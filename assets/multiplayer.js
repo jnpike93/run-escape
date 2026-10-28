@@ -3,6 +3,21 @@
 // mutual player awareness (custom lobby names, overhead HP bars, nametags, party HUD, off-screen arrows),
 // and automatic run termination on partner disconnect.
 
+function sanitizeName(name) {
+    if (!name || typeof name !== 'string') return '';
+    return name.trim().slice(0, 14).replace(/[^a-zA-Z0-9 ()_-]/g, '');
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 export class MultiplayerManager {
     constructor() {
         this.roomId = null;
@@ -148,13 +163,14 @@ export class MultiplayerManager {
                 break;
 
             case 'lobby_update':
+                const incomingLobbyName = sanitizeName(msg.name);
                 if (this.role === 'host') {
                     this.remoteCharacter = msg.character || this.remoteCharacter;
-                    this.remoteName = msg.name || this.remoteName;
+                    if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
                 } else {
                     this.remoteCharacter = msg.hostCharacter || msg.character || this.remoteCharacter;
-                    this.remoteName = msg.name || this.remoteName;
+                    if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
                 }
                 this.updateLobbyUI();
@@ -164,9 +180,11 @@ export class MultiplayerManager {
                 this.gameStarted = true;
                 this.gameConfig = msg.config;
                 if (this.role === 'host') {
-                    this.remoteName = msg.config.p2Name || this.remoteName;
+                    const cleanP2 = sanitizeName(msg.config?.p2Name);
+                    if (cleanP2) this.remoteName = cleanP2;
                 } else {
-                    this.remoteName = msg.config.p1Name || this.remoteName;
+                    const cleanP1 = sanitizeName(msg.config?.p1Name);
+                    if (cleanP1) this.remoteName = cleanP1;
                 }
                 console.log('[Multiplayer] Game Starting with config:', this.gameConfig);
                 this.closeLobbyModal();
@@ -211,7 +229,7 @@ export class MultiplayerManager {
     }
 
     setPlayerName(name) {
-        this.localName = (name || '').trim().slice(0, 14) || (this.role === 'host' ? 'Player 1' : 'Player 2');
+        this.localName = sanitizeName(name) || (this.role === 'host' ? 'Player 1' : 'Player 2');
         this.sendLobbyUpdate();
     }
 
@@ -944,8 +962,8 @@ export class MultiplayerManager {
         }
 
         const isCorgi = p2.characterId === 'dipper';
-        const charName = isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase();
-        const displayName = this.remoteName.toUpperCase();
+        const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase());
+        const displayName = escapeHtml(this.remoteName.toUpperCase());
         const hp = Math.max(0, Math.round(p2.hp));
         const maxHp = p2.maxHp || 25;
         const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
@@ -1269,6 +1287,8 @@ export class MultiplayerManager {
 
         const isHost = this.role === 'host' || this.role === null;
         const inviteLink = this.getInviteLink();
+        const safeLocalName = escapeHtml(this.localName);
+        const safeRemoteName = escapeHtml(this.remoteName);
 
         const characters = [
             { id: 'dipper', name: 'Dipper (Corgi)' },
@@ -1310,14 +1330,14 @@ export class MultiplayerManager {
                     <div style="font-size: 12px; color: #888; margin-bottom: 4px;">PLAYER 1 (HOST)</div>
                     ${isHost ? `
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
-                        <input id="coop-p1-name" type="text" maxlength="14" value="${this.localName}"
+                        <input id="coop-p1-name" type="text" maxlength="14" value="${safeLocalName}"
                             style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character:</label>
                         <select id="coop-p1-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
                             ${characters.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
                         </select>
                     ` : `
-                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${this.remoteName}</div>
+                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
                         <div style="font-size: 13px; color: #ff981f;">
                             Class: <strong>${(this.remoteCharacter || 'wizard').toUpperCase()}</strong>
                         </div>
@@ -1329,14 +1349,14 @@ export class MultiplayerManager {
                     <div style="font-size: 12px; color: #888; margin-bottom: 4px;">PLAYER 2 (GUEST)</div>
                     ${!isHost ? `
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
-                        <input id="coop-p2-name" type="text" maxlength="14" value="${this.localName}"
+                        <input id="coop-p2-name" type="text" maxlength="14" value="${safeLocalName}"
                             style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character:</label>
                         <select id="coop-p2-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
                             ${characters.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
                         </select>
                     ` : (this.peerConnected ? `
-                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${this.remoteName}</div>
+                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
                         <div style="font-size: 13px; color: #ff981f;">
                             Class: <strong>${(this.remoteCharacter || 'warrior').toUpperCase()}</strong>
                             <div style="font-size: 11px; color: ${this.remoteReady ? '#00ff00' : '#ffff00'}; margin-top: 4px;">

@@ -10,6 +10,9 @@ import sys
 
 PORT = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+MAX_FRAME_SIZE = 65536  # 64 KB max frame payload
+MAX_ROOMS = 1000        # Maximum concurrent rooms
+MAX_PEERS_PER_ROOM = 2  # 2-player co-op cap
 
 # WebSocket Room Broker: room_id -> list of (client_sock, lock, role)
 rooms = {}
@@ -42,7 +45,18 @@ def handle_ws_client(sock, room_id):
     sock_lock = threading.Lock()
     with rooms_lock:
         if room_id not in rooms:
+            if len(rooms) >= MAX_ROOMS:
+                sock.close()
+                return
             rooms[room_id] = []
+        if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
+            try:
+                err_frame = encode_ws_frame('{"type":"error","message":"Room is full (maximum 2 players)."}')
+                sock.sendall(err_frame)
+                sock.close()
+            except:
+                pass
+            return
         peer_count = len(rooms[room_id])
         role = "host" if peer_count == 0 else "guest"
         rooms[room_id].append((sock, sock_lock, role))
@@ -86,6 +100,15 @@ def handle_ws_client(sock, room_id):
                 ext = read_exact(sock, 8)
                 if not ext: break
                 length = struct.unpack("!Q", ext)[0]
+
+            if length > MAX_FRAME_SIZE:
+                close_payload = struct.pack("!H", 1009) + b"Frame payload exceeds maximum size"
+                try:
+                    with sock_lock:
+                        sock.sendall(encode_ws_frame(close_payload, opcode=8))
+                except:
+                    pass
+                break
 
             mask = read_exact(sock, 4) if is_masked else None
             payload = read_exact(sock, length)
@@ -140,9 +163,24 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/ws"):
+            origin = self.headers.get("Origin")
+            if origin:
+                parsed_origin = urllib.parse.urlparse(origin)
+                host_only = parsed_origin.netloc.split(":")[0].lower()
+                allowed_hosts = {
+                    "localhost",
+                    "127.0.0.1",
+                    "cuteanimegirls.moe",
+                    "run-escape.cuteanimegirls.moe",
+                    "167.71.157.5"
+                }
+                if host_only not in allowed_hosts and not host_only.endswith(".cuteanimegirls.moe"):
+                    self.send_error(403, "Forbidden Origin")
+                    return
+
             u = urllib.parse.urlparse(self.path)
             qs = urllib.parse.parse_qs(u.query)
-            room_id = qs.get("room", ["default"])[0].strip()
+            room_id = qs.get("room", ["default"])[0].strip()[:32]
 
             key = self.headers.get("Sec-WebSocket-Key")
             if not key:
@@ -162,6 +200,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         super().do_GET()
+
+    def send_head(self):
+        # Block dotfiles and hidden paths (.git, .env, etc.)
+        clean_path = urllib.parse.urlsplit(self.path).path
+        parts = clean_path.strip("/").split("/")
+        if any(part.startswith(".") for part in parts if part):
+            self.send_error(404, "File not found")
+            return None
+        return super().send_head()
+
+    def list_directory(self, path):
+        self.send_error(404, "Directory listing disabled")
+        return None
 
     def end_headers(self):
         # Enable SharedArrayBuffer for multithreaded WebAssembly & Web Workers
