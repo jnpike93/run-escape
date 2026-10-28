@@ -30,7 +30,7 @@ GUEST_ALLOWED_MSG_TYPES = {"lobby_update", "input", "game_over"}
 
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'wasm-unsafe-eval'; "
+    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; "
     "font-src 'self' data:; "
