@@ -1195,20 +1195,160 @@ export class MultiplayerManager {
                 }
             };
 
-            // Hook sim.stepEnemies on Host to partition monsters across all living players (P1..P4) by closest distance
-            const origStepEnemies = sim.stepEnemies.bind(sim);
-            sim.stepEnemies = () => {
-                const activeTargets = [
-                    { slot: this.localSlot, entity: sim.player, bucket: [] }
-                ];
+            // Track which player (slot) is currently dealing damage so monster AI prioritizes the last attacker first
+            this._activeAttackerSlot = null;
+            if (sim.damageEnemy) {
+                const origDamageEnemy = sim.damageEnemy.bind(sim);
+                sim.damageEnemy = (enemy, amount, knockback, srcX, srcY, mightScale, isDot) => {
+                    if (enemy && !enemy.dead && !isDot) {
+                        if (this._activeAttackerSlot) {
+                            enemy.lastAttackerSlot = this._activeAttackerSlot;
+                            enemy.lastAttackedTick = sim.tick;
+                        } else if (Number.isFinite(srcX) && Number.isFinite(srcY)) {
+                            let bestSlot = this.localSlot;
+                            let bestDist = (sim.player && sim.player.hp > 0)
+                                ? Math.hypot(sim.player.x - srcX, sim.player.y - srcY)
+                                : Infinity;
+                            for (const peer of this.remotePeers.values()) {
+                                if (peer.entity && peer.entity.hp > 0) {
+                                    const d = Math.hypot(peer.entity.x - srcX, peer.entity.y - srcY);
+                                    if (d < bestDist) {
+                                        bestDist = d;
+                                        bestSlot = peer.slot;
+                                    }
+                                }
+                            }
+                            enemy.lastAttackerSlot = bestSlot;
+                            enemy.lastAttackedTick = sim.tick;
+                        }
+                    }
+                    return origDamageEnemy(enemy, amount, knockback, srcX, srcY, mightScale, isDot);
+                };
+            }
+
+            if (sim.projectileHit) {
+                const origProjectileHit = sim.projectileHit.bind(sim);
+                sim.projectileHit = (proj, enemy) => {
+                    const prevSlot = this._activeAttackerSlot;
+                    this._activeAttackerSlot = (proj && proj.ownerSlot) ? proj.ownerSlot : this.localSlot;
+                    try {
+                        return origProjectileHit(proj, enemy);
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
+
+            // Helper: collect all living players with their dedicated BFS FlowFields
+            const getLivingPlayerTargets = () => {
+                const targets = [];
+                if (sim.player && sim.player.hp > 0 && sim.player.deathTick === -1) {
+                    targets.push({
+                        slot: this.localSlot,
+                        entity: sim.player,
+                        flowField: sim.flowField,
+                        bucket: []
+                    });
+                }
                 for (const peer of this.remotePeers.values()) {
-                    if (peer.entity && peer.entity.hp > 0) {
-                        activeTargets.push({ slot: peer.slot, entity: peer.entity, bucket: [] });
+                    if (peer.entity && peer.entity.hp > 0 && peer.entity.deathTick === -1) {
+                        if (!peer.flowField && sim.flowField && sim.flowField.constructor) {
+                            peer.flowField = new sim.flowField.constructor(sim.flowField.size);
+                        }
+                        targets.push({
+                            slot: peer.slot,
+                            entity: peer.entity,
+                            flowField: peer.flowField || sim.flowField,
+                            bucket: []
+                        });
                     }
                 }
-                if (activeTargets.length <= 1) {
+                if (targets.length === 0) {
+                    targets.push({
+                        slot: this.localSlot,
+                        entity: sim.player,
+                        flowField: sim.flowField,
+                        bucket: []
+                    });
+                }
+                return targets;
+            };
+
+            // Multi-player safe monster spawning: spawn around a random living player while enforcing minimum safe distance from ALL living players
+            if (sim.findSpawnPoint) {
+                const origFindSpawnPoint = sim.findSpawnPoint.bind(sim);
+                sim.findSpawnPoint = (def, minRange, maxRange, dir) => {
+                    const living = getLivingPlayerTargets();
+                    if (living.length <= 1) {
+                        return origFindSpawnPoint(def, minRange, maxRange, dir);
+                    }
+                    const savedPlayer = sim.player;
+                    const savedFlowField = sim.flowField;
+                    try {
+                        for (let attempt = 0; attempt < 28; attempt++) {
+                            const anchor = living[sim.rng.int(living.length)];
+                            sim.player = anchor.entity;
+                            sim.flowField = anchor.flowField;
+                            if (anchor.slot !== this.localSlot && sim.updateFlowField) {
+                                sim.updateFlowField();
+                            }
+                            const pt = origFindSpawnPoint(def, minRange, maxRange, attempt < 4 ? dir : undefined);
+                            if (!pt) continue;
+                            // Reject candidate spawn points that land too close to ANY living player in the party
+                            const minSafeDist = attempt < 20 ? Math.max(12, minRange * 0.85) : 10.5;
+                            let safeForAll = true;
+                            for (let k = 0; k < living.length; k++) {
+                                const pl = living[k].entity;
+                                if (Math.hypot(pt.x - pl.x, pt.y - pl.y) < minSafeDist) {
+                                    safeForAll = false;
+                                    break;
+                                }
+                            }
+                            if (safeForAll) {
+                                return pt;
+                            }
+                        }
+                        return undefined;
+                    } finally {
+                        sim.player = savedPlayer;
+                        sim.flowField = savedFlowField;
+                    }
+                };
+            }
+
+            // Multi-player safe relocation: only relocate an enemy if it is far (> 34 tiles) from EVERY living player
+            if (sim.relocate) {
+                const origRelocate = sim.relocate.bind(sim);
+                sim.relocate = (enemy) => {
+                    if (!enemy) return;
+                    const living = getLivingPlayerTargets();
+                    for (let i = 0; i < living.length; i++) {
+                        const pl = living[i].entity;
+                        if (Math.hypot(pl.x - enemy.x, pl.y - enemy.y) <= 34) {
+                            // Another living player is still within range; drop stale attacker lock instead of teleporting in midair
+                            enemy.lastAttackerSlot = null;
+                            return;
+                        }
+                    }
+                    origRelocate(enemy);
+                };
+            }
+
+            // Hook sim.stepEnemies on Host:
+            // 1. Priority 1: Target the last player who attacked the monster (if that player is alive)
+            // 2. Priority 2: Target the closest living player
+            // 3. Give each player their own BFS FlowField so monsters pathfind around walls toward every player
+            const origStepEnemies = sim.stepEnemies.bind(sim);
+            sim.stepEnemies = () => {
+                const activeTargets = getLivingPlayerTargets();
+                if (activeTargets.length <= 1 && activeTargets[0].slot === this.localSlot) {
                     origStepEnemies();
                     return;
+                }
+
+                const slotToTargetIdx = new Map();
+                for (let j = 0; j < activeTargets.length; j++) {
+                    slotToTargetIdx.set(activeTargets[j].slot, j);
                 }
 
                 const allEnemies = sim.enemies;
@@ -1218,28 +1358,41 @@ export class MultiplayerManager {
                         activeTargets[0].bucket.push(enemy);
                         continue;
                     }
-                    let bestIdx = 0;
-                    let bestDist = Math.hypot(activeTargets[0].entity.x - enemy.x, activeTargets[0].entity.y - enemy.y);
-                    for (let j = 1; j < activeTargets.length; j++) {
-                        const d = Math.hypot(activeTargets[j].entity.x - enemy.x, activeTargets[j].entity.y - enemy.y);
-                        if (d < bestDist) {
-                            bestDist = d;
-                            bestIdx = j;
+                    let chosenIdx = -1;
+                    if (enemy.lastAttackerSlot && slotToTargetIdx.has(enemy.lastAttackerSlot)) {
+                        const attackerIdx = slotToTargetIdx.get(enemy.lastAttackerSlot);
+                        const attackerEntity = activeTargets[attackerIdx].entity;
+                        if (Math.hypot(attackerEntity.x - enemy.x, attackerEntity.y - enemy.y) <= 34) {
+                            chosenIdx = attackerIdx;
+                        } else {
+                            enemy.lastAttackerSlot = null;
                         }
                     }
-                    activeTargets[bestIdx].bucket.push(enemy);
+                    if (chosenIdx === -1) {
+                        chosenIdx = 0;
+                        let bestDist = Math.hypot(activeTargets[0].entity.x - enemy.x, activeTargets[0].entity.y - enemy.y);
+                        for (let j = 1; j < activeTargets.length; j++) {
+                            const d = Math.hypot(activeTargets[j].entity.x - enemy.x, activeTargets[j].entity.y - enemy.y);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                chosenIdx = j;
+                            }
+                        }
+                    }
+                    activeTargets[chosenIdx].bucket.push(enemy);
                 }
 
                 const savedPlayer = sim.player;
-                const origGetStep = sim.flowField?.getStep ? sim.flowField.getStep.bind(sim.flowField) : null;
+                const savedFlowField = sim.flowField;
                 try {
                     for (const t of activeTargets) {
                         if (t.bucket.length === 0) continue;
                         const initialLen = t.bucket.length;
                         sim.enemies = t.bucket;
                         sim.player = t.entity;
-                        if (origGetStep && sim.flowField) {
-                            sim.flowField.getStep = (t.slot === this.localSlot) ? origGetStep : () => false;
+                        sim.flowField = t.flowField || savedFlowField;
+                        if (t.slot !== this.localSlot && sim.updateFlowField) {
+                            sim.updateFlowField();
                         }
                         origStepEnemies();
                         if (t.bucket.length > initialLen) {
@@ -1249,9 +1402,7 @@ export class MultiplayerManager {
                         }
                     }
                 } finally {
-                    if (origGetStep && sim.flowField) {
-                        sim.flowField.getStep = origGetStep;
-                    }
+                    sim.flowField = savedFlowField;
                     sim.enemies = allEnemies;
                     sim.player = savedPlayer;
                 }
@@ -1310,6 +1461,8 @@ export class MultiplayerManager {
         if (sim.stepOrbit) {
             const origStepOrbit = sim.stepOrbit.bind(sim);
             sim.stepOrbit = (proj, orbit) => {
+                const prevSlot = this._activeAttackerSlot;
+                this._activeAttackerSlot = (proj && proj.ownerSlot) ? proj.ownerSlot : this.localSlot;
                 if (orbit && orbit.owner) {
                     const savedPlayer = sim.player;
                     sim.player = orbit.owner;
@@ -1317,9 +1470,14 @@ export class MultiplayerManager {
                         origStepOrbit(proj, orbit);
                     } finally {
                         sim.player = savedPlayer;
+                        this._activeAttackerSlot = prevSlot;
                     }
                 } else {
-                    origStepOrbit(proj, orbit);
+                    try {
+                        origStepOrbit(proj, orbit);
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
                 }
             };
         }
@@ -1333,11 +1491,16 @@ export class MultiplayerManager {
                 remoteOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
                 sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot));
             }
-            origStepWeapons();
+            this._activeAttackerSlot = this.localSlot;
+            try {
+                origStepWeapons();
+            } finally {
+                this._activeAttackerSlot = null;
+            }
             for (const p of sim.projectiles) {
-                if (p.orbit && !p.ownerSlot) {
+                if (!p.ownerSlot) {
                     p.ownerSlot = this.localSlot;
-                    p.orbit.owner = sim.player;
+                    if (p.orbit) p.orbit.owner = sim.player;
                 }
             }
             if (remoteOrbits && remoteOrbits.length > 0) {
@@ -1359,6 +1522,7 @@ export class MultiplayerManager {
                     }
 
                     sim.player = rEntity;
+                    this._activeAttackerSlot = peer.slot;
                     try {
                         for (const t of rWeapons) {
                             if (t.cooldown > 0) {
@@ -1384,12 +1548,13 @@ export class MultiplayerManager {
                             }
                         }
                         for (const p of sim.projectiles) {
-                            if (p.orbit && !p.ownerSlot) {
+                            if (!p.ownerSlot) {
                                 p.ownerSlot = peer.slot;
-                                p.orbit.owner = rEntity;
+                                if (p.orbit) p.orbit.owner = rEntity;
                             }
                         }
                     } finally {
+                        this._activeAttackerSlot = null;
                         sim.player = origPlayer;
                         if (otherOrbits && otherOrbits.length > 0) {
                             sim.projectiles.push(...otherOrbits);
@@ -1828,23 +1993,32 @@ export class MultiplayerManager {
                         } else {
                             const centerX = w / 2;
                             const centerY = h / 2;
-                            let targetX = peerScreen.x;
-                            let targetY = peerScreen.y;
-                            if (!peerScreen.visible) {
-                                targetX = centerX - (peerScreen.x - centerX);
-                                targetY = centerY - (peerScreen.y - centerY);
-                            }
+                            const p1 = s.player;
+                            const p1x = p1.prevX + (p1.x - p1.prevX) * alpha;
+                            const p1y = p1.prevY + (p1.y - p1.prevY) * alpha;
+                            const worldDx = px - p1x;
+                            const worldDy = py - p1y;
+                            const worldDist = Math.hypot(worldDx, worldDy) || 1;
+                            const p1Ground = s.grid ? s.grid.getHeight(p1x, p1y) / 128 : 0;
+                            const p1Scr = { x: centerX, y: centerY, visible: true };
+                            const stepScr = { x: centerX, y: centerY, visible: true };
+                            overlayRenderer.project(p1x, p1Ground, p1y, p1Scr);
+                            overlayRenderer.project(
+                                p1x + (worldDx / worldDist) * 2.0,
+                                p1Ground,
+                                p1y + (worldDy / worldDist) * 2.0,
+                                stepScr
+                            );
 
-                            const dx = targetX - centerX;
-                            const dy = targetY - centerY;
+                            const dx = stepScr.x - p1Scr.x;
+                            const dy = stepScr.y - p1Scr.y;
                             const angle = Math.atan2(dy, dx);
 
                             const pad = 40;
                             const edgeX = Math.min(Math.max(centerX + Math.cos(angle) * (w / 2 - pad), pad), w - pad);
                             const edgeY = Math.min(Math.max(centerY + Math.sin(angle) * (h / 2 - pad), pad), h - pad);
 
-                            const p1 = s.player;
-                            const distMeters = Math.round(Math.hypot(p1.x - p2.x, p1.y - p2.y));
+                            const distMeters = Math.round(worldDist);
 
                             ctx.save();
                             ctx.translate(edgeX, edgeY);
