@@ -881,9 +881,30 @@ export class MultiplayerManager {
                 sim.player = p1;
             };
         } else {
-            // Guest disables autonomous wave spawner, enemy stepping, and local pickup resolution (Host is authoritative)
+            // Guest disables autonomous wave spawner, local enemy movement, and local pickup resolution (Host is authoritative)
             sim.stepDirector = () => {};
-            sim.stepEnemies = () => {};
+            sim.stepEnemies = () => {
+                // Advance prevX/prevY and targetX/targetY once per simulation tick at 30Hz for smooth render interpolation
+                for (let i = 0; i < sim.enemies.length; i++) {
+                    const e = sim.enemies[i];
+                    e.prevX = e.x;
+                    e.prevY = e.y;
+                    if (Number.isFinite(e.targetX) && Number.isFinite(e.targetY)) {
+                        e.x = e.targetX;
+                        e.y = e.targetY;
+                    }
+                    if (e.flash > 0) e.flash--;
+                }
+                for (let i = 0; i < sim.pickups.length; i++) {
+                    const p = sim.pickups[i];
+                    p.prevX = p.x;
+                    p.prevY = p.y;
+                    if (Number.isFinite(p.targetX) && Number.isFinite(p.targetY)) {
+                        p.x = p.targetX;
+                        p.y = p.targetY;
+                    }
+                }
+            };
             sim.stepPickups = () => {};
             sim.dropPickup = () => {};
             sim.dropCasket = () => {};
@@ -987,14 +1008,15 @@ export class MultiplayerManager {
         // Hook sim.step to transmit local state, sync world, and step Player 2
         const origStep = sim.step.bind(sim);
         sim.step = (moveX, moveY) => {
+            // Advance Player 2 position BEFORE origStep so weapons, orbits, and enemy AI use Player 2's current tick position and interpolate smoothly
+            if (sim.player2 && sim.state === 'playing' && !sim.runOver) {
+                this.stepPlayer2(sim, sim.player2);
+            }
+
             origStep(moveX, moveY);
 
-            // Step Player 2
-            if (sim.player2) {
-                this.stepPlayer2(sim, sim.player2);
-                if (isHost && sim.state === 'playing') {
-                    this.stepPlayer2Pickups(sim, sim.player2);
-                }
+            if (sim.player2 && isHost && sim.state === 'playing') {
+                this.stepPlayer2Pickups(sim, sim.player2);
             }
 
             // Detect immediate transition into chest or levelUp on this exact tick
@@ -2125,8 +2147,12 @@ export class MultiplayerManager {
         const sim = client.sim;
 
         // 0. Synchronize simulation clock, kills, and remote pause state
+        // Only snap sim.tick if it drifts by more than 2 ticks so local projectile/enemy anims do not jitter
         if (Number.isFinite(Number(msg.tick)) && msg.tick >= 0) {
-            sim.tick = Math.round(Number(msg.tick));
+            const hostTick = Math.round(Number(msg.tick));
+            if (Math.abs(hostTick - sim.tick) > 2) {
+                sim.tick = hostTick;
+            }
         }
         if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
             sim.kills = Math.round(Number(msg.kills));
@@ -2211,11 +2237,15 @@ export class MultiplayerManager {
 
                 let enemy = existingMap.get(uid);
                 if (enemy) {
-                    // Update positions with smooth interpolation support
-                    enemy.prevX = enemy.x;
-                    enemy.prevY = enemy.y;
-                    enemy.x = x;
-                    enemy.y = y;
+                    // Store target position for tick-synchronized interpolation in sim.stepEnemies
+                    enemy.targetX = x;
+                    enemy.targetY = y;
+                    if (Math.hypot(x - enemy.x, y - enemy.y) > 4.0) {
+                        enemy.prevX = x;
+                        enemy.prevY = y;
+                        enemy.x = x;
+                        enemy.y = y;
+                    }
                     enemy.hp = hp;
                     enemy.maxHp = maxHp;
                     enemy.yaw = yaw;
@@ -2239,6 +2269,8 @@ export class MultiplayerManager {
                                 enemy.y = y;
                                 enemy.prevX = x;
                                 enemy.prevY = y;
+                                enemy.targetX = x;
+                                enemy.targetY = y;
                                 enemy.hp = hp;
                                 enemy.maxHp = maxHp;
                                 enemy.yaw = yaw;
@@ -2280,10 +2312,14 @@ export class MultiplayerManager {
                 hostPickupUids.add(uid);
                 let p = pickupMap.get(uid);
                 if (p) {
-                    p.prevX = p.x;
-                    p.prevY = p.y;
-                    p.x = px;
-                    p.y = py;
+                    p.targetX = px;
+                    p.targetY = py;
+                    if (Math.hypot(px - p.x, py - p.y) > 4.0) {
+                        p.prevX = px;
+                        p.prevY = py;
+                        p.x = px;
+                        p.y = py;
+                    }
                     p.value = val;
                     if (tier) p.tier = tier;
                     if (powerUp) p.powerUp = powerUp;
@@ -2295,6 +2331,8 @@ export class MultiplayerManager {
                         y: py,
                         prevX: px,
                         prevY: py,
+                        targetX: px,
+                        targetY: py,
                         value: val,
                         tier: tier || undefined,
                         powerUp: powerUp || undefined,
