@@ -103,6 +103,7 @@ export class MultiplayerManager {
         this.localNameCustomized = false;
         this.localReady = false;
         this.selectedMapId = 'lumbridge';
+        this.selectedEndless = false;
         this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
 
         // Map<slot (1..4), { slot, name, character, ready, isHost }>
@@ -412,6 +413,9 @@ export class MultiplayerManager {
                     if (msg.mapId) {
                         this.selectedMapId = sanitizeMapId(msg.mapId, this.selectedMapId);
                     }
+                    if (typeof msg.endless === 'boolean') {
+                        this.selectedEndless = msg.endless;
+                    }
                     if (Array.isArray(msg.party)) {
                         const nextSlots = new Set([this.localSlot]);
                         for (const p of msg.party) {
@@ -470,6 +474,7 @@ export class MultiplayerManager {
                 this.gameConfig = {
                     seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
                     mapId: sanitizeMapId(msg.config.mapId, 'lumbridge'),
+                    endless: Boolean(msg.config.endless),
                     partySize: Math.max(2, Math.min(4, sanitizedPlayers.length || 2)),
                     players: sanitizedPlayers,
                     unlockedItems: Array.isArray(msg.config.unlockedItems)
@@ -477,6 +482,7 @@ export class MultiplayerManager {
                         : []
                 };
                 this.selectedMapId = this.gameConfig.mapId;
+                this.selectedEndless = this.gameConfig.endless;
                 console.log('[Multiplayer] Game Starting with 2-4P config:', this.gameConfig);
                 this.closeLobbyModal();
                 this.launchCoopRun(this.gameConfig);
@@ -617,6 +623,7 @@ export class MultiplayerManager {
             slot: this.localSlot,
             hostCharacter: this.localCharacter,
             mapId: this.selectedMapId,
+            endless: Boolean(this.selectedEndless),
             name: this.localName,
             ready: this.localReady,
             unlockedCharacters: unlocked,
@@ -646,6 +653,13 @@ export class MultiplayerManager {
     selectMap(mapId) {
         if (this.role !== 'host' && this.role !== null) return;
         this.selectedMapId = sanitizeMapId(mapId, 'lumbridge');
+        this.sendLobbyUpdate();
+        this.updateLobbyUI();
+    }
+
+    toggleEndless() {
+        if (this.role !== 'host' && this.role !== null) return;
+        this.selectedEndless = !this.selectedEndless;
         this.sendLobbyUpdate();
         this.updateLobbyUI();
     }
@@ -809,6 +823,7 @@ export class MultiplayerManager {
         const config = {
             seed,
             mapId: selectedRegion.id,
+            endless: Boolean(this.selectedEndless),
             partySize: players.length,
             players,
             unlockedItems: Array.isArray(client.save?.unlockedItems) ? [...client.save.unlockedItems] : []
@@ -1416,6 +1431,8 @@ export class MultiplayerManager {
                     this.send({
                         type: 'sync_world',
                         tick: sim.tick,
+                        round: sim.round || 1,
+                        roundStartTick: sim.roundStartTick || 0,
                         kills: sim.kills,
                         pauseState: this.getLocalPauseState(client),
                         players: playersSnapshot,
@@ -2046,8 +2063,7 @@ export class MultiplayerManager {
                     sim.addWeapon(cleanId, Number.isFinite(Number(w.bonus)) ? Number(w.bonus) : 0);
                     if (sim.weapons.length > 0) {
                         const inst = sim.weapons[0];
-                        const maxLvl = inst.def?.levels?.length || 8;
-                        inst.level = Math.max(1, Math.min(maxLvl, Math.round(Number(w.level) || 1)));
+                        inst.level = Math.max(1, Math.min(99, Math.round(Number(w.level) || 1)));
                         inst.cooldown = Math.min(inst.cooldown || 10, 10);
                         built.push(inst);
                     }
@@ -2491,6 +2507,19 @@ export class MultiplayerManager {
         }
         if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
             sim.kills = Math.round(Number(msg.kills));
+        }
+        if (Number.isFinite(Number(msg.round)) && msg.round >= 1) {
+            const hostRound = Math.round(Number(msg.round));
+            if (hostRound > (sim.round || 1)) {
+                sim.round = hostRound;
+                sim.roundStartTick = Number.isFinite(Number(msg.roundStartTick)) ? Math.round(Number(msg.roundStartTick)) : sim.tick;
+                if (Array.isArray(sim.events)) {
+                    sim.events.push({ type: 'roundStarted', round: sim.round });
+                }
+                if (client.handleEvents && sim.takeEvents) {
+                    client.handleEvents(sim, sim.takeEvents());
+                }
+            }
         }
 
         // 1. Synchronize all players in the party (2 to 4 players)
@@ -3023,13 +3052,24 @@ export class MultiplayerManager {
                     <span style="font-size: 12px; color: #ff981f; letter-spacing: 0.5px;">DESTINATION REGION:</span>
                     <span style="font-size: 11px; color: #ffff00;">${escapeHtml(currentRegion.difficulty)} (${hpScaleLabel} Co-Op HP)</span>
                 </div>
-                ${isHost ? `
-                    <select id="coop-map-select" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px; margin-bottom: 4px;">
-                        ${regionOptionsHtml}
-                    </select>
-                ` : `
-                    <div style="font-size: 15px; color: #ffff00; margin-bottom: 4px;">${escapeHtml(currentRegion.name)} <span style="font-size: 11px; color: #888;">(Selected by Host)</span></div>
-                `}
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                    ${isHost ? `
+                        <select id="coop-map-select" style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px;">
+                            ${regionOptionsHtml}
+                        </select>
+                        <button id="coop-endless-btn" style="
+                            background: ${this.selectedEndless ? '#5c2d16' : '#2a2118'};
+                            border: 2px solid ${this.selectedEndless ? '#ff981f' : '#5a4a35'};
+                            color: ${this.selectedEndless ? '#ffff00' : '#b8a890'};
+                            padding: 5px 10px; cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; white-space: nowrap;">
+                            Endless: ${this.selectedEndless ? 'ON' : 'OFF'}
+                        </button>
+                    ` : `
+                        <div style="font-size: 15px; color: #ffff00;">
+                            ${escapeHtml(currentRegion.name)}${this.selectedEndless ? ' <span style="color: #ff6040;">[ENDLESS]</span>' : ''} <span style="font-size: 11px; color: #888;">(Selected by Host)</span>
+                        </div>
+                    `}
+                </div>
                 <div style="font-size: 11px; color: #b8a890;">
                     Bosses: <strong style="color: #ff981f;">${escapeHtml(currentRegion.bosses)}</strong>
                 </div>
@@ -3085,6 +3125,11 @@ export class MultiplayerManager {
         const mapSelect = box.querySelector('#coop-map-select');
         if (mapSelect) {
             mapSelect.onchange = (e) => this.selectMap(e.target.value);
+        }
+
+        const endlessBtn = box.querySelector('#coop-endless-btn');
+        if (endlessBtn) {
+            endlessBtn.onclick = () => this.toggleEndless();
         }
 
         const localNameInput = box.querySelector('#coop-local-name');
