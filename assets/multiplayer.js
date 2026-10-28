@@ -1152,9 +1152,11 @@ export class MultiplayerManager {
                     const e = sim.enemies[i];
                     e.prevX = e.x;
                     e.prevY = e.y;
+                    e.vx = 0;
+                    e.vy = 0;
                     if (!e.dead && Number.isFinite(e.netX) && Number.isFinite(e.netY)) {
-                        const predX = e.x + (e.vx || 0);
-                        const predY = e.y + (e.vy || 0);
+                        const predX = e.x + (e.netVx || 0);
+                        const predY = e.y + (e.netVy || 0);
                         const errX = e.netX - predX;
                         const errY = e.netY - predY;
                         const errDist = Math.hypot(errX, errY);
@@ -1167,8 +1169,8 @@ export class MultiplayerManager {
                             e.x = predX + errX * 0.45;
                             e.y = predY + errY * 0.45;
                         }
-                        e.vx = (e.vx || 0) * 0.85;
-                        e.vy = (e.vy || 0) * 0.85;
+                        e.netVx = (e.netVx || 0) * 0.85;
+                        e.netVy = (e.netVy || 0) * 0.85;
                     }
                     if (e.flash > 0) e.flash--;
                 }
@@ -1182,6 +1184,7 @@ export class MultiplayerManager {
                     }
                 }
             };
+            sim.killEnemy = () => {};
             sim.stepPickups = () => {};
             sim.dropPickup = () => {};
             sim.dropCasket = () => {};
@@ -1335,7 +1338,7 @@ export class MultiplayerManager {
                     const enemyData = [];
                     for (let i = 0; i < sim.enemies.length; i++) {
                         const e = sim.enemies[i];
-                        if (!e.dead || (sim.tick - e.deathTick <= 2)) {
+                        if (!e.dead || (sim.tick - e.deathTick <= 6)) {
                             enemyData.push([
                                 e.uid,
                                 e.def.id,
@@ -2588,8 +2591,8 @@ export class MultiplayerManager {
                 let enemy = existingMap.get(uid);
                 if (enemy) {
                     if (Number.isFinite(enemy.netX) && Number.isFinite(enemy.netY)) {
-                        enemy.vx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
-                        enemy.vy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
+                        enemy.netVx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
+                        enemy.netVy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
                     }
                     enemy.netX = x;
                     enemy.netY = y;
@@ -2597,9 +2600,9 @@ export class MultiplayerManager {
                     enemy.maxHp = maxHp;
                     enemy.yaw = yaw;
                     if (dead && !enemy.dead) {
+                        enemy.dead = true;
                         enemy.deathTick = sim.tick;
                     }
-                    enemy.dead = !!dead;
                     enemy.anim = anim;
                     enemy.animStart = animStart;
                     enemy.flash = flash;
@@ -2618,6 +2621,8 @@ export class MultiplayerManager {
                                 enemy.prevY = y;
                                 enemy.netX = x;
                                 enemy.netY = y;
+                                enemy.netVx = 0;
+                                enemy.netVy = 0;
                                 enemy.vx = 0;
                                 enemy.vy = 0;
                                 enemy.hp = hp;
@@ -2639,6 +2644,16 @@ export class MultiplayerManager {
                 }
             }
 
+            for (let i = 0; i < sim.enemies.length; i++) {
+                const e = sim.enemies[i];
+                if (!hostUids.has(e.uid) && !e.dead) {
+                    e.dead = true;
+                    e.hp = 0;
+                    e.deathTick = sim.tick;
+                    e.anim = 'death';
+                    e.animStart = sim.tick;
+                }
+            }
             sim.enemies = sim.enemies.filter(e => hostUids.has(e.uid) || (e.dead && (sim.tick - (e.deathTick || 0) < 45)));
 
             if (sim.rebuildEnemyHash) {
