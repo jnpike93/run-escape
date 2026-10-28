@@ -3659,8 +3659,19 @@ window.addEventListener('keydown', (ev) => {
     }
 });
 
+window._hideOsrsPrayerBar = function() {
+    window._osrsPrayer = null;
+    const bar = document.getElementById('osrs-prayer-bar');
+    if (bar && bar.style.display !== 'none') {
+        bar.style.display = 'none';
+    }
+};
+
 window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playerScreenPos) {
-    if (!sim) return;
+    if (!sim) {
+        window._hideOsrsPrayerBar();
+        return;
+    }
     const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && e.def?.id === 'tztok_jad');
     const bar = ensureOsrsPrayerBarUI();
     if (!isFightCavesOrJad || sim.runOver) {
