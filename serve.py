@@ -354,7 +354,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # Enforce strict public static asset allowlist
         normalized = "/" + "/".join(parts) if parts else "/"
-        allowed_exact = {"/", "/index.html", "/favicon.ico", "/notice.md"}
+        allowed_exact = {"/", "/index.html", "/favicon.ico"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
             and not normalized.endswith(".map")
