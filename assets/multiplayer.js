@@ -3206,7 +3206,11 @@ export class MultiplayerManager {
             }
 
             if (localPlayerSnapshot && sim.player && Number.isFinite(Number(localPlayerSnapshot.hp))) {
-                sim.player.hp = Math.max(0, Number(localPlayerSnapshot.hp));
+                if (sim.player.spectating) {
+                    sim.player.hp = 0;
+                } else {
+                    sim.player.hp = Math.max(0, Number(localPlayerSnapshot.hp));
+                }
                 if (Number.isFinite(Number(localPlayerSnapshot.maxHp))) {
                     sim.player.maxHp = Math.max(1, Math.round(Number(localPlayerSnapshot.maxHp)));
                 }
