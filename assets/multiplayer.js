@@ -3,9 +3,22 @@
 // mutual player awareness (custom lobby names, overhead HP bars, nametags, party HUD, off-screen arrows),
 // and automatic run termination on partner disconnect.
 
+const ALLOWED_CHARACTERS = new Set(['dipper', 'warrior', 'wizard', 'ranger', 'barbarian', 'monk', 'dwarf']);
+
 function sanitizeName(name) {
     if (!name || typeof name !== 'string') return '';
     return name.trim().slice(0, 14).replace(/[^a-zA-Z0-9 ()_-]/g, '');
+}
+
+function sanitizeRoomId(room) {
+    if (!room || typeof room !== 'string') return '';
+    return room.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+}
+
+function sanitizeCharacter(charId, fallback = 'warrior') {
+    if (!charId || typeof charId !== 'string') return fallback;
+    const normalized = charId.trim().toLowerCase();
+    return ALLOWED_CHARACTERS.has(normalized) ? normalized : fallback;
 }
 
 function escapeHtml(str) {
@@ -72,15 +85,24 @@ export class MultiplayerManager {
         if (this.ws) {
             try { this.ws.close(); } catch(e) {}
         }
-        this.roomId = roomId;
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+        const safeRoom = sanitizeRoomId(roomId) || MultiplayerManager.generateRoomId();
+        this.roomId = safeRoom;
+        this.role = null;
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${proto}//${window.location.host}/ws?room=${encodeURIComponent(roomId)}`;
+        const wsUrl = `${proto}//${window.location.host}/ws?room=${encodeURIComponent(safeRoom)}`;
         console.log('[Multiplayer] Connecting to:', wsUrl);
 
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
             console.log('[Multiplayer] WebSocket connected');
+            this.heartbeatInterval = setInterval(() => {
+                this.send({ type: 'ping' });
+            }, 20000);
             this.checkLocalReady();
         };
 
@@ -95,6 +117,10 @@ export class MultiplayerManager {
 
         this.ws.onclose = () => {
             console.log('[Multiplayer] WebSocket closed');
+            if (this.heartbeatInterval) {
+                clearInterval(this.heartbeatInterval);
+                this.heartbeatInterval = null;
+            }
             this.peerConnected = false;
             if (this.gameStarted) {
                 this.endGameOnDisconnect('Connection to Co-Op server lost.');
@@ -125,11 +151,21 @@ export class MultiplayerManager {
     }
 
     handleMessage(msg) {
+        if (!msg || typeof msg !== 'object') return;
         switch (msg.type) {
+            case 'pong':
+                break;
+
             case 'welcome':
+                if (this.role !== null) break;
+                if (msg.role !== 'host' && msg.role !== 'guest') break;
                 this.role = msg.role;
-                this.peers = msg.peers;
-                this.peerConnected = msg.peers > 1;
+                this.peers = Number.isFinite(Number(msg.peers)) ? Math.max(1, Math.min(2, Math.round(Number(msg.peers)))) : 1;
+                this.peerConnected = this.peers > 1;
+                if (msg.room) {
+                    const cleanRoom = sanitizeRoomId(msg.room);
+                    if (cleanRoom) this.roomId = cleanRoom;
+                }
                 if (this.role === 'guest' && this.localName === 'Player 1') {
                     this.localName = 'Player 2';
                     this.remoteName = 'Player 1';
@@ -141,7 +177,7 @@ export class MultiplayerManager {
 
             case 'peer_joined':
                 this.peerConnected = true;
-                this.peers = msg.peers || 2;
+                this.peers = 2;
                 console.log('[Multiplayer] Peer joined');
                 this.sendLobbyUpdate();
                 this.showToast('Player 2 connected to lobby!');
@@ -157,7 +193,15 @@ export class MultiplayerManager {
                 if (this.gameStarted) {
                     this.endGameOnDisconnect('Co-Op Partner Disconnected - Game Over');
                 } else {
-                    this.showToast('Peer disconnected from lobby');
+                    if (msg.promotedToHost || this.role === 'guest') {
+                        this.role = 'host';
+                        if (this.localName === 'Player 2') {
+                            this.localName = 'Player 1';
+                        }
+                        this.showToast('Host left lobby - promoted to Host');
+                    } else {
+                        this.showToast('Peer disconnected from lobby');
+                    }
                     this.updateLobbyUI();
                 }
                 break;
@@ -165,11 +209,11 @@ export class MultiplayerManager {
             case 'lobby_update':
                 const incomingLobbyName = sanitizeName(msg.name);
                 if (this.role === 'host') {
-                    this.remoteCharacter = msg.character || this.remoteCharacter;
+                    this.remoteCharacter = sanitizeCharacter(msg.character, this.remoteCharacter);
                     if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
                 } else {
-                    this.remoteCharacter = msg.hostCharacter || msg.character || this.remoteCharacter;
+                    this.remoteCharacter = sanitizeCharacter(msg.hostCharacter || msg.character, this.remoteCharacter);
                     if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
                 }
@@ -177,21 +221,25 @@ export class MultiplayerManager {
                 break;
 
             case 'game_start':
+                if (this.role !== 'guest' || this.gameStarted) break;
+                if (!msg.config || typeof msg.config !== 'object') break;
                 this.gameStarted = true;
-                this.gameConfig = msg.config;
-                if (this.role === 'host') {
-                    const cleanP2 = sanitizeName(msg.config?.p2Name);
-                    if (cleanP2) this.remoteName = cleanP2;
-                } else {
-                    const cleanP1 = sanitizeName(msg.config?.p1Name);
-                    if (cleanP1) this.remoteName = cleanP1;
-                }
+                this.gameConfig = {
+                    seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
+                    mapId: typeof msg.config.mapId === 'string' ? msg.config.mapId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) : 'lumbridge',
+                    p1Char: sanitizeCharacter(msg.config.p1Char, 'dipper'),
+                    p2Char: sanitizeCharacter(msg.config.p2Char, 'warrior'),
+                    p1Name: sanitizeName(msg.config.p1Name) || 'Player 1',
+                    p2Name: sanitizeName(msg.config.p2Name) || 'Player 2'
+                };
+                if (this.gameConfig.p1Name) this.remoteName = this.gameConfig.p1Name;
                 console.log('[Multiplayer] Game Starting with config:', this.gameConfig);
                 this.closeLobbyModal();
                 this.launchCoopRun(this.gameConfig);
                 break;
 
             case 'input':
+                if (this.role !== 'host') break;
                 this.remoteInput = msg;
                 if (window.gameClient && window.gameClient.sim && window.gameClient.sim.player2) {
                     this.applyRemoteInput(window.gameClient.sim.player2, msg);
@@ -205,7 +253,7 @@ export class MultiplayerManager {
                 break;
 
             case 'game_over':
-                this.endGameOnDisconnect(msg.reason || 'Game Over');
+                this.endGameOnDisconnect(typeof msg.reason === 'string' ? msg.reason.slice(0, 80) : 'Game Over');
                 break;
         }
     }
@@ -964,8 +1012,8 @@ export class MultiplayerManager {
         const isCorgi = p2.characterId === 'dipper';
         const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase());
         const displayName = escapeHtml(this.remoteName.toUpperCase());
-        const hp = Math.max(0, Math.round(p2.hp));
-        const maxHp = p2.maxHp || 25;
+        const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
+        const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
         const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
         const hpPercent = Math.round(hpRatio * 100);
         const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
@@ -1039,22 +1087,26 @@ export class MultiplayerManager {
 
         // 1. Synchronize player states
         if (sim.player2) {
-            if (msg.x !== undefined && msg.y !== undefined) {
+            if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
                 sim.player2.prevX = sim.player2.x;
                 sim.player2.prevY = sim.player2.y;
                 sim.player2.x = msg.x;
                 sim.player2.y = msg.y;
             }
-            if (msg.p1Hp !== undefined) {
-                sim.player2.hp = msg.p1Hp;
-                if (msg.p1MaxHp) sim.player2.maxHp = msg.p1MaxHp;
+            if (Number.isFinite(Number(msg.p1Hp))) {
+                sim.player2.hp = Math.max(0, Number(msg.p1Hp));
+                if (Number.isFinite(Number(msg.p1MaxHp))) {
+                    sim.player2.maxHp = Math.max(1, Math.round(Number(msg.p1MaxHp)));
+                }
             }
         }
 
         if (sim.player) {
-            if (msg.p2Hp !== undefined) {
-                sim.player.hp = msg.p2Hp;
-                if (msg.p2MaxHp) sim.player.maxHp = msg.p2MaxHp;
+            if (Number.isFinite(Number(msg.p2Hp))) {
+                sim.player.hp = Math.max(0, Number(msg.p2Hp));
+                if (Number.isFinite(Number(msg.p2MaxHp))) {
+                    sim.player.maxHp = Math.max(1, Math.round(Number(msg.p2MaxHp)));
+                }
                 if (sim.player.hp <= 0 && !sim.runOver) {
                     this.endGameOnDisconnect('You have died - Game Over');
                 }
@@ -1167,15 +1219,30 @@ export class MultiplayerManager {
     }
 
     applyRemoteInput(p2, msg) {
-        this.remoteInput = msg;
-        if (msg.x !== undefined && msg.y !== undefined) {
+        if (!msg || typeof msg !== 'object') return;
+        const moveX = Number.isFinite(msg.moveX) ? Math.max(-1, Math.min(1, msg.moveX)) : 0;
+        const moveY = Number.isFinite(msg.moveY) ? Math.max(-1, Math.min(1, msg.moveY)) : 0;
+        this.remoteInput = { moveX, moveY, tick: Number.isFinite(msg.tick) ? msg.tick : 0 };
+
+        if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+            const targetX = Math.max(0, Math.min(16384, msg.x));
+            const targetY = Math.max(0, Math.min(16384, msg.y));
+            const dx = targetX - p2.x;
+            const dy = targetY - p2.y;
+            const dist = Math.hypot(dx, dy);
+            const maxStep = 6.0;
             p2.prevX = p2.x;
             p2.prevY = p2.y;
-            p2.x = msg.x;
-            p2.y = msg.y;
+            if (dist <= maxStep) {
+                p2.x = targetX;
+                p2.y = targetY;
+            } else if (dist > 0) {
+                p2.x += (dx / dist) * maxStep;
+                p2.y += (dy / dist) * maxStep;
+            }
         }
-        if (msg.moveX !== undefined && (msg.moveX !== 0 || msg.moveY !== 0)) {
-            p2.yaw = Math.round(Math.atan2(msg.moveX, msg.moveY) * (1024 / Math.PI));
+        if (moveX !== 0 || moveY !== 0) {
+            p2.yaw = Math.round(Math.atan2(moveX, moveY) * (1024 / Math.PI));
             p2.moving = true;
         } else {
             p2.moving = false;
@@ -1230,10 +1297,8 @@ export class MultiplayerManager {
     }
 
     openLobbyModal(roomId = null) {
-        if (!roomId) {
-            roomId = MultiplayerManager.generateRoomId();
-        }
-        this.connect(roomId);
+        const cleanRoom = sanitizeRoomId(roomId) || MultiplayerManager.generateRoomId();
+        this.connect(cleanRoom);
         this.renderLobbyModal();
     }
 
@@ -1286,9 +1351,12 @@ export class MultiplayerManager {
         if (!box) return;
 
         const isHost = this.role === 'host' || this.role === null;
-        const inviteLink = this.getInviteLink();
+        const safeRoomId = escapeHtml(this.roomId || 'CONNECTING...');
+        const safeInviteLink = escapeHtml(this.getInviteLink());
         const safeLocalName = escapeHtml(this.localName);
         const safeRemoteName = escapeHtml(this.remoteName);
+        const safeRemoteCharGuestView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'wizard')).toUpperCase());
+        const safeRemoteCharHostView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'warrior')).toUpperCase());
 
         const characters = [
             { id: 'dipper', name: 'Dipper (Corgi)' },
@@ -1310,10 +1378,10 @@ export class MultiplayerManager {
             <div style="background: #1a1510; border: 2px solid #3d3123; padding: 12px; margin-bottom: 20px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <span style="font-size: 14px; color: #888;">ROOM CODE:</span>
-                    <span style="font-size: 20px; color: #ffff00; letter-spacing: 2px;">${this.roomId || 'CONNECTING...'}</span>
+                    <span style="font-size: 20px; color: #ffff00; letter-spacing: 2px;">${safeRoomId}</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                    <input id="coop-link-input" type="text" readonly value="${inviteLink}" 
+                    <input id="coop-link-input" type="text" readonly value="${safeInviteLink}" 
                         style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #fff; padding: 6px 10px; font-family: monospace; font-size: 13px;" />
                     <button id="coop-copy-btn" style="
                         background: #4a3c2c; border: 2px solid #6b5842; color: #ff981f; padding: 6px 14px; 
@@ -1339,7 +1407,7 @@ export class MultiplayerManager {
                     ` : `
                         <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
                         <div style="font-size: 13px; color: #ff981f;">
-                            Class: <strong>${(this.remoteCharacter || 'wizard').toUpperCase()}</strong>
+                            Class: <strong>${safeRemoteCharGuestView}</strong>
                         </div>
                     `}
                 </div>
@@ -1358,7 +1426,7 @@ export class MultiplayerManager {
                     ` : (this.peerConnected ? `
                         <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
                         <div style="font-size: 13px; color: #ff981f;">
-                            Class: <strong>${(this.remoteCharacter || 'warrior').toUpperCase()}</strong>
+                            Class: <strong>${safeRemoteCharHostView}</strong>
                             <div style="font-size: 11px; color: ${this.remoteReady ? '#00ff00' : '#ffff00'}; margin-top: 4px;">
                                 ${this.remoteReady ? '● Assets Ready' : '⏳ Baking Assets...'}
                             </div>
@@ -1457,7 +1525,7 @@ window.multiplayer = multiplayer;
 // Automatically open lobby if ?room= is in URL
 window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
-    const room = params.get('room');
+    const room = sanitizeRoomId(params.get('room'));
     if (room) {
         console.log('[Multiplayer] Auto-joining room from URL query:', room);
         setTimeout(() => {

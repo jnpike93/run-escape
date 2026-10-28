@@ -5,18 +5,47 @@ import hashlib
 import base64
 import struct
 import threading
+import socket
+import json
+import re
 import os
 import sys
 
 PORT = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8080))
+BIND_HOST = os.environ.get("HOST", "127.0.0.1")
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-MAX_FRAME_SIZE = 65536  # 64 KB max frame payload
-MAX_ROOMS = 1000        # Maximum concurrent rooms
-MAX_PEERS_PER_ROOM = 2  # 2-player co-op cap
+MAX_FRAME_SIZE = 65536       # 64 KB max frame payload
+MAX_ROOMS = 1000             # Maximum concurrent rooms
+MAX_PEERS_PER_ROOM = 2       # 2-player co-op cap
+MAX_CONNS_PER_IP = 10        # Maximum concurrent WebSocket connections per client IP
+SOCKET_TIMEOUT = 60.0        # Socket read/write timeout in seconds
 
 # WebSocket Room Broker: room_id -> list of (client_sock, lock, role)
 rooms = {}
+ip_conns = {}
 rooms_lock = threading.Lock()
+
+HOST_ALLOWED_MSG_TYPES = {"lobby_update", "game_start", "sync_world", "game_over"}
+GUEST_ALLOWED_MSG_TYPES = {"lobby_update", "input", "game_over"}
+
+CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'wasm-unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "worker-src 'self' blob:; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'"
+)
+
+def sanitize_room_id(raw_room):
+    if not raw_room or not isinstance(raw_room, str):
+        return "default"
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "", raw_room.strip())[:32]
+    return cleaned if cleaned else "default"
 
 def encode_ws_frame(msg, opcode=1):
     payload = msg.encode("utf-8") if isinstance(msg, str) else msg
@@ -37,52 +66,84 @@ def read_exact(sock, n):
             if not chunk:
                 return None
             buf.extend(chunk)
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, socket.timeout, TimeoutError, OSError):
             return None
     return bytes(buf)
 
-def handle_ws_client(sock, room_id):
+def handle_ws_client(sock, room_id, client_ip):
+    sock.settimeout(SOCKET_TIMEOUT)
     sock_lock = threading.Lock()
+    registered = False
+    role = "guest"
+
     with rooms_lock:
-        if room_id not in rooms:
-            if len(rooms) >= MAX_ROOMS:
-                sock.close()
-                return
-            rooms[room_id] = []
-        if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
+        current_ip_count = ip_conns.get(client_ip, 0)
+        if current_ip_count >= MAX_CONNS_PER_IP:
             try:
-                err_frame = encode_ws_frame('{"type":"error","message":"Room is full (maximum 2 players)."}')
-                sock.sendall(err_frame)
                 sock.close()
-            except:
+            except Exception:
                 pass
             return
-        peer_count = len(rooms[room_id])
-        role = "host" if peer_count == 0 else "guest"
-        rooms[room_id].append((sock, sock_lock, role))
-    
-    # Send welcome packet
-    try:
-        welcome = encode_ws_frame(f'{{"type":"welcome","role":"{role}","peers":{peer_count + 1},"room":"{room_id}"}}')
-        with sock_lock:
-            sock.sendall(welcome)
-    except:
-        pass
 
-    # Notify existing peers that a new player joined
-    if peer_count > 0:
-        joined_msg = encode_ws_frame(f'{{"type":"peer_joined","role":"{role}","peers":{peer_count + 1}}}')
-        with rooms_lock:
-            peers = list(rooms.get(room_id, []))
-        for peer_sock, peer_lock, _ in peers:
-            if peer_sock != sock:
+        if room_id not in rooms:
+            if len(rooms) >= MAX_ROOMS:
                 try:
-                    with peer_lock:
-                        peer_sock.sendall(joined_msg)
-                except:
+                    sock.close()
+                except Exception:
                     pass
+                return
+            rooms[room_id] = []
+
+        if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
+            try:
+                err_frame = encode_ws_frame(json.dumps({
+                    "type": "error",
+                    "message": "Room is full (maximum 2 players)."
+                }))
+                sock.sendall(err_frame)
+                sock.close()
+            except Exception:
+                pass
+            return
+
+        peer_count = len(rooms[room_id])
+        has_host = any(p[2] == "host" for p in rooms[room_id])
+        role = "host" if not has_host else "guest"
+        rooms[room_id].append((sock, sock_lock, role))
+        ip_conns[client_ip] = current_ip_count + 1
+        registered = True
 
     try:
+        # Send welcome packet serialized via json.dumps
+        try:
+            welcome = encode_ws_frame(json.dumps({
+                "type": "welcome",
+                "role": role,
+                "peers": peer_count + 1,
+                "room": room_id
+            }))
+            with sock_lock:
+                sock.sendall(welcome)
+        except Exception:
+            return
+
+        # Notify existing peers that a new player joined (outside rooms_lock)
+        if peer_count > 0:
+            joined_msg = encode_ws_frame(json.dumps({
+                "type": "peer_joined",
+                "role": role,
+                "peers": peer_count + 1
+            }))
+            with rooms_lock:
+                peers = list(rooms.get(room_id, []))
+            for peer_sock, peer_lock, _ in peers:
+                if peer_sock != sock:
+                    try:
+                        with peer_lock:
+                            peer_sock.sendall(joined_msg)
+                    except Exception:
+                        pass
+
         while True:
             head = read_exact(sock, 2)
             if not head:
@@ -94,11 +155,13 @@ def handle_ws_client(sock, room_id):
 
             if length == 126:
                 ext = read_exact(sock, 2)
-                if not ext: break
+                if not ext:
+                    break
                 length = struct.unpack("!H", ext)[0]
             elif length == 127:
                 ext = read_exact(sock, 8)
-                if not ext: break
+                if not ext:
+                    break
                 length = struct.unpack("!Q", ext)[0]
 
             if length > MAX_FRAME_SIZE:
@@ -106,7 +169,7 @@ def handle_ws_client(sock, room_id):
                 try:
                     with sock_lock:
                         sock.sendall(encode_ws_frame(close_payload, opcode=8))
-                except:
+                except Exception:
                     pass
                 break
 
@@ -121,66 +184,142 @@ def handle_ws_client(sock, room_id):
                     unmasked[i] ^= mask[i % 4]
                 payload = bytes(unmasked)
 
-            if opcode == 8: # close
+            if opcode == 8:  # close
                 break
-            elif opcode == 9: # ping
-                pong = encode_ws_frame(payload, opcode=10)
-                with sock_lock:
-                    sock.sendall(pong)
-            elif opcode in (1, 2): # text or binary
-                # Relay to all peers in the same room
-                relay = encode_ws_frame(payload, opcode=opcode)
+            elif opcode == 9:  # ping
+                pong = encode_ws_frame(payload[:125], opcode=10)
+                try:
+                    with sock_lock:
+                        sock.sendall(pong)
+                except Exception:
+                    break
+            elif opcode == 1:  # text JSON frame only
+                try:
+                    decoded_text = payload.decode("utf-8")
+                    parsed_msg = json.loads(decoded_text)
+                except Exception:
+                    continue
+
+                if not isinstance(parsed_msg, dict):
+                    continue
+
+                msg_type = parsed_msg.get("type")
+                if not isinstance(msg_type, str):
+                    continue
+
+                if msg_type == "ping":
+                    try:
+                        with sock_lock:
+                            sock.sendall(encode_ws_frame('{"type":"pong"}'))
+                    except Exception:
+                        break
+                    continue
+
                 with rooms_lock:
-                    peers = list(rooms.get(room_id, []))
-                for peer_sock, peer_lock, _ in peers:
+                    room_entries = list(rooms.get(room_id, []))
+                    current_role = role
+                    for p_sock, _, p_role in room_entries:
+                        if p_sock == sock:
+                            current_role = p_role
+                            break
+
+                allowed_types = HOST_ALLOWED_MSG_TYPES if current_role == "host" else GUEST_ALLOWED_MSG_TYPES
+                if msg_type not in allowed_types:
+                    continue
+
+                relay = encode_ws_frame(payload, opcode=1)
+                for peer_sock, peer_lock, _ in room_entries:
                     if peer_sock != sock:
                         try:
                             with peer_lock:
                                 peer_sock.sendall(relay)
-                        except:
+                        except Exception:
                             pass
     finally:
-        with rooms_lock:
-            if room_id in rooms:
-                rooms[room_id] = [p for p in rooms[room_id] if p[0] != sock]
-                left_msg = encode_ws_frame(f'{{"type":"peer_left","role":"{role}"}}')
-                for peer_sock, peer_lock, _ in rooms[room_id]:
-                    try:
-                        with peer_lock:
-                            peer_sock.sendall(left_msg)
-                    except:
-                        pass
-                if not rooms[room_id]:
-                    del rooms[room_id]
+        notify_peers = []
+        departing_role = role
+        promoted_host = False
+
+        if registered:
+            with rooms_lock:
+                if client_ip in ip_conns:
+                    ip_conns[client_ip] = max(0, ip_conns[client_ip] - 1)
+                    if ip_conns[client_ip] == 0:
+                        del ip_conns[client_ip]
+
+                if room_id in rooms:
+                    remaining = []
+                    for p_sock, p_lock, p_role in rooms[room_id]:
+                        if p_sock == sock:
+                            departing_role = p_role
+                        else:
+                            remaining.append((p_sock, p_lock, p_role))
+
+                    if remaining and not any(p[2] == "host" for p in remaining):
+                        first_sock, first_lock, _ = remaining[0]
+                        remaining[0] = (first_sock, first_lock, "host")
+                        promoted_host = True
+
+                    if remaining:
+                        rooms[room_id] = remaining
+                        notify_peers = list(remaining)
+                    else:
+                        del rooms[room_id]
+
+        if notify_peers:
+            left_msg = encode_ws_frame(json.dumps({
+                "type": "peer_left",
+                "role": departing_role,
+                "promotedToHost": promoted_host
+            }))
+            for peer_sock, peer_lock, _ in notify_peers:
+                try:
+                    with peer_lock:
+                        peer_sock.sendall(left_msg)
+                except Exception:
+                    pass
+
         try:
             sock.close()
-        except:
+        except Exception:
             pass
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+    def _get_client_ip(self):
+        remote_ip = self.client_address[0] if self.client_address else "unknown"
+        if remote_ip in ("127.0.0.1", "::1"):
+            forwarded = self.headers.get("X-Real-IP")
+            if forwarded:
+                return forwarded.strip()[:64]
+        return remote_ip
+
     def do_GET(self):
         if self.path.startswith("/ws"):
             origin = self.headers.get("Origin")
-            if origin:
-                parsed_origin = urllib.parse.urlparse(origin)
-                host_only = parsed_origin.netloc.split(":")[0].lower()
-                allowed_hosts = {
-                    "localhost",
-                    "127.0.0.1",
-                    "cuteanimegirls.moe",
-                    "run-escape.cuteanimegirls.moe",
-                    "167.71.157.5"
-                }
-                if host_only not in allowed_hosts and not host_only.endswith(".cuteanimegirls.moe"):
-                    self.send_error(403, "Forbidden Origin")
-                    return
+            if not origin:
+                self.send_error(403, "Forbidden Origin")
+                return
+
+            parsed_origin = urllib.parse.urlparse(origin)
+            host_only = parsed_origin.netloc.split(":")[0].lower()
+            allowed_hosts = {
+                "localhost",
+                "127.0.0.1",
+                "cuteanimegirls.moe",
+                "run-escape.cuteanimegirls.moe",
+                "167.71.157.5"
+            }
+            if host_only not in allowed_hosts and not host_only.endswith(".cuteanimegirls.moe"):
+                self.send_error(403, "Forbidden Origin")
+                return
 
             u = urllib.parse.urlparse(self.path)
             qs = urllib.parse.parse_qs(u.query)
-            room_id = qs.get("room", ["default"])[0].strip()[:32]
+            raw_room = qs.get("room", ["default"])[0]
+            room_id = sanitize_room_id(raw_room)
 
             key = self.headers.get("Sec-WebSocket-Key")
             if not key:
@@ -196,18 +335,37 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Sec-WebSocket-Accept", accept)
             self.end_headers()
 
-            handle_ws_client(self.connection, room_id)
+            handle_ws_client(self.connection, room_id, self._get_client_ip())
             return
 
         super().do_GET()
 
     def send_head(self):
-        # Block dotfiles and hidden paths (.git, .env, etc.)
-        clean_path = urllib.parse.urlsplit(self.path).path
-        parts = clean_path.strip("/").split("/")
-        if any(part.startswith(".") for part in parts if part):
+        raw_path = urllib.parse.urlsplit(self.path).path
+        unquoted_path = urllib.parse.unquote(raw_path)
+        if "\\" in unquoted_path or "\x00" in unquoted_path:
             self.send_error(404, "File not found")
             return None
+
+        parts = [p for p in unquoted_path.strip("/").split("/") if p]
+        if any(part.startswith(".") or part in (".", "..") for part in parts):
+            self.send_error(404, "File not found")
+            return None
+
+        # Enforce strict public static asset allowlist
+        normalized = "/" + "/".join(parts) if parts else "/"
+        allowed_exact = {"/", "/index.html", "/favicon.ico", "/notice.md"}
+        is_allowed_asset = (
+            normalized.startswith("/assets/")
+            and not normalized.endswith(".map")
+            and normalized != "/assets/index-BiDFrk06.js"
+        )
+        is_allowed_cache = normalized.startswith("/caches/") and not normalized.endswith(".map")
+
+        if normalized not in allowed_exact and not is_allowed_asset and not is_allowed_cache:
+            self.send_error(404, "File not found")
+            return None
+
         return super().send_head()
 
     def list_directory(self, path):
@@ -220,6 +378,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Security-Policy", CSP_POLICY)
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
@@ -246,6 +406,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
-    with http.server.ThreadingHTTPServer(("", port), CustomHandler) as httpd:
-        print(f"Serving Run Escape + WebSocket Relay on http://localhost:{port} with COOP/COEP enabled...")
+    bind_host = sys.argv[2] if len(sys.argv) > 2 else BIND_HOST
+    with http.server.ThreadingHTTPServer((bind_host, port), CustomHandler) as httpd:
+        print(f"Serving Run Escape + WebSocket Relay on http://{bind_host}:{port} with COOP/COEP enabled...")
         httpd.serve_forever()
