@@ -30,6 +30,24 @@ const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
 const CHAR_WEAPONS = Object.fromEntries(ALL_CHARACTERS.map(c => [c.id, c.weapon]));
 const DEFAULT_UNLOCKED_CHARACTERS = ALL_CHARACTERS.filter(c => c.defaultUnlocked).map(c => c.id);
 
+const ALL_REGIONS = [
+    { id: 'lumbridge', name: 'Lumbridge', bosses: 'Count Draynor & Wise Old Man', difficulty: '1.0x Base HP / 1.0x Dmg' },
+    { id: 'barrows', name: 'Barrows', bosses: 'The Six Barrows Brothers (Dharok Final)', difficulty: '1.25x Base HP / 1.15x Dmg' },
+    { id: 'wilderness', name: 'Wilderness', bosses: 'Crazy Archaeologist, Chaos Fanatic & King Black Dragon', difficulty: '1.5x Base HP / 1.3x Dmg' },
+    { id: 'desert', name: 'Kharidian Desert', bosses: 'Fareed, Dessous, Damis & Kalphite Queen', difficulty: '1.75x Base HP / 1.45x Dmg' },
+    { id: 'fremennik', name: 'Fremennik Province', bosses: 'Dagannoth Kings & Vorkath', difficulty: '2.0x Base HP / 1.6x Dmg' },
+    { id: 'karamja', name: 'Karamja', bosses: 'Elvarg, Nezikchened, Ket-Zek & TzTok-Jad', difficulty: '2.25x Base HP / 1.75x Dmg' },
+    { id: 'kourend', name: 'Kourend', bosses: 'Lizardman Shaman, Sarachnis, Skotizo & Alchemical Hydra', difficulty: '2.5x Base HP / 1.9x Dmg' },
+    { id: 'varlamore', name: 'Varlamore', bosses: 'Manticore, Colossi & Sol Heredit', difficulty: '2.75x Base HP / 2.05x Dmg' }
+];
+const ALLOWED_REGIONS = new Set(ALL_REGIONS.map(r => r.id));
+
+function sanitizeMapId(mapId, fallback = 'lumbridge') {
+    if (!mapId || typeof mapId !== 'string') return fallback;
+    const normalized = mapId.trim().toLowerCase();
+    return ALLOWED_REGIONS.has(normalized) ? normalized : fallback;
+}
+
 function sanitizeName(name) {
     if (!name || typeof name !== 'string') return '';
     return name.trim().slice(0, 14).replace(/[^a-zA-Z0-9 ()_-]/g, '');
@@ -70,6 +88,7 @@ export class MultiplayerManager {
         this.remoteName = 'Player 2';
         this.localReady = false;
         this.remoteReady = false;
+        this.selectedMapId = 'lumbridge';
         this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
         
         this.gameStarted = false;
@@ -259,6 +278,9 @@ export class MultiplayerManager {
                             this.sendLobbyUpdate();
                         }
                     }
+                    if (msg.mapId) {
+                        this.selectedMapId = sanitizeMapId(msg.mapId, this.selectedMapId);
+                    }
                     this.remoteCharacter = sanitizeCharacter(msg.hostCharacter || msg.character, this.remoteCharacter);
                     if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
@@ -272,7 +294,7 @@ export class MultiplayerManager {
                 this.gameStarted = true;
                 this.gameConfig = {
                     seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
-                    mapId: typeof msg.config.mapId === 'string' ? msg.config.mapId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) : 'lumbridge',
+                    mapId: sanitizeMapId(msg.config.mapId, 'lumbridge'),
                     p1Char: sanitizeCharacter(msg.config.p1Char, 'dipper'),
                     p2Char: sanitizeCharacter(msg.config.p2Char, 'warrior'),
                     p1Name: sanitizeName(msg.config.p1Name) || 'Player 1',
@@ -281,6 +303,7 @@ export class MultiplayerManager {
                         ? msg.config.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
                         : []
                 };
+                this.selectedMapId = this.gameConfig.mapId;
                 if (this.gameConfig.p1Name) this.remoteName = this.gameConfig.p1Name;
                 console.log('[Multiplayer] Game Starting with config:', this.gameConfig);
                 this.closeLobbyModal();
@@ -390,6 +413,7 @@ export class MultiplayerManager {
             this.send({
                 type: 'lobby_update',
                 hostCharacter: this.localCharacter,
+                mapId: this.selectedMapId,
                 name: this.localName,
                 ready: this.localReady,
                 unlockedCharacters: unlocked
@@ -402,6 +426,13 @@ export class MultiplayerManager {
                 ready: this.localReady
             });
         }
+    }
+
+    selectMap(mapId) {
+        if (this.role !== 'host' && this.role !== null) return;
+        this.selectedMapId = sanitizeMapId(mapId, 'lumbridge');
+        this.sendLobbyUpdate();
+        this.updateLobbyUI();
     }
 
     setPlayerName(name) {
@@ -524,9 +555,10 @@ export class MultiplayerManager {
     async startRun() {
         if (this.role !== 'host') return;
         
+        const selectedRegion = ALL_REGIONS.find(r => r.id === this.selectedMapId) || ALL_REGIONS[0];
         const startBtn = document.getElementById('coop-start-btn');
         if (startBtn) {
-            startBtn.textContent = 'Preparing Lumbridge...';
+            startBtn.textContent = `Preparing ${selectedRegion.name}...`;
             startBtn.disabled = true;
         }
 
@@ -534,7 +566,7 @@ export class MultiplayerManager {
         if (!client) {
             this.showToast('Game client not ready');
             if (startBtn) {
-                startBtn.textContent = 'Enter Lumbridge (Start Co-Op)';
+                startBtn.textContent = `Enter ${selectedRegion.name} (Start Co-Op)`;
                 startBtn.disabled = false;
             }
             return;
@@ -547,7 +579,7 @@ export class MultiplayerManager {
         const seed = Math.floor(Math.random() * 2147483647);
         const config = {
             seed,
-            mapId: 'lumbridge',
+            mapId: selectedRegion.id,
             p1Char,
             p1Name: this.localName,
             p2Char,
@@ -673,17 +705,20 @@ export class MultiplayerManager {
         const p1 = sim.player;
         p1.characterId = localChar;
 
-        // Position players side-by-side with clear spacing
+        const spawnX = Number.isFinite(sim.map?.spawn?.x) ? sim.map.spawn.x : 3222.5;
+        const spawnY = Number.isFinite(sim.map?.spawn?.y) ? sim.map.spawn.y : 3218.5;
+
+        // Position players side-by-side at the selected region's spawn coordinates
         if (isHost) {
-            p1.x = 3222.0;
-            p1.y = 3218.5;
-            p1.prevX = 3222.0;
-            p1.prevY = 3218.5;
+            p1.x = spawnX - 0.5;
+            p1.y = spawnY;
+            p1.prevX = spawnX - 0.5;
+            p1.prevY = spawnY;
             sim.player2 = {
-                x: 3223.5,
-                y: 3218.5,
-                prevX: 3223.5,
-                prevY: 3218.5,
+                x: spawnX + 1.0,
+                y: spawnY,
+                prevX: spawnX + 1.0,
+                prevY: spawnY,
                 radius: p1.radius,
                 facingX: 0,
                 facingY: -1,
@@ -701,15 +736,15 @@ export class MultiplayerManager {
                 characterId: remoteChar
             };
         } else {
-            p1.x = 3223.5;
-            p1.y = 3218.5;
-            p1.prevX = 3223.5;
-            p1.prevY = 3218.5;
+            p1.x = spawnX + 1.0;
+            p1.y = spawnY;
+            p1.prevX = spawnX + 1.0;
+            p1.prevY = spawnY;
             sim.player2 = {
-                x: 3222.0,
-                y: 3218.5,
-                prevX: 3222.0,
-                prevY: 3218.5,
+                x: spawnX - 0.5,
+                y: spawnY,
+                prevX: spawnX - 0.5,
+                prevY: spawnY,
                 radius: p1.radius,
                 facingX: 0,
                 facingY: -1,
@@ -748,22 +783,25 @@ export class MultiplayerManager {
                 }
             }
 
-            // Spawn initial courtyard goblins on Host so both players immediately engage monsters
+            // Spawn initial wave enemies around the region's spawn point on Host so both players immediately engage monsters
             if (client.getEnemyDef && sim.enemies.length < 5) {
                 try {
-                    const courtyardSpawns = [
-                        { x: 3225.5, y: 3218.5 },
-                        { x: 3220.0, y: 3218.5 },
-                        { x: 3222.5, y: 3222.0 },
-                        { x: 3222.5, y: 3215.0 },
-                        { x: 3226.0, y: 3221.0 }
+                    const firstWaveEnemyId = sim.map?.waves?.[0]?.enemies?.[0]?.id || 'goblin';
+                    const starterDef = client.getEnemyDef(firstWaveEnemyId) || client.getEnemyDef('goblin');
+                    const initialSpawns = [
+                        { x: spawnX + 3.0, y: spawnY },
+                        { x: spawnX - 2.5, y: spawnY },
+                        { x: spawnX, y: spawnY + 3.5 },
+                        { x: spawnX, y: spawnY - 3.5 },
+                        { x: spawnX + 3.5, y: spawnY + 2.5 }
                     ];
-                    for (const pos of courtyardSpawns) {
-                        sim.spawnEnemy(client.getEnemyDef('goblin'), 'normal', pos);
+                    for (const pos of initialSpawns) {
+                        const walkable = sim.grid && !sim.grid.isSolid(Math.floor(pos.x), Math.floor(pos.y));
+                        sim.spawnEnemy(starterDef, 'normal', walkable ? pos : undefined);
                     }
-                    console.log('[Multiplayer] Courtyard enemies spawned authoritatively on Host (2x Co-Op HP).');
+                    console.log(`[Multiplayer] Initial ${firstWaveEnemyId} enemies spawned on Host in ${sim.map?.name || 'region'} (2x Co-Op HP).`);
                 } catch (e) {
-                    console.warn('[Multiplayer] Courtyard spawn note:', e);
+                    console.warn('[Multiplayer] Initial spawn note:', e);
                 }
             }
 
@@ -2447,6 +2485,11 @@ export class MultiplayerManager {
             ...lockedChars.map(c => `<option value="${c.id}" disabled>🔒 ${escapeHtml(c.name)} (Locked on Host)</option>`)
         ].join('');
 
+        const currentRegion = ALL_REGIONS.find(r => r.id === this.selectedMapId) || ALL_REGIONS[0];
+        const regionOptionsHtml = ALL_REGIONS.map(r => (
+            `<option value="${r.id}" ${currentRegion.id === r.id ? 'selected' : ''}>${escapeHtml(r.name)} (${escapeHtml(r.difficulty)})</option>`
+        )).join('');
+
         box.innerHTML = `
             <h2 style="margin: 0 0 8px; font-size: 26px; color: #ff981f; text-shadow: 2px 2px #000;">
                 Online Co-Op Lobby
@@ -2454,7 +2497,7 @@ export class MultiplayerManager {
             <div style="font-size: 14px; color: #bbb; margin-bottom: 10px;">
                 ${isHost ? 'Share the generated link below with Player 2 to join your run.' : 'Connected as Player 2 (Guest).'}
             </div>
-            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 16px; font-size: 11px;">
+            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 14px; font-size: 11px;">
                 <span style="background: #231a12; border: 1px solid #6b5842; color: #ff6040; padding: 3px 10px; border-radius: 3px;">
                     ⚔ Co-Op Difficulty: 2x Monster HP
                 </span>
@@ -2464,7 +2507,7 @@ export class MultiplayerManager {
             </div>
 
             <!-- Room Code & Link Box -->
-            <div style="background: #1a1510; border: 2px solid #3d3123; padding: 12px; margin-bottom: 20px; text-align: left;">
+            <div style="background: #1a1510; border: 2px solid #3d3123; padding: 12px; margin-bottom: 14px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <span style="font-size: 14px; color: #888;">ROOM CODE:</span>
                     <span style="font-size: 20px; color: #ffff00; letter-spacing: 2px;">${safeRoomId}</span>
@@ -2480,8 +2523,26 @@ export class MultiplayerManager {
                 </div>
             </div>
 
+            <!-- Region / Map Selection Box -->
+            <div style="background: #1e1812; border: 2px solid #5a4a35; padding: 12px 14px; margin-bottom: 16px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 12px; color: #ff981f; letter-spacing: 0.5px;">DESTINATION REGION:</span>
+                    <span style="font-size: 11px; color: #ffff00;">${escapeHtml(currentRegion.difficulty)} (x2 Co-Op HP)</span>
+                </div>
+                ${isHost ? `
+                    <select id="coop-map-select" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 6px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 6px;">
+                        ${regionOptionsHtml}
+                    </select>
+                ` : `
+                    <div style="font-size: 16px; color: #ffff00; margin-bottom: 4px;">${escapeHtml(currentRegion.name)} <span style="font-size: 11px; color: #888;">(Selected by Host)</span></div>
+                `}
+                <div style="font-size: 11px; color: #b8a890;">
+                    Bosses: <strong style="color: #ff981f;">${escapeHtml(currentRegion.bosses)}</strong>
+                </div>
+            </div>
+
             <!-- Players Cards with Custom Name Fields -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; text-align: left;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; text-align: left;">
                 <!-- Player 1 Card -->
                 <div style="background: #1e1812; border: 2px solid ${isHost ? '#ff981f' : '#3d3123'}; padding: 14px;">
                     <div style="font-size: 12px; color: #888; margin-bottom: 4px;">PLAYER 1 (HOST)</div>
@@ -2542,11 +2603,11 @@ export class MultiplayerManager {
                         color: ${this.peerConnected ? '#fff' : '#665'}; padding: 10px;
                         cursor: ${this.peerConnected ? 'pointer' : 'not-allowed'}; 
                         font-family: 'OSRS Bold', monospace; font-size: 18px; text-shadow: 1px 1px #000;">
-                        ${this.peerConnected ? (this.remoteReady ? 'Enter Lumbridge (Start Co-Op)' : 'Player 2 Loading Assets...') : 'Waiting for Player 2...'}
+                        ${this.peerConnected ? (this.remoteReady ? `Enter ${escapeHtml(currentRegion.name)} (Start Co-Op)` : 'Player 2 Loading Assets...') : 'Waiting for Player 2...'}
                     </button>
                 ` : `
                     <div style="flex: 2; padding: 10px; color: #ffff00; font-size: 15px; align-self: center;">
-                        ${this.localReady ? 'Assets Ready! Waiting for Host to start...' : 'Loading assets...'}
+                        ${this.localReady ? `Assets Ready! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : 'Loading assets...'}
                     </div>
                 `}
             </div>
@@ -2569,6 +2630,11 @@ export class MultiplayerManager {
                     });
                 }
             };
+        }
+
+        const mapSelect = box.querySelector('#coop-map-select');
+        if (mapSelect) {
+            mapSelect.onchange = (e) => this.selectMap(e.target.value);
         }
 
         const p1NameInput = box.querySelector('#coop-p1-name');
