@@ -16,11 +16,11 @@ BIND_HOST = os.environ.get("HOST", "127.0.0.1")
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 MAX_FRAME_SIZE = 65536       # 64 KB max frame payload
 MAX_ROOMS = 1000             # Maximum concurrent rooms
-MAX_PEERS_PER_ROOM = 2       # 2-player co-op cap
-MAX_CONNS_PER_IP = 10        # Maximum concurrent WebSocket connections per client IP
+MAX_PEERS_PER_ROOM = 4       # 4-player co-op cap
+MAX_CONNS_PER_IP = 16        # Maximum concurrent WebSocket connections per client IP
 SOCKET_TIMEOUT = 60.0        # Socket read/write timeout in seconds
 
-# WebSocket Room Broker: room_id -> list of (client_sock, lock, role)
+# WebSocket Room Broker: room_id -> list of (client_sock, lock, role, slot)
 rooms = {}
 ip_conns = {}
 rooms_lock = threading.Lock()
@@ -108,7 +108,7 @@ def handle_ws_client(sock, room_id, client_ip):
             try:
                 err_frame = encode_ws_frame(json.dumps({
                     "type": "error",
-                    "message": "Room is full (maximum 2 players)."
+                    "message": "Room is full (maximum 4 players)."
                 }))
                 sock.sendall(err_frame)
                 sock.close()
@@ -117,9 +117,17 @@ def handle_ws_client(sock, room_id, client_ip):
             return
 
         peer_count = len(rooms[room_id])
+        used_slots = {p[3] for p in rooms[room_id] if len(p) > 3}
+        slot = 1
+        for candidate in range(1, MAX_PEERS_PER_ROOM + 1):
+            if candidate not in used_slots:
+                slot = candidate
+                break
         has_host = any(p[2] == "host" for p in rooms[room_id])
         role = "host" if not has_host else "guest"
-        rooms[room_id].append((sock, sock_lock, role))
+        rooms[room_id].append((sock, sock_lock, role, slot))
+        active_slots = [p[3] for p in rooms[room_id]]
+        host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
         ip_conns[client_ip] = current_ip_count + 1
         registered = True
 
@@ -129,6 +137,9 @@ def handle_ws_client(sock, room_id, client_ip):
             welcome = encode_ws_frame(json.dumps({
                 "type": "welcome",
                 "role": role,
+                "slot": slot,
+                "hostSlot": host_slot,
+                "activeSlots": active_slots,
                 "peers": peer_count + 1,
                 "room": room_id
             }))
@@ -142,11 +153,14 @@ def handle_ws_client(sock, room_id, client_ip):
             joined_msg = encode_ws_frame(json.dumps({
                 "type": "peer_joined",
                 "role": role,
+                "slot": slot,
+                "hostSlot": host_slot,
+                "activeSlots": active_slots,
                 "peers": peer_count + 1
             }))
             with rooms_lock:
                 peers = list(rooms.get(room_id, []))
-            for peer_sock, peer_lock, _ in peers:
+            for peer_sock, peer_lock, _, _ in peers:
                 if peer_sock != sock:
                     try:
                         with peer_lock:
@@ -226,17 +240,21 @@ def handle_ws_client(sock, room_id, client_ip):
                 with rooms_lock:
                     room_entries = list(rooms.get(room_id, []))
                     current_role = role
-                    for p_sock, _, p_role in room_entries:
+                    current_slot = slot
+                    for p_sock, _, p_role, p_slot in room_entries:
                         if p_sock == sock:
                             current_role = p_role
+                            current_slot = p_slot
                             break
 
                 allowed_types = HOST_ALLOWED_MSG_TYPES if current_role == "host" else GUEST_ALLOWED_MSG_TYPES
                 if msg_type not in allowed_types:
                     continue
 
-                relay = encode_ws_frame(payload, opcode=1)
-                for peer_sock, peer_lock, _ in room_entries:
+                parsed_msg["senderSlot"] = current_slot
+                relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
+                relay = encode_ws_frame(relay_payload, opcode=1)
+                for peer_sock, peer_lock, _, _ in room_entries:
                     if peer_sock != sock:
                         try:
                             with peer_lock:
@@ -246,7 +264,10 @@ def handle_ws_client(sock, room_id, client_ip):
     finally:
         notify_peers = []
         departing_role = role
+        departing_slot = slot
         promoted_host = False
+        new_host_slot = None
+        active_slots_after = []
 
         if registered:
             with rooms_lock:
@@ -257,20 +278,25 @@ def handle_ws_client(sock, room_id, client_ip):
 
                 if room_id in rooms:
                     remaining = []
-                    for p_sock, p_lock, p_role in rooms[room_id]:
+                    for p_sock, p_lock, p_role, p_slot in rooms[room_id]:
                         if p_sock == sock:
                             departing_role = p_role
+                            departing_slot = p_slot
                         else:
-                            remaining.append((p_sock, p_lock, p_role))
+                            remaining.append((p_sock, p_lock, p_role, p_slot))
 
                     if remaining and not any(p[2] == "host" for p in remaining):
-                        first_sock, first_lock, _ = remaining[0]
-                        remaining[0] = (first_sock, first_lock, "host")
+                        first_sock, first_lock, _, first_slot = remaining[0]
+                        remaining[0] = (first_sock, first_lock, "host", first_slot)
                         promoted_host = True
+                        new_host_slot = first_slot
+                    elif remaining:
+                        new_host_slot = next((p[3] for p in remaining if p[2] == "host"), remaining[0][3])
 
                     if remaining:
                         rooms[room_id] = remaining
                         notify_peers = list(remaining)
+                        active_slots_after = [p[3] for p in remaining]
                     else:
                         del rooms[room_id]
 
@@ -278,9 +304,13 @@ def handle_ws_client(sock, room_id, client_ip):
             left_msg = encode_ws_frame(json.dumps({
                 "type": "peer_left",
                 "role": departing_role,
-                "promotedToHost": promoted_host
+                "slot": departing_slot,
+                "promotedToHost": promoted_host,
+                "newHostSlot": new_host_slot,
+                "activeSlots": active_slots_after,
+                "peers": len(notify_peers)
             }))
-            for peer_sock, peer_lock, _ in notify_peers:
+            for peer_sock, peer_lock, _, _ in notify_peers:
                 try:
                     with peer_lock:
                         peer_sock.sendall(left_msg)

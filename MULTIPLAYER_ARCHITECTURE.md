@@ -166,3 +166,4 @@ sequenceDiagram
    - Added an `O(1)` primitive version check (`fastKey` using `this.loadoutVersion`) at the top of `updatePartyHUD(p2)` so the 60-144 FPS render loop skips array mapping and `JSON.stringify` on frames where neither HP nor loadout has changed.
 5. **Conditional Orbit Projectile Filtering ([`assets/multiplayer.js`](./assets/multiplayer.js))**:
    - Guarded the per-tick `sim.projectiles.filter(...)` calls in `sim.stepWeapons` behind `.some(p => p.orbit)` checks, avoiding 4 array allocations per tick when neither player has an orbiting weapon active.
+

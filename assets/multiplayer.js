@@ -1,7 +1,8 @@
 // Run Escape - Multiplayer Co-Op Module (RFC 6455 WebSockets)
-// Full 2-player networked co-op with class model baking, deterministic seeds,
-// mutual player awareness (custom lobby names, overhead HP bars, nametags, party HUD, off-screen arrows),
-// and automatic run termination on partner disconnect.
+// Supports 2 to 4 players with Host-authoritative simulation, class model baking,
+// jitter-free velocity extrapolation + soft correction, dynamic party HP scaling,
+// mutual player awareness (custom lobby names, overhead HP bars, nametags, multi-partner HUD, off-screen arrows),
+// and synchronized pause/casket barriers.
 
 const ALL_CHARACTERS = [
     { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: false, secretCode: true },
@@ -29,6 +30,7 @@ const ALL_CHARACTERS = [
 const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
 const CHAR_WEAPONS = Object.fromEntries(ALL_CHARACTERS.map(c => [c.id, c.weapon]));
 const DEFAULT_UNLOCKED_CHARACTERS = ALL_CHARACTERS.filter(c => c.defaultUnlocked).map(c => c.id);
+const SLOT_DEFAULT_CHARS = { 1: 'warrior', 2: 'wizard', 3: 'ranger', 4: 'warrior' };
 
 const ALL_REGIONS = [
     { id: 'lumbridge', name: 'Lumbridge', bosses: 'Count Draynor & Wise Old Man', difficulty: '1.0x Base HP / 1.0x Dmg' },
@@ -41,6 +43,13 @@ const ALL_REGIONS = [
     { id: 'varlamore', name: 'Varlamore', bosses: 'Manticore, Colossi & Sol Heredit', difficulty: '2.75x Base HP / 2.05x Dmg' }
 ];
 const ALLOWED_REGIONS = new Set(ALL_REGIONS.map(r => r.id));
+
+const SPAWN_OFFSETS = {
+    1: { dx: -0.75, dy: -0.5 },
+    2: { dx: 0.75, dy: -0.5 },
+    3: { dx: -0.75, dy: 0.75 },
+    4: { dx: 0.75, dy: 0.75 }
+};
 
 function sanitizeMapId(mapId, fallback = 'lumbridge') {
     if (!mapId || typeof mapId !== 'string') return fallback;
@@ -64,6 +73,11 @@ function sanitizeCharacter(charId, fallback = 'warrior') {
     return ALLOWED_CHARACTERS.has(normalized) ? normalized : fallback;
 }
 
+function sanitizeSlot(slot, fallback = 1) {
+    const n = Math.round(Number(slot));
+    return (Number.isFinite(n) && n >= 1 && n <= 4) ? n : fallback;
+}
+
 function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -78,31 +92,34 @@ export class MultiplayerManager {
     constructor() {
         this.roomId = null;
         this.role = null; // 'host' | 'guest'
+        this.localSlot = 1; // 1..4
+        this.hostSlot = 1;
         this.ws = null;
         this.peers = 1;
         this.peerConnected = false;
-        
+
         this.localCharacter = 'warrior';
-        this.remoteCharacter = 'wizard';
         this.localName = 'Player 1';
-        this.remoteName = 'Player 2';
+        this.localNameCustomized = false;
         this.localReady = false;
-        this.remoteReady = false;
         this.selectedMapId = 'lumbridge';
         this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
-        
+
+        // Map<slot (1..4), { slot, name, character, ready, isHost }>
+        this.lobbyPlayers = new Map();
+        // Map<slot (1..4), RemotePeerData> for active in-game peers (excluding localSlot)
+        this.remotePeers = new Map();
+
         this.gameStarted = false;
-        this.gameConfig = null; // { seed, mapId, p1Char, p2Char, p1Name, p2Name, unlockedItems }
-        
-        this.remoteInput = { moveX: 0, moveY: 0, tick: 0 };
-        this.remoteState = null;
+        this.gameConfig = null; // { seed, mapId, partySize, players: [{slot, name, character, isHost}], unlockedItems }
+
         this.localPauseState = null;
-        this.remotePauseState = null;
-        this.remoteLoadout = { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
         this.pendingIcons = new Set();
         this.lastPartyHudKey = '';
+        this.lastPartyHudFastKey = '';
+        this.loadoutVersion = 0;
         this.nextChestExcludeId = undefined;
-        
+
         this.modalEl = null;
         this.inGameHooked = false;
         this.clientMethodsHooked = false;
@@ -133,6 +150,16 @@ export class MultiplayerManager {
         return url.toString();
     }
 
+    syncLocalToLobbyPlayers() {
+        this.lobbyPlayers.set(this.localSlot, {
+            slot: this.localSlot,
+            name: this.localName,
+            character: this.localCharacter,
+            ready: this.localReady,
+            isHost: this.role === 'host' || this.role === null
+        });
+    }
+
     connect(roomId) {
         if (this.ws) {
             try { this.ws.close(); } catch(e) {}
@@ -144,6 +171,9 @@ export class MultiplayerManager {
         const safeRoom = sanitizeRoomId(roomId) || MultiplayerManager.generateRoomId();
         this.roomId = safeRoom;
         this.role = null;
+        this.lobbyPlayers.clear();
+        this.syncLocalToLobbyPlayers();
+
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${proto}//${window.location.host}/ws?room=${encodeURIComponent(safeRoom)}`;
         console.log('[Multiplayer] Connecting to:', wsUrl);
@@ -195,11 +225,36 @@ export class MultiplayerManager {
         const client = window.gameClient;
         if (client && client.assets && client.assets.models && client.assets.models.size >= 250) {
             this.localReady = true;
+            this.syncLocalToLobbyPlayers();
             this.sendLobbyUpdate();
             this.updateLobbyUI();
         } else {
             setTimeout(() => this.checkLocalReady(), 500);
         }
+    }
+
+    reconcileActiveSlots(activeSlots) {
+        if (!Array.isArray(activeSlots)) return;
+        const validSet = new Set(activeSlots.map(s => sanitizeSlot(s, 0)).filter(s => s >= 1 && s <= 4));
+        validSet.add(this.localSlot);
+        for (const s of Array.from(this.lobbyPlayers.keys())) {
+            if (!validSet.has(s)) {
+                this.lobbyPlayers.delete(s);
+            }
+        }
+        for (const s of validSet) {
+            if (!this.lobbyPlayers.has(s)) {
+                this.lobbyPlayers.set(s, {
+                    slot: s,
+                    name: `Player ${s}`,
+                    character: SLOT_DEFAULT_CHARS[s] || 'warrior',
+                    ready: false,
+                    isHost: s === this.hostSlot
+                });
+            }
+        }
+        this.peers = this.lobbyPlayers.size;
+        this.peerConnected = this.peers >= 2;
     }
 
     handleMessage(msg) {
@@ -208,64 +263,139 @@ export class MultiplayerManager {
             case 'pong':
                 break;
 
-            case 'welcome':
+            case 'error':
+                if (typeof msg.message === 'string') {
+                    this.showToast(msg.message.slice(0, 80));
+                }
+                break;
+
+            case 'welcome': {
                 if (this.role !== null) break;
                 if (msg.role !== 'host' && msg.role !== 'guest') break;
                 this.role = msg.role;
-                this.peers = Number.isFinite(Number(msg.peers)) ? Math.max(1, Math.min(2, Math.round(Number(msg.peers)))) : 1;
-                this.peerConnected = this.peers > 1;
+                this.localSlot = sanitizeSlot(msg.slot, msg.role === 'host' ? 1 : 2);
+                this.hostSlot = sanitizeSlot(msg.hostSlot, 1);
+                this.peers = Number.isFinite(Number(msg.peers)) ? Math.max(1, Math.min(4, Math.round(Number(msg.peers)))) : 1;
+                this.peerConnected = this.peers >= 2;
                 if (msg.room) {
                     const cleanRoom = sanitizeRoomId(msg.room);
                     if (cleanRoom) this.roomId = cleanRoom;
                 }
-                if (this.role === 'guest' && this.localName === 'Player 1') {
-                    this.localName = 'Player 2';
-                    this.remoteName = 'Player 1';
+                if (!this.localNameCustomized) {
+                    this.localName = `Player ${this.localSlot}`;
                 }
-                console.log(`[Multiplayer] Welcome: role=${this.role}, peers=${this.peers}`);
+                this.lobbyPlayers.clear();
+                this.syncLocalToLobbyPlayers();
+                if (Array.isArray(msg.activeSlots)) {
+                    this.reconcileActiveSlots(msg.activeSlots);
+                }
+                console.log(`[Multiplayer] Welcome: role=${this.role}, slot=${this.localSlot}, peers=${this.peers}`);
                 this.sendLobbyUpdate();
                 this.updateLobbyUI();
                 break;
+            }
 
-            case 'peer_joined':
-                this.peerConnected = true;
-                this.peers = 2;
-                console.log('[Multiplayer] Peer joined');
+            case 'peer_joined': {
+                const joinedSlot = sanitizeSlot(msg.slot, 2);
+                if (msg.hostSlot) this.hostSlot = sanitizeSlot(msg.hostSlot, this.hostSlot);
+                if (!this.lobbyPlayers.has(joinedSlot)) {
+                    this.lobbyPlayers.set(joinedSlot, {
+                        slot: joinedSlot,
+                        name: `Player ${joinedSlot}`,
+                        character: SLOT_DEFAULT_CHARS[joinedSlot] || 'warrior',
+                        ready: false,
+                        isHost: joinedSlot === this.hostSlot
+                    });
+                }
+                if (Array.isArray(msg.activeSlots)) {
+                    this.reconcileActiveSlots(msg.activeSlots);
+                } else {
+                    this.peers = Math.max(2, this.lobbyPlayers.size);
+                    this.peerConnected = this.peers >= 2;
+                }
+                console.log(`[Multiplayer] Player ${joinedSlot} joined lobby (peers=${this.peers})`);
                 this.sendLobbyUpdate();
-                this.showToast('Player 2 connected to lobby!');
+                this.showToast(`Player ${joinedSlot} connected to lobby! (${this.peers}/4)`);
                 this.updateLobbyUI();
                 break;
+            }
 
             case 'peer_leaving':
-            case 'peer_left':
-                console.log('[Multiplayer] Peer disconnected');
-                this.peerConnected = false;
-                this.peers = 1;
-                this.remoteReady = false;
-                if (this.gameStarted) {
-                    this.endGameOnDisconnect('Co-Op Partner Disconnected - Game Over');
+            case 'peer_left': {
+                const leftSlot = sanitizeSlot(msg.slot || msg.senderSlot, 0);
+                console.log(`[Multiplayer] Peer slot ${leftSlot} disconnected`);
+                if (leftSlot && leftSlot !== this.localSlot) {
+                    this.lobbyPlayers.delete(leftSlot);
+                }
+                if (Array.isArray(msg.activeSlots)) {
+                    this.reconcileActiveSlots(msg.activeSlots);
                 } else {
-                    if (msg.promotedToHost || this.role === 'guest') {
-                        this.role = 'host';
-                        if (this.localName === 'Player 2') {
-                            this.localName = 'Player 1';
-                        }
-                        this.showToast('Host left lobby - promoted to Host');
+                    this.peers = Math.max(1, this.lobbyPlayers.size);
+                    this.peerConnected = this.peers >= 2;
+                }
+
+                if (this.gameStarted) {
+                    const departingPeer = this.remotePeers.get(leftSlot);
+                    const departingName = departingPeer?.name || `Player ${leftSlot || 'Partner'}`;
+                    if (msg.role === 'host' || leftSlot === this.hostSlot || this.remotePeers.size <= 1) {
+                        this.endGameOnDisconnect(`${departingName} Disconnected - Game Over`);
                     } else {
-                        this.showToast('Peer disconnected from lobby');
+                        // In 3-4 player co-op, if one Guest drops, remove their entity and let the remaining party continue!
+                        this.remotePeers.delete(leftSlot);
+                        const sim = window.gameClient?.sim;
+                        if (sim && Array.isArray(sim.remotePlayers)) {
+                            sim.remotePlayers = sim.remotePlayers.filter(rp => rp.slot !== leftSlot);
+                            sim.player2 = sim.remotePlayers[0] || null;
+                        }
+                        this.loadoutVersion++;
+                        this.lastPartyHudKey = '';
+                        if (window.gameClient) {
+                            this.updatePauseOverlay(window.gameClient);
+                        }
+                        this.showToast(`${departingName} disconnected (${this.remotePeers.size + 1} players remaining)`);
                     }
+                } else {
+                    if (msg.newHostSlot) {
+                        this.hostSlot = sanitizeSlot(msg.newHostSlot, 1);
+                    }
+                    if (msg.promotedToHost && this.localSlot === this.hostSlot) {
+                        this.role = 'host';
+                        this.showToast('Host left lobby - you are now the Host!');
+                    } else if (leftSlot) {
+                        this.showToast(`Player ${leftSlot} left the lobby`);
+                    }
+                    for (const [s, p] of this.lobbyPlayers.entries()) {
+                        p.isHost = (s === this.hostSlot);
+                    }
+                    this.syncLocalToLobbyPlayers();
+                    this.sendLobbyUpdate();
                     this.updateLobbyUI();
                 }
                 break;
+            }
 
-            case 'lobby_update':
-                const incomingLobbyName = sanitizeName(msg.name);
+            case 'lobby_update': {
+                const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, this.role === 'host' ? 2 : 1);
+                const incomingName = sanitizeName(msg.name) || `Player ${senderSlot}`;
+                const hostUnlocked = this.getUnlockedCharacters();
+
                 if (this.role === 'host') {
-                    const hostUnlocked = this.getUnlockedCharacters();
-                    const candidate = sanitizeCharacter(msg.character, this.remoteCharacter);
-                    this.remoteCharacter = hostUnlocked.includes(candidate) ? candidate : (hostUnlocked[0] || 'warrior');
-                    if (incomingLobbyName) this.remoteName = incomingLobbyName;
-                    this.remoteReady = !!msg.ready;
+                    if (senderSlot !== this.localSlot) {
+                        const prev = this.lobbyPlayers.get(senderSlot);
+                        const candidate = sanitizeCharacter(msg.character, prev?.character || SLOT_DEFAULT_CHARS[senderSlot] || 'warrior');
+                        const validChar = hostUnlocked.includes(candidate) ? candidate : (hostUnlocked[0] || 'warrior');
+                        this.lobbyPlayers.set(senderSlot, {
+                            slot: senderSlot,
+                            name: incomingName,
+                            character: validChar,
+                            ready: Boolean(msg.ready),
+                            isHost: false
+                        });
+                        this.peers = this.lobbyPlayers.size;
+                        this.peerConnected = this.peers >= 2;
+                        // Re-broadcast full party roster so all Guests see every other Guest's name/class/ready state
+                        this.broadcastPartyRoster();
+                    }
                 } else {
                     if (Array.isArray(msg.unlockedCharacters)) {
                         const validUnlocked = msg.unlockedCharacters
@@ -275,59 +405,106 @@ export class MultiplayerManager {
                         this.hostUnlockedCharacters = ALL_CHARACTERS.filter(c => merged.has(c.id)).map(c => c.id);
                         if (!this.hostUnlockedCharacters.includes(this.localCharacter)) {
                             this.localCharacter = this.hostUnlockedCharacters[0] || 'warrior';
+                            this.syncLocalToLobbyPlayers();
                             this.sendLobbyUpdate();
                         }
                     }
                     if (msg.mapId) {
                         this.selectedMapId = sanitizeMapId(msg.mapId, this.selectedMapId);
                     }
-                    this.remoteCharacter = sanitizeCharacter(msg.hostCharacter || msg.character, this.remoteCharacter);
-                    if (incomingLobbyName) this.remoteName = incomingLobbyName;
-                    this.remoteReady = !!msg.ready;
+                    if (Array.isArray(msg.party)) {
+                        const nextSlots = new Set([this.localSlot]);
+                        for (const p of msg.party) {
+                            if (!p || typeof p !== 'object') continue;
+                            const s = sanitizeSlot(p.slot, 0);
+                            if (s < 1 || s > 4) continue;
+                            nextSlots.add(s);
+                            if (p.isHost) this.hostSlot = s;
+                            if (s === this.localSlot) continue;
+                            this.lobbyPlayers.set(s, {
+                                slot: s,
+                                name: sanitizeName(p.name) || `Player ${s}`,
+                                character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
+                                ready: Boolean(p.ready),
+                                isHost: Boolean(p.isHost)
+                            });
+                        }
+                        for (const s of Array.from(this.lobbyPlayers.keys())) {
+                            if (!nextSlots.has(s)) this.lobbyPlayers.delete(s);
+                        }
+                    } else if (senderSlot !== this.localSlot) {
+                        this.lobbyPlayers.set(senderSlot, {
+                            slot: senderSlot,
+                            name: incomingName,
+                            character: sanitizeCharacter(msg.hostCharacter || msg.character, SLOT_DEFAULT_CHARS[senderSlot] || 'warrior'),
+                            ready: Boolean(msg.ready),
+                            isHost: senderSlot === this.hostSlot
+                        });
+                    }
+                    this.syncLocalToLobbyPlayers();
+                    this.peers = this.lobbyPlayers.size;
+                    this.peerConnected = this.peers >= 2;
                 }
                 this.updateLobbyUI();
                 break;
+            }
 
-            case 'game_start':
+            case 'game_start': {
                 if (this.role !== 'guest' || this.gameStarted) break;
                 if (!msg.config || typeof msg.config !== 'object') break;
                 this.gameStarted = true;
+                const rawPlayers = Array.isArray(msg.config.players) ? msg.config.players : [];
+                const sanitizedPlayers = rawPlayers
+                    .filter(p => p && typeof p === 'object')
+                    .slice(0, 4)
+                    .map((p, idx) => {
+                        const s = sanitizeSlot(p.slot, idx + 1);
+                        return {
+                            slot: s,
+                            name: sanitizeName(p.name) || `Player ${s}`,
+                            character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
+                            isHost: Boolean(p.isHost)
+                        };
+                    });
+
                 this.gameConfig = {
                     seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
                     mapId: sanitizeMapId(msg.config.mapId, 'lumbridge'),
-                    p1Char: sanitizeCharacter(msg.config.p1Char, 'warrior'),
-                    p2Char: sanitizeCharacter(msg.config.p2Char, 'wizard'),
-                    p1Name: sanitizeName(msg.config.p1Name) || 'Player 1',
-                    p2Name: sanitizeName(msg.config.p2Name) || 'Player 2',
+                    partySize: Math.max(2, Math.min(4, sanitizedPlayers.length || 2)),
+                    players: sanitizedPlayers,
                     unlockedItems: Array.isArray(msg.config.unlockedItems)
                         ? msg.config.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
                         : []
                 };
                 this.selectedMapId = this.gameConfig.mapId;
-                if (this.gameConfig.p1Name) this.remoteName = this.gameConfig.p1Name;
-                console.log('[Multiplayer] Game Starting with config:', this.gameConfig);
+                console.log('[Multiplayer] Game Starting with 2-4P config:', this.gameConfig);
                 this.closeLobbyModal();
                 this.launchCoopRun(this.gameConfig);
                 break;
+            }
 
-            case 'input':
+            case 'input': {
                 if (this.role !== 'host') break;
-                this.remoteInput = msg;
+                const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, 2);
+                const peer = this.remotePeers.get(senderSlot);
+                if (!peer) break;
+
                 if (msg.pauseState !== undefined) {
                     const allowedStates = new Set(['levelUp', 'chest', 'paused']);
                     const nextRemote = (typeof msg.pauseState === 'string' && allowedStates.has(msg.pauseState)) ? msg.pauseState : null;
-                    if (nextRemote !== this.remotePauseState) {
-                        this.remotePauseState = nextRemote;
+                    if (nextRemote !== peer.pauseState) {
+                        peer.pauseState = nextRemote;
                         if (window.gameClient) {
                             window.gameClient.accumulator = 0;
                             this.updatePauseOverlay(window.gameClient);
                         }
                     }
                 }
-                if (window.gameClient && window.gameClient.sim && window.gameClient.sim.player2) {
-                    this.applyRemoteInput(window.gameClient.sim.player2, msg);
+                if (peer.entity) {
+                    this.applyRemoteInput(peer, msg);
                 }
                 break;
+            }
 
             case 'sync_world':
                 if (this.role === 'guest') {
@@ -336,16 +513,32 @@ export class MultiplayerManager {
                 break;
 
             case 'coop_pause': {
+                const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, 0);
                 const allowedStates = new Set(['levelUp', 'chest', 'paused']);
                 const nextRemote = (typeof msg.state === 'string' && allowedStates.has(msg.state)) ? msg.state : null;
-                this.remotePauseState = nextRemote;
+
+                if (msg.action === 'resume_both') {
+                    for (const peer of this.remotePeers.values()) {
+                        peer.pauseState = null;
+                    }
+                    if (window.gameClient) {
+                        window.gameClient.accumulator = 0;
+                        if (window.gameClient.paused) {
+                            window.gameClient.paused = false;
+                            window.gameClient.syncOverlay();
+                            this.syncLocalPauseState(window.gameClient, true);
+                        }
+                        this.updatePauseOverlay(window.gameClient);
+                    }
+                    break;
+                }
+
+                const peer = this.remotePeers.get(senderSlot);
+                if (peer) {
+                    peer.pauseState = nextRemote;
+                }
                 if (window.gameClient) {
                     window.gameClient.accumulator = 0;
-                    if (msg.action === 'resume_both' && window.gameClient.paused) {
-                        window.gameClient.paused = false;
-                        window.gameClient.syncOverlay();
-                        this.syncLocalPauseState(window.gameClient, true);
-                    }
                     this.updatePauseOverlay(window.gameClient);
                 }
                 break;
@@ -406,23 +599,43 @@ export class MultiplayerManager {
         return this.hostUnlockedCharacters;
     }
 
+    broadcastPartyRoster() {
+        if (this.role !== 'host') return;
+        const unlocked = this.getUnlockedCharacters();
+        this.syncLocalToLobbyPlayers();
+        const party = Array.from(this.lobbyPlayers.values())
+            .sort((a, b) => a.slot - b.slot)
+            .map(p => ({
+                slot: p.slot,
+                name: p.name,
+                character: p.character,
+                ready: Boolean(p.ready),
+                isHost: p.slot === this.localSlot
+            }));
+        this.send({
+            type: 'lobby_update',
+            slot: this.localSlot,
+            hostCharacter: this.localCharacter,
+            mapId: this.selectedMapId,
+            name: this.localName,
+            ready: this.localReady,
+            unlockedCharacters: unlocked,
+            party
+        });
+    }
+
     sendLobbyUpdate() {
         const unlocked = this.getUnlockedCharacters();
         if (!unlocked.includes(this.localCharacter)) {
             this.localCharacter = unlocked[0] || 'warrior';
         }
+        this.syncLocalToLobbyPlayers();
         if (this.role === 'host') {
-            this.send({
-                type: 'lobby_update',
-                hostCharacter: this.localCharacter,
-                mapId: this.selectedMapId,
-                name: this.localName,
-                ready: this.localReady,
-                unlockedCharacters: unlocked
-            });
+            this.broadcastPartyRoster();
         } else {
             this.send({
                 type: 'lobby_update',
+                slot: this.localSlot,
                 character: this.localCharacter,
                 name: this.localName,
                 ready: this.localReady
@@ -438,7 +651,10 @@ export class MultiplayerManager {
     }
 
     setPlayerName(name) {
-        this.localName = sanitizeName(name) || (this.role === 'host' ? 'Player 1' : 'Player 2');
+        const cleaned = sanitizeName(name);
+        this.localNameCustomized = Boolean(cleaned);
+        this.localName = cleaned || `Player ${this.localSlot}`;
+        this.syncLocalToLobbyPlayers();
         this.sendLobbyUpdate();
     }
 
@@ -451,6 +667,7 @@ export class MultiplayerManager {
             return;
         }
         this.localCharacter = cleanChar;
+        this.syncLocalToLobbyPlayers();
         const client = window.gameClient;
         if (client) {
             client.store?.set({ characterId: cleanChar });
@@ -496,7 +713,6 @@ export class MultiplayerManager {
         this.playerSeqIds = seqIds;
         const bakes = [];
 
-        // Ensure Corgi is baked
         if (!client.assets.models.has('corgi')) {
             bakes.push({
                 kind: 'npc',
@@ -556,7 +772,12 @@ export class MultiplayerManager {
 
     async startRun() {
         if (this.role !== 'host') return;
-        
+        this.syncLocalToLobbyPlayers();
+        if (this.lobbyPlayers.size < 2) {
+            this.showToast('Need at least 2 players to start Co-Op!');
+            return;
+        }
+
         const selectedRegion = ALL_REGIONS.find(r => r.id === this.selectedMapId) || ALL_REGIONS[0];
         const startBtn = document.getElementById('coop-start-btn');
         if (startBtn) {
@@ -575,17 +796,21 @@ export class MultiplayerManager {
         }
 
         const hostUnlocked = this.getUnlockedCharacters();
-        const p1Char = hostUnlocked.includes(this.localCharacter) ? this.localCharacter : (hostUnlocked[0] || 'warrior');
-        const p2Char = hostUnlocked.includes(this.remoteCharacter) ? this.remoteCharacter : (hostUnlocked[0] || 'warrior');
+        const players = Array.from(this.lobbyPlayers.values())
+            .sort((a, b) => a.slot - b.slot)
+            .map(p => ({
+                slot: p.slot,
+                name: sanitizeName(p.name) || `Player ${p.slot}`,
+                character: hostUnlocked.includes(p.character) ? p.character : (hostUnlocked[0] || 'warrior'),
+                isHost: p.slot === this.localSlot
+            }));
 
         const seed = Math.floor(Math.random() * 2147483647);
         const config = {
             seed,
             mapId: selectedRegion.id,
-            p1Char,
-            p1Name: this.localName,
-            p2Char,
-            p2Name: this.remoteName,
+            partySize: players.length,
+            players,
             unlockedItems: Array.isArray(client.save?.unlockedItems) ? [...client.save.unlockedItems] : []
         };
 
@@ -612,29 +837,30 @@ export class MultiplayerManager {
             return;
         }
 
-        // Wait until assets are fully baked to prevent missing monster models
         const modelWaitStart = Date.now();
         while (client.assets?.models?.size < 250 && (Date.now() - modelWaitStart) < 20000) {
-            console.log('[Multiplayer] Waiting for models to finish baking... count:', client.assets?.models?.size);
             await new Promise(r => setTimeout(r, 250));
         }
 
-        const isHost = this.role === 'host';
-        const localChar = isHost ? config.p1Char : config.p2Char;
-        const remoteChar = isHost ? config.p2Char : config.p1Char;
+        const players = Array.isArray(config.players) ? config.players : [];
+        const localEntry = players.find(p => p.slot === this.localSlot) || players[0] || {
+            slot: this.localSlot,
+            name: this.localName,
+            character: this.localCharacter
+        };
+        const localChar = localEntry.character || 'warrior';
+        this.localName = localEntry.name || this.localName;
 
-        // Bake all player character models (including any unlocked class selected by P1 or P2)
-        await this.ensureAllCharacterModels(client, [localChar, remoteChar]);
+        const allPartyChars = players.map(p => p.character);
+        await this.ensureAllCharacterModels(client, allPartyChars);
 
-        console.log(`[Multiplayer] Launching run: Local=${localChar} (${this.localName}), Remote=${remoteChar} (${this.remoteName})`);
+        console.log(`[Multiplayer] Launching ${players.length}-Player Co-Op Run: Local Slot ${this.localSlot} (${this.localName} - ${localChar})`);
 
-        // Set local character and map in store
         client.store.set({
             characterId: localChar,
             mapId: config.mapId || 'lumbridge'
         });
 
-        // Set player appearance before starting run
         if (localChar !== 'dipper' && client.getAppearance) {
             try {
                 await client.assets.setPlayerAppearance(client.getAppearance(localChar));
@@ -643,32 +869,33 @@ export class MultiplayerManager {
 
         try {
             await client.startRun();
-            this.setupInGameHooks(localChar, remoteChar);
+            this.setupInGameHooks(localChar, players);
         } catch (err) {
             console.error('[Multiplayer] Error starting run:', err);
         }
     }
 
-    setupInGameHooks(localChar, remoteChar) {
+    setupInGameHooks(localChar, partyPlayers) {
         const client = window.gameClient;
         if (!client || !client.sim) return;
         const sim = client.sim;
         const isHost = this.role === 'host';
 
         this.localPauseState = null;
-        this.remotePauseState = null;
         this.lastPartyHudKey = '';
-        this.remoteLoadout = { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
+        this.lastPartyHudFastKey = '';
+        this.loadoutVersion = 0;
+        this.remotePeers.clear();
         this.removePauseOverlay();
 
-        // Sync Host's unlocked items into Guest's simulation so casket & level-up pools match Host's save state
+        // Sync Host's unlocked items into Guest's simulation
         if (!isHost && Array.isArray(this.gameConfig?.unlockedItems) && sim.unlockedItems instanceof Set) {
             for (const itemId of this.gameConfig.unlockedItems) {
                 sim.unlockedItems.add(itemId);
             }
         }
 
-        // Ensure every casket roll and reroll uses fresh independent random entropy per player
+        // Independent random entropy for casket rolls and rerolls
         const mixRandomSeed = () => {
             const arr = new Uint32Array(1);
             if (window.crypto && window.crypto.getRandomValues) {
@@ -697,7 +924,6 @@ export class MultiplayerManager {
             };
         }
 
-        // Prevent window blur from auto-pausing during Co-Op; explicit Esc/P, Level-Up, and Chests pause both players
         if (client.input) {
             client.input.onBlur = () => {
                 client.accumulator = 0;
@@ -706,21 +932,40 @@ export class MultiplayerManager {
 
         const p1 = sim.player;
         p1.characterId = localChar;
+        p1.slot = this.localSlot;
 
         const spawnX = Number.isFinite(sim.map?.spawn?.x) ? sim.map.spawn.x : 3222.5;
         const spawnY = Number.isFinite(sim.map?.spawn?.y) ? sim.map.spawn.y : 3218.5;
 
-        // Position players side-by-side at the selected region's spawn coordinates
-        if (isHost) {
-            p1.x = spawnX - 0.5;
-            p1.y = spawnY;
-            p1.prevX = spawnX - 0.5;
-            p1.prevY = spawnY;
-            sim.player2 = {
-                x: spawnX + 1.0,
-                y: spawnY,
-                prevX: spawnX + 1.0,
-                prevY: spawnY,
+        const localOffset = SPAWN_OFFSETS[this.localSlot] || { dx: 0, dy: 0 };
+        p1.x = spawnX + localOffset.dx;
+        p1.y = spawnY + localOffset.dy;
+        p1.prevX = p1.x;
+        p1.prevY = p1.y;
+
+        sim.remotePlayers = [];
+        for (const pInfo of partyPlayers) {
+            if (!pInfo || pInfo.slot === this.localSlot) continue;
+            const slot = sanitizeSlot(pInfo.slot, 2);
+            const offset = SPAWN_OFFSETS[slot] || { dx: 1.0, dy: 0 };
+            const sx = spawnX + offset.dx;
+            const sy = spawnY + offset.dy;
+            const charId = sanitizeCharacter(pInfo.character, 'warrior');
+
+            const entity = {
+                slot,
+                x: sx,
+                y: sy,
+                prevX: sx,
+                prevY: sy,
+                netX: sx,
+                netY: sy,
+                vx: 0,
+                vy: 0,
+                moveX: 0,
+                moveY: 0,
+                moveSpeed: 0,
+                lastPacketTime: performance.now(),
                 radius: p1.radius,
                 facingX: 0,
                 facingY: -1,
@@ -735,57 +980,69 @@ export class MultiplayerManager {
                 flash: 0,
                 frozen: 0,
                 invulnerable: 0,
-                characterId: remoteChar
+                characterId: charId,
+                hasDynamicModel: false
             };
-        } else {
-            p1.x = spawnX + 1.0;
-            p1.y = spawnY;
-            p1.prevX = spawnX + 1.0;
-            p1.prevY = spawnY;
-            sim.player2 = {
-                x: spawnX - 0.5,
-                y: spawnY,
-                prevX: spawnX - 0.5,
-                prevY: spawnY,
-                radius: p1.radius,
-                facingX: 0,
-                facingY: -1,
-                yaw: 0,
-                moving: false,
-                hp: 25,
-                maxHp: 25,
-                deathTick: -1,
-                attackSeq: -1,
-                attackStart: 0,
-                moveStart: 0,
-                flash: 0,
-                frozen: 0,
-                invulnerable: 0,
-                characterId: remoteChar
+
+            // Build starting weapon for this remote peer
+            const weaponId = CHAR_WEAPONS[charId] || 'throwing_knives';
+            let peerWeapons = [];
+            const savedWeapons = sim.weapons;
+            try {
+                sim.weapons = [];
+                sim.addWeapon(weaponId);
+                if (sim.weapons.length > 0) {
+                    peerWeapons = [sim.weapons[0]];
+                }
+            } catch (err) {
+                console.error(`[Multiplayer] Failed adding weapon for slot ${slot}:`, err);
+            } finally {
+                sim.weapons = savedWeapons;
+            }
+
+            const peerObj = {
+                slot,
+                name: sanitizeName(pInfo.name) || `Player ${slot}`,
+                characterId: charId,
+                isHost: Boolean(pInfo.isHost),
+                entity,
+                weapons: peerWeapons,
+                loadout: { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] },
+                pauseState: null,
+                lastEquipKey: ''
             };
+            this.remotePeers.set(slot, peerObj);
+            sim.remotePlayers.push(entity);
         }
 
+        // Maintain sim.player2 alias for compatibility
+        sim.player2 = sim.remotePlayers[0] || null;
+
+        const partySize = Math.max(2, Math.min(4, this.remotePeers.size + 1));
+        // Dynamic Monster HP Scaling: 2P = 2.0x, 3P = 2.75x, 4P = 3.5x
+        const hpMultiplier = 1 + (partySize - 1) * 0.85;
+        const effectiveMult = partySize === 2 ? 2.0 : hpMultiplier;
+
         if (isHost) {
-            // Co-Op Difficulty Scaling: 2x Monster HP on all spawned enemies (normal, elite, and bosses)
             const origSpawnEnemy = sim.spawnEnemy.bind(sim);
             sim.spawnEnemy = (def, kind, pos, bossHp) => {
                 const enemy = origSpawnEnemy(def, kind, pos, bossHp);
                 if (enemy && !enemy._coopHpScaled) {
                     enemy._coopHpScaled = true;
-                    enemy.hp = Math.max(1, Math.round(enemy.hp * 2));
-                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * 2));
+                    enemy.hp = Math.max(1, Math.round(enemy.hp * effectiveMult));
+                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * effectiveMult));
                 }
                 return enemy;
             };
             for (const enemy of sim.enemies) {
                 if (enemy && !enemy._coopHpScaled) {
                     enemy._coopHpScaled = true;
-                    enemy.hp = Math.max(1, Math.round(enemy.hp * 2));
-                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * 2));
+                    enemy.hp = Math.max(1, Math.round(enemy.hp * effectiveMult));
+                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * effectiveMult));
                 }
             }
 
-            // Spawn initial wave enemies around the region's spawn point on Host so both players immediately engage monsters
+            // Spawn initial wave enemies around the region's spawn point on Host
             if (client.getEnemyDef && sim.enemies.length < 5) {
                 try {
                     const firstWaveEnemyId = sim.map?.waves?.[0]?.enemies?.[0]?.id || 'goblin';
@@ -801,13 +1058,12 @@ export class MultiplayerManager {
                         const walkable = sim.grid && !sim.grid.isSolid(Math.floor(pos.x), Math.floor(pos.y));
                         sim.spawnEnemy(starterDef, 'normal', walkable ? pos : undefined);
                     }
-                    console.log(`[Multiplayer] Initial ${firstWaveEnemyId} enemies spawned on Host in ${sim.map?.name || 'region'} (2x Co-Op HP).`);
                 } catch (e) {
                     console.warn('[Multiplayer] Initial spawn note:', e);
                 }
             }
 
-            // Hook sim.collect on Host so XP, coins, AND caskets collected by Player 1 are shared with Player 2
+            // Hook sim.collect on Host so XP, coins, AND caskets collected by Host are shared with all Guests
             const origCollect = sim.collect.bind(sim);
             sim._origCollect = origCollect;
             sim.collect = (pickup) => {
@@ -815,7 +1071,7 @@ export class MultiplayerManager {
                 const val = pickup.value;
                 const tier = pickup.tier || 'medium';
                 origCollect(pickup);
-                if (this.peerConnected) {
+                if (this.remotePeers.size > 0) {
                     if ((kind === 'bones' || kind === 'big_bones' || kind === 'coins') && val > 0) {
                         this.send({
                             type: 'coop_pickup',
@@ -824,7 +1080,9 @@ export class MultiplayerManager {
                         });
                     } else if (kind === 'casket') {
                         const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
-                        this.remotePauseState = 'chest';
+                        for (const peer of this.remotePeers.values()) {
+                            peer.pauseState = 'chest';
+                        }
                         this.send({
                             type: 'coop_pickup',
                             kind: 'casket',
@@ -838,60 +1096,79 @@ export class MultiplayerManager {
                 }
             };
 
-            // Hook sim.stepEnemies on Host to target whichever player is closest
+            // Hook sim.stepEnemies on Host to partition monsters across all living players (P1..P4) by closest distance
             const origStepEnemies = sim.stepEnemies.bind(sim);
             sim.stepEnemies = () => {
-                if (!sim.player2 || sim.player2.hp <= 0) {
+                const activeTargets = [
+                    { slot: this.localSlot, entity: sim.player, bucket: [] }
+                ];
+                for (const peer of this.remotePeers.values()) {
+                    if (peer.entity && peer.entity.hp > 0) {
+                        activeTargets.push({ slot: peer.slot, entity: peer.entity, bucket: [] });
+                    }
+                }
+                if (activeTargets.length <= 1) {
                     origStepEnemies();
                     return;
                 }
-                const p1 = sim.player;
-                const p2 = sim.player2;
-                const allEnemies = sim.enemies;
 
-                const enemiesP1 = [];
-                const enemiesP2 = [];
+                const allEnemies = sim.enemies;
                 for (let i = 0; i < allEnemies.length; i++) {
                     const enemy = allEnemies[i];
                     if (enemy.dead) {
-                        enemiesP1.push(enemy);
+                        activeTargets[0].bucket.push(enemy);
                         continue;
                     }
-                    const d1 = Math.hypot(p1.x - enemy.x, p1.y - enemy.y);
-                    const d2 = Math.hypot(p2.x - enemy.x, p2.y - enemy.y);
-                    if (d2 < d1) {
-                        enemiesP2.push(enemy);
-                    } else {
-                        enemiesP1.push(enemy);
+                    let bestIdx = 0;
+                    let bestDist = Math.hypot(activeTargets[0].entity.x - enemy.x, activeTargets[0].entity.y - enemy.y);
+                    for (let j = 1; j < activeTargets.length; j++) {
+                        const d = Math.hypot(activeTargets[j].entity.x - enemy.x, activeTargets[j].entity.y - enemy.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestIdx = j;
+                        }
                     }
+                    activeTargets[bestIdx].bucket.push(enemy);
                 }
 
-                // Step enemies targeting Player 1
-                sim.enemies = enemiesP1;
-                sim.player = p1;
-                origStepEnemies();
-
-                // Step enemies targeting Player 2
-                sim.enemies = enemiesP2;
-                sim.player = p2;
-                origStepEnemies();
-
-                // Restore full enemy list and player reference
-                sim.enemies = allEnemies;
-                sim.player = p1;
+                const savedPlayer = sim.player;
+                try {
+                    for (const t of activeTargets) {
+                        if (t.bucket.length === 0) continue;
+                        sim.enemies = t.bucket;
+                        sim.player = t.entity;
+                        origStepEnemies();
+                    }
+                } finally {
+                    sim.enemies = allEnemies;
+                    sim.player = savedPlayer;
+                }
             };
         } else {
-            // Guest disables autonomous wave spawner, local enemy movement, and local pickup resolution (Host is authoritative)
+            // Guest disables autonomous wave spawner and local pickup resolution; steps enemy/pickup velocity interpolation at 30Hz
             sim.stepDirector = () => {};
             sim.stepEnemies = () => {
-                // Advance prevX/prevY and targetX/targetY once per simulation tick at 30Hz for smooth render interpolation
                 for (let i = 0; i < sim.enemies.length; i++) {
                     const e = sim.enemies[i];
                     e.prevX = e.x;
                     e.prevY = e.y;
-                    if (Number.isFinite(e.targetX) && Number.isFinite(e.targetY)) {
-                        e.x = e.targetX;
-                        e.y = e.targetY;
+                    if (!e.dead && Number.isFinite(e.netX) && Number.isFinite(e.netY)) {
+                        const predX = e.x + (e.vx || 0);
+                        const predY = e.y + (e.vy || 0);
+                        const errX = e.netX - predX;
+                        const errY = e.netY - predY;
+                        const errDist = Math.hypot(errX, errY);
+                        if (errDist > 3.5) {
+                            e.x = e.netX;
+                            e.y = e.netY;
+                            e.prevX = e.netX;
+                            e.prevY = e.netY;
+                        } else {
+                            e.x = predX + errX * 0.45;
+                            e.y = predY + errY * 0.45;
+                        }
+                        e.vx = (e.vx || 0) * 0.85;
+                        e.vy = (e.vy || 0) * 0.85;
                     }
                     if (e.flash > 0) e.flash--;
                 }
@@ -900,8 +1177,8 @@ export class MultiplayerManager {
                     p.prevX = p.x;
                     p.prevY = p.y;
                     if (Number.isFinite(p.targetX) && Number.isFinite(p.targetY)) {
-                        p.x = p.targetX;
-                        p.y = p.targetY;
+                        p.x = p.x + (p.targetX - p.x) * 0.55;
+                        p.y = p.y + (p.targetY - p.y) * 0.55;
                     }
                 }
             };
@@ -911,26 +1188,16 @@ export class MultiplayerManager {
             sim.dropCasketOfTier = () => {};
             sim.rollPowerUp = () => {};
             sim.enemies = [];
-            console.log('[Multiplayer] Guest initialized in client sync mode.');
+            console.log('[Multiplayer] Guest initialized in 2-4P client sync mode.');
         }
 
-        // Arm Player 2 with their class starting weapon
-        const p2WeaponId = CHAR_WEAPONS[remoteChar] || 'throwing_knives';
-        try {
-            sim.addWeapon(p2WeaponId);
-            sim.player2Weapons = [sim.weapons.pop()];
-            console.log(`[Multiplayer] Player 2 armed with ${p2WeaponId}`);
-        } catch (err) {
-            console.error('[Multiplayer] Failed adding Player 2 weapon:', err);
-        }
-
-        // Hook sim.stepOrbit so Player 2's orbiting weapons orbit around Player 2
+        // Hook sim.stepOrbit so each remote player's orbiting weapons orbit around that remote player
         if (sim.stepOrbit) {
             const origStepOrbit = sim.stepOrbit.bind(sim);
             sim.stepOrbit = (proj, orbit) => {
-                if (orbit && orbit.owner && sim.player2) {
+                if (orbit && orbit.owner) {
                     const savedPlayer = sim.player;
-                    sim.player = sim.player2;
+                    sim.player = orbit.owner;
                     try {
                         origStepOrbit(proj, orbit);
                     } finally {
@@ -942,104 +1209,129 @@ export class MultiplayerManager {
             };
         }
 
-        // Hook sim.stepWeapons to fire Player 2's weapons
+        // Hook sim.stepWeapons to fire all remote players' weapons
         const origStepWeapons = sim.stepWeapons.bind(sim);
         sim.stepWeapons = () => {
-            // Fast-path: only allocate filter arrays when orbit projectiles are active
-            const hasP2Orbits = sim.projectiles.some(p => p.orbit && p.owner === 'p2');
-            let p2Orbits = null;
-            if (hasP2Orbits) {
-                p2Orbits = sim.projectiles.filter(p => p.orbit && p.owner === 'p2');
-                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner === 'p2'));
+            const hasRemoteOrbits = sim.projectiles.some(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
+            let remoteOrbits = null;
+            if (hasRemoteOrbits) {
+                remoteOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
+                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot));
             }
             origStepWeapons();
-            if (p2Orbits && p2Orbits.length > 0) {
-                sim.projectiles.push(...p2Orbits);
+            for (const p of sim.projectiles) {
+                if (p.orbit && !p.ownerSlot) {
+                    p.ownerSlot = this.localSlot;
+                    p.orbit.owner = sim.player;
+                }
+            }
+            if (remoteOrbits && remoteOrbits.length > 0) {
+                sim.projectiles.push(...remoteOrbits);
             }
 
-            if (sim.player2 && sim.player2Weapons) {
+            if (this.remotePeers.size > 0) {
                 const origPlayer = sim.player;
-                const hasP1Orbits = sim.projectiles.some(p => p.orbit && p.owner !== 'p2');
-                let p1Orbits = null;
-                if (hasP1Orbits) {
-                    p1Orbits = sim.projectiles.filter(p => p.orbit && p.owner !== 'p2');
-                    sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner !== 'p2'));
-                }
-                sim.player = sim.player2;
-                try {
-                    for (const t of sim.player2Weapons) {
-                        if (t.cooldown > 0) {
-                            t.cooldown--;
-                            continue;
-                        }
-                        const e = sim.getEffectiveLevel(t);
-                        const n = sim.takeSpecial ? sim.takeSpecial(t, e) : undefined;
-                        const s = sim.fireWeapon(t.def, e, n);
-                        t.cooldown = s ? sim.cooldownTicks(e.cooldown) : 10;
-                        if (s) {
-                            sim.events.push({
-                                type: "weapon",
-                                weaponId: t.def.id,
-                                sound: n?.sound ?? e.sound ?? t.def.sound,
-                                x: sim.player2.x,
-                                y: sim.player2.y
-                            });
-                            if (!sim.player2.moving) {
-                                sim.player2.attackSeq = n?.playerSeq ?? t.def.playerSeq;
-                                sim.player2.attackStart = sim.tick;
+                for (const peer of this.remotePeers.values()) {
+                    const rEntity = peer.entity;
+                    const rWeapons = peer.weapons;
+                    if (!rEntity || rEntity.hp <= 0 || !rWeapons || rWeapons.length === 0) continue;
+
+                    const hasOtherOrbits = sim.projectiles.some(p => p.orbit && p.ownerSlot !== peer.slot);
+                    let otherOrbits = null;
+                    if (hasOtherOrbits) {
+                        otherOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot !== peer.slot);
+                        sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot !== peer.slot));
+                    }
+
+                    sim.player = rEntity;
+                    try {
+                        for (const t of rWeapons) {
+                            if (t.cooldown > 0) {
+                                t.cooldown--;
+                                continue;
+                            }
+                            const e = sim.getEffectiveLevel(t);
+                            const n = sim.takeSpecial ? sim.takeSpecial(t, e) : undefined;
+                            const s = sim.fireWeapon(t.def, e, n);
+                            t.cooldown = s ? sim.cooldownTicks(e.cooldown) : 10;
+                            if (s) {
+                                sim.events.push({
+                                    type: "weapon",
+                                    weaponId: t.def.id,
+                                    sound: n?.sound ?? e.sound ?? t.def.sound,
+                                    x: rEntity.x,
+                                    y: rEntity.y
+                                });
+                                if (!rEntity.moving) {
+                                    rEntity.attackSeq = n?.playerSeq ?? t.def.playerSeq;
+                                    rEntity.attackStart = sim.tick;
+                                }
                             }
                         }
-                    }
-                    for (const p of sim.projectiles) {
-                        if (p.orbit && !p.owner) {
-                            p.owner = 'p2';
-                            p.orbit.owner = sim.player2;
+                        for (const p of sim.projectiles) {
+                            if (p.orbit && !p.ownerSlot) {
+                                p.ownerSlot = peer.slot;
+                                p.orbit.owner = rEntity;
+                            }
                         }
-                    }
-                } finally {
-                    sim.player = origPlayer;
-                    if (p1Orbits && p1Orbits.length > 0) {
-                        sim.projectiles.push(...p1Orbits);
+                    } finally {
+                        sim.player = origPlayer;
+                        if (otherOrbits && otherOrbits.length > 0) {
+                            sim.projectiles.push(...otherOrbits);
+                        }
                     }
                 }
             }
         };
 
-        // Hook sim.step to transmit local state, sync world, and step Player 2
+        // Hook sim.step to step remote peers, handle pickups, and broadcast state
         const origStep = sim.step.bind(sim);
         sim.step = (moveX, moveY) => {
-            // Advance Player 2 position BEFORE origStep so weapons, orbits, and enemy AI use Player 2's current tick position and interpolate smoothly
-            if (sim.player2 && sim.state === 'playing' && !sim.runOver) {
-                this.stepPlayer2(sim, sim.player2);
+            if (sim.state === 'playing' && !sim.runOver) {
+                for (const peer of this.remotePeers.values()) {
+                    if (peer.entity) {
+                        this.stepRemotePlayer(sim, peer);
+                    }
+                }
             }
 
             origStep(moveX, moveY);
 
-            if (sim.player2 && isHost && sim.state === 'playing') {
-                this.stepPlayer2Pickups(sim, sim.player2);
+            if (isHost && sim.state === 'playing' && !sim.runOver) {
+                for (const peer of this.remotePeers.values()) {
+                    if (peer.entity && peer.entity.hp > 0) {
+                        this.stepRemotePlayerPickups(sim, peer);
+                    }
+                }
             }
 
-            // Detect immediate transition into chest or levelUp on this exact tick
             if (sim.state !== 'playing') {
                 this.syncLocalPauseState(client, true);
             }
 
-            // Re-broadcast initial loadout shortly after run start so partner HUD is always populated
             if (sim.tick === 10) {
                 this.sendLoadoutSync(client, false);
             }
 
-            // Network transmission
-            if (this.peerConnected) {
+            if (this.remotePeers.size > 0) {
                 if (isHost) {
-                    // Check if either player died
-                    if (!sim.runOver && (sim.player.hp <= 0 || (sim.player2 && sim.player2.hp <= 0))) {
-                        this.send({ type: 'game_over', reason: 'A hero has fallen in battle!' });
-                        this.endGameOnDisconnect('A hero has fallen - Game Over');
+                    let deadHeroName = null;
+                    if (sim.player.hp <= 0) {
+                        deadHeroName = this.localName;
+                    } else {
+                        for (const peer of this.remotePeers.values()) {
+                            if (peer.entity && peer.entity.hp <= 0) {
+                                deadHeroName = peer.name;
+                                break;
+                            }
+                        }
+                    }
+                    if (!sim.runOver && deadHeroName) {
+                        this.send({ type: 'game_over', reason: `${deadHeroName} has fallen in battle!` });
+                        this.endGameOnDisconnect(`${deadHeroName} has fallen - Game Over`);
                         return;
                     }
 
-                    // Host broadcasts authoritative world state; dead enemies are transmitted for 2 ticks so Guest triggers death anim without 45-tick bandwidth bloat
                     const enemyData = [];
                     for (let i = 0; i < sim.enemies.length; i++) {
                         const e = sim.enemies[i];
@@ -1078,13 +1370,12 @@ export class MultiplayerManager {
                         }
                     }
 
-                    this.send({
-                        type: 'sync_world',
-                        tick: sim.tick,
-                        kills: sim.kills,
-                        pauseState: this.getLocalPauseState(client),
+                    const playersSnapshot = [{
+                        slot: this.localSlot,
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
+                        vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
+                        vy: Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
                         yaw: sim.player.yaw & 2047,
                         facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
                         facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
@@ -1092,30 +1383,60 @@ export class MultiplayerManager {
                         moveStart: sim.player.moveStart || 0,
                         attackSeq: sim.player.attackSeq ?? -1,
                         attackStart: sim.player.attackStart || 0,
-                        p1Hp: sim.player.hp,
-                        p1MaxHp: sim.player.maxHp,
-                        p2Hp: sim.player2 ? sim.player2.hp : 25,
-                        p2MaxHp: sim.player2 ? sim.player2.maxHp : 25,
+                        hp: sim.player.hp,
+                        maxHp: sim.player.maxHp,
+                        pauseState: this.getLocalPauseState(client)
+                    }];
+
+                    for (const peer of this.remotePeers.values()) {
+                        const re = peer.entity;
+                        if (!re) continue;
+                        playersSnapshot.push({
+                            slot: peer.slot,
+                            x: Math.round(re.x * 100) / 100,
+                            y: Math.round(re.y * 100) / 100,
+                            vx: Math.round((re.x - re.prevX) * 1000) / 1000,
+                            vy: Math.round((re.y - re.prevY) * 1000) / 1000,
+                            yaw: re.yaw & 2047,
+                            facingX: Math.round((re.facingX || 0) * 1000) / 1000,
+                            facingY: Math.round((re.facingY ?? -1) * 1000) / 1000,
+                            moving: Boolean(re.moving),
+                            moveStart: re.moveStart || 0,
+                            attackSeq: re.attackSeq ?? -1,
+                            attackStart: re.attackStart || 0,
+                            hp: re.hp,
+                            maxHp: re.maxHp,
+                            pauseState: peer.pauseState
+                        });
+                    }
+
+                    this.send({
+                        type: 'sync_world',
+                        tick: sim.tick,
+                        kills: sim.kills,
+                        pauseState: this.getLocalPauseState(client),
+                        players: playersSnapshot,
                         enemies: enemyData,
                         pickups: pickupData
                     });
                 } else {
-                    // Guest checks local death
                     if (!sim.runOver && sim.player.hp <= 0) {
-                        this.send({ type: 'game_over', reason: 'Player 2 has fallen in battle!' });
+                        this.send({ type: 'game_over', reason: `${this.localName} has fallen in battle!` });
                         this.endGameOnDisconnect('You have died - Game Over');
                         return;
                     }
 
-                    // Guest transmits input, local position, orientation, and pause state
                     this.send({
                         type: 'input',
+                        slot: this.localSlot,
                         tick: sim.tick,
                         pauseState: this.getLocalPauseState(client),
                         moveX: moveX,
                         moveY: moveY,
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
+                        vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
+                        vy: Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
                         yaw: sim.player.yaw & 2047,
                         facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
                         facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
@@ -1135,7 +1456,7 @@ export class MultiplayerManager {
                 if (this.gameStarted && client.sim) {
                     this.syncLocalPauseState(client);
                     const localState = this.getLocalPauseState(client);
-                    if (this.remotePauseState !== null && localState === null && client.sim.state === 'playing' && !client.sim.runOver) {
+                    if (this.hasAnyRemotePause() && localState === null && client.sim.state === 'playing' && !client.sim.runOver) {
                         client.accumulator = 0;
                         client.sim.state = 'coopWait';
                         try {
@@ -1212,24 +1533,26 @@ export class MultiplayerManager {
             this.clientMethodsHooked = true;
         }
 
-        // Send initial loadout sync from both Host and Guest
         this.sendLoadoutSync(client, true);
 
-        // Hook view.submitActors to render both characters with authentic models and colors
+        // Hook view.submitActors to render all remote players (up to 3 teammates)
         if (client.view && !this.inGameHooked) {
             const origSubmitActors = client.view.submitActors.bind(client.view);
             client.view.submitActors = (actors, s, alpha) => {
                 origSubmitActors(actors, s, alpha);
 
-                // Render Player 2
-                if (s.player2) {
-                    const p2 = s.player2;
+                if (!this.gameStarted || this.remotePeers.size === 0) return;
+
+                for (const peer of this.remotePeers.values()) {
+                    const p2 = peer.entity;
+                    if (!p2) continue;
                     const isCorgi = p2.characterId === 'dipper';
+                    const dynKey = `player_dynamic_${peer.slot}`;
                     let model;
                     if (isCorgi) {
                         model = client.assets.get('corgi');
-                    } else if (p2.hasDynamicModel && client.assets.get('player2_dynamic')) {
-                        model = client.assets.get('player2_dynamic');
+                    } else if (p2.hasDynamicModel && client.assets.get(dynKey)) {
+                        model = client.assets.get(dynKey);
                     } else {
                         model = client.assets.get('player_' + p2.characterId) || client.assets.getPlayer();
                     }
@@ -1238,8 +1561,8 @@ export class MultiplayerManager {
                         let anim;
                         let frame = 0;
                         if (isCorgi) {
-                            anim = p2.moving ? 
-                                (model.getAnim(6560) || model.anims[0]) : 
+                            anim = p2.moving ?
+                                (model.getAnim(6560) || model.anims[0]) :
                                 (model.getAnim(6561) || model.anims[0]);
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                         } else {
@@ -1267,7 +1590,6 @@ export class MultiplayerManager {
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isCorgi ? 0.22 : 0);
 
-                        // Renders with full vibrant colors: scale 3.0 for Corgi so it is chunky, proud, and clearly visible
                         actors.draw(model, anim, frame, px, height, py, p2.yaw & 2047, {
                             scale: isCorgi ? 3.0 : 1.0,
                             flash: (p2.flash > 0) ? 0.4 : 0,
@@ -1277,14 +1599,16 @@ export class MultiplayerManager {
                 }
             };
 
-            // Hook client.view.drawOverlay for mutual player awareness
-            // Overhead HP bar, custom nametag, off-screen pointer, and party HUD
+            // Hook client.view.drawOverlay for overhead HP bars, custom nametags, off-screen pointers, and party HUD
             const origDrawOverlay = client.view.drawOverlay.bind(client.view);
-            const p2Screen = { x: 0, y: 0, visible: false };
+            const peerScreen = { x: 0, y: 0, visible: false };
             const p1Screen = { x: 0, y: 0, visible: false };
+            const SLOT_COLORS = { 1: '#ffff00', 2: '#40e0ff', 3: '#50ff50', 4: '#ff90ff' };
 
             client.view.drawOverlay = (overlayRenderer, s, alpha) => {
                 origDrawOverlay(overlayRenderer, s, alpha);
+
+                if (!this.gameStarted || this.remotePeers.size === 0) return;
 
                 if (overlayRenderer && overlayRenderer.ctx) {
                     const ctx = overlayRenderer.ctx;
@@ -1292,7 +1616,7 @@ export class MultiplayerManager {
                     const h = overlayRenderer.height;
                     const scale = Math.max(h / 900, 0.75);
 
-                    // 1. Draw Player 1 (Local Player) Name Tag above their overhead HP bar
+                    // 1. Draw Local Player Name Tag
                     if (s.player && s.player.deathTick === -1) {
                         const p1 = s.player;
                         const px1 = p1.prevX + (p1.x - p1.prevX) * alpha;
@@ -1318,9 +1642,10 @@ export class MultiplayerManager {
                         }
                     }
 
-                    // 2. Draw Player 2 (Remote Partner)
-                    if (s.player2) {
-                        const p2 = s.player2;
+                    // 2. Draw all Remote Teammates
+                    for (const peer of this.remotePeers.values()) {
+                        const p2 = peer.entity;
+                        if (!p2) continue;
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const isCorgi = p2.characterId === 'dipper';
@@ -1328,25 +1653,24 @@ export class MultiplayerManager {
                         const groundHeight = s.grid ? s.grid.getHeight(px, py) / 128 : 0;
                         const worldHeight = groundHeight - (modelHeight / 128) - (15 / 128);
 
-                        overlayRenderer.project(px, worldHeight, py, p2Screen);
+                        overlayRenderer.project(px, worldHeight, py, peerScreen);
 
-                        const displayName = this.remoteName.toUpperCase();
+                        const displayName = (peer.name || `Player ${peer.slot}`).toUpperCase();
                         const classSub = isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase();
+                        const tagColor = SLOT_COLORS[peer.slot] || '#ffff00';
 
-                        // Check if Player 2 is visible on screen
                         const margin = 50;
-                        const onScreen = p2Screen.visible && p2Screen.x >= margin && p2Screen.x <= w - margin && p2Screen.y >= margin && p2Screen.y <= h - margin;
+                        const onScreen = peerScreen.visible && peerScreen.x >= margin && peerScreen.x <= w - margin && peerScreen.y >= margin && peerScreen.y <= h - margin;
 
                         if (onScreen) {
                             const barW = Math.round(34 * scale);
                             const barH = Math.round(6 * scale);
-                            const barX = Math.round(p2Screen.x - barW / 2);
-                            const barY = Math.round(p2Screen.y - barH * 0.6);
+                            const barX = Math.round(peerScreen.x - barW / 2);
+                            const barY = Math.round(peerScreen.y - barH * 0.6);
 
                             const hpRatio = Math.max(0, Math.min(1, p2.hp / (p2.maxHp || 25)));
                             const greenW = Math.floor(barW * hpRatio);
 
-                            // Overhead Health Bar
                             ctx.fillStyle = '#000000';
                             ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
                             ctx.fillStyle = '#00ff00';
@@ -1354,7 +1678,6 @@ export class MultiplayerManager {
                             ctx.fillStyle = '#ff0000';
                             ctx.fillRect(barX + greenW, barY, barW - greenW, barH);
 
-                            // Overhead Name Tag with custom player name
                             ctx.save();
                             ctx.font = `bold ${Math.round(13 * scale)}px "OSRS Bold", monospace, sans-serif`;
                             ctx.textAlign = 'center';
@@ -1362,19 +1685,18 @@ export class MultiplayerManager {
                             ctx.lineWidth = 3;
                             ctx.strokeStyle = '#000000';
                             const partnerTag = displayName.includes(classSub) ? displayName : `${displayName} (${classSub})`;
-                            ctx.strokeText(partnerTag, p2Screen.x, barY - 4);
-                            ctx.fillStyle = '#ffff00';
-                            ctx.fillText(partnerTag, p2Screen.x, barY - 4);
+                            ctx.strokeText(partnerTag, peerScreen.x, barY - 4);
+                            ctx.fillStyle = tagColor;
+                            ctx.fillText(partnerTag, peerScreen.x, barY - 4);
                             ctx.restore();
                         } else {
-                            // Off-screen indicator arrow pointing toward partner
                             const centerX = w / 2;
                             const centerY = h / 2;
-                            let targetX = p2Screen.x;
-                            let targetY = p2Screen.y;
-                            if (!p2Screen.visible) {
-                                targetX = centerX - (p2Screen.x - centerX);
-                                targetY = centerY - (p2Screen.y - centerY);
+                            let targetX = peerScreen.x;
+                            let targetY = peerScreen.y;
+                            if (!peerScreen.visible) {
+                                targetX = centerX - (peerScreen.x - centerX);
+                                targetY = centerY - (peerScreen.y - centerY);
                             }
 
                             const dx = targetX - centerX;
@@ -1392,8 +1714,7 @@ export class MultiplayerManager {
                             ctx.translate(edgeX, edgeY);
                             ctx.rotate(angle);
 
-                            // Golden chevron arrow
-                            ctx.fillStyle = '#ff981f';
+                            ctx.fillStyle = tagColor;
                             ctx.beginPath();
                             ctx.moveTo(12, 0);
                             ctx.lineTo(-8, -8);
@@ -1407,43 +1728,31 @@ export class MultiplayerManager {
 
                             ctx.restore();
 
-                            // Distance and name label
                             ctx.save();
                             ctx.font = `bold 12px "OSRS Small", monospace`;
                             ctx.textAlign = 'center';
                             ctx.lineWidth = 3;
                             ctx.strokeStyle = '#000';
                             ctx.strokeText(`${displayName} (${distMeters}m)`, edgeX, edgeY + 20);
-                            ctx.fillStyle = '#ffff00';
+                            ctx.fillStyle = tagColor;
                             ctx.fillText(`${displayName} (${distMeters}m)`, edgeX, edgeY + 20);
                             ctx.restore();
                         }
-
-                        // Update persistent Party HUD widget (located at bottom left to avoid item infographs)
-                        this.updatePartyHUD(p2);
                     }
+
+                    // Update persistent Party HUD widget on bottom-right
+                    this.updatePartyHUD();
                 }
             };
 
-            // Hook CameraRig to dynamically frame both players
+            // Lock CameraRig directly to local player (px, py, pz) to eliminate remote-latency camera shake!
             if (client.cameraRig) {
                 const origApply = client.cameraRig.apply.bind(client.cameraRig);
                 client.cameraRig.apply = (camera, px, py, pz) => {
-                    if (client.sim && client.sim.player2) {
-                        const p1 = client.sim.player;
-                        const p2 = client.sim.player2;
-                        const midX = (p1.x + p2.x) / 2;
-                        const midZ = (p1.y + p2.y) / 2;
-                        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-                        client.cameraRig.distance = Math.min(Math.max(18 + dist * 0.45, 16), 34);
-                        origApply(camera, midX, py, midZ);
-                    } else {
-                        origApply(camera, px, py, pz);
-                    }
+                    origApply(camera, px, py, pz);
                 };
             }
 
-            // Hook client.quitRun to cleanly notify peer
             const origQuitRun = client.quitRun?.bind(client);
             if (origQuitRun) {
                 client.quitRun = () => {
@@ -1451,7 +1760,7 @@ export class MultiplayerManager {
                         this.send({ type: 'peer_leaving' });
                         this.gameStarted = false;
                         this.localPauseState = null;
-                        this.remotePauseState = null;
+                        this.remotePeers.clear();
                         this.removePauseOverlay();
                         const hud = document.getElementById('coop-party-hud');
                         if (hud) hud.remove();
@@ -1463,7 +1772,15 @@ export class MultiplayerManager {
             this.inGameHooked = true;
         }
 
-        this.showToast(`Co-Op Run Active! Teammate: ${this.remoteName.toUpperCase()} (${remoteChar.toUpperCase()})`);
+        const partnerNames = Array.from(this.remotePeers.values()).map(p => p.name.toUpperCase()).join(', ');
+        this.showToast(`Co-Op Active (${partySize}P)! Party: ${partnerNames}`);
+    }
+
+    hasAnyRemotePause() {
+        for (const peer of this.remotePeers.values()) {
+            if (peer.pauseState !== null) return true;
+        }
+        return false;
     }
 
     getLocalPauseState(client) {
@@ -1478,9 +1795,10 @@ export class MultiplayerManager {
         const nextState = this.getLocalPauseState(client);
         if (nextState !== this.localPauseState || force) {
             this.localPauseState = nextState;
-            if (this.peerConnected) {
+            if (this.remotePeers.size > 0) {
                 this.send({
                     type: 'coop_pause',
+                    slot: this.localSlot,
                     state: nextState,
                     playerName: this.localName
                 });
@@ -1500,8 +1818,8 @@ export class MultiplayerManager {
             return;
         }
         const localState = this.getLocalPauseState(client);
-        // If local player has their own Chest / Level-Up / Pause modal open, let them interact with it directly
-        if (localState !== null || this.remotePauseState === null) {
+        const pausedPeers = Array.from(this.remotePeers.values()).filter(p => p.pauseState !== null);
+        if (localState !== null || pausedPeers.length === 0) {
             this.removePauseOverlay();
             return;
         }
@@ -1525,24 +1843,25 @@ export class MultiplayerManager {
             document.body.appendChild(el);
         }
 
-        const partnerName = escapeHtml(this.remoteName.toUpperCase());
+        const names = pausedPeers.map(p => escapeHtml(p.name.toUpperCase())).join(', ');
+        const primaryState = pausedPeers[0].pauseState;
         let titleText = 'CO-OP PAUSED';
-        let bodyText = `Waiting for ${partnerName}...`;
+        let bodyText = `Waiting for ${names}...`;
         let showResumeBtn = false;
 
-        if (this.remotePauseState === 'chest') {
+        if (primaryState === 'chest') {
             titleText = 'TREASURE CASKET';
-            bodyText = `${partnerName} is opening a treasure casket...`;
-        } else if (this.remotePauseState === 'levelUp') {
+            bodyText = `${names} ${pausedPeers.length > 1 ? 'are' : 'is'} opening a treasure casket...`;
+        } else if (primaryState === 'levelUp') {
             titleText = 'LEVEL UP!';
-            bodyText = `${partnerName} is choosing a level-up reward...`;
-        } else if (this.remotePauseState === 'paused') {
+            bodyText = `${names} ${pausedPeers.length > 1 ? 'are' : 'is'} choosing a level-up reward...`;
+        } else if (primaryState === 'paused') {
             titleText = 'GAME PAUSED';
-            bodyText = `${partnerName} paused the game.`;
+            bodyText = `${names} paused the game.`;
             showResumeBtn = true;
         }
 
-        const stateKey = `${this.remotePauseState}:${partnerName}`;
+        const stateKey = pausedPeers.map(p => `${p.slot}:${p.pauseState}:${p.name}`).join('|');
         if (el.dataset.stateKey !== stateKey) {
             el.dataset.stateKey = stateKey;
             el.innerHTML = `
@@ -1556,7 +1875,7 @@ export class MultiplayerManager {
                 ">
                     <h2 style="margin: 0 0 10px 0; font-size: 24px; color: #ffff00; text-shadow: 2px 2px #000;">${titleText}</h2>
                     <p style="margin: 0 0 ${showResumeBtn ? '18px' : '4px'} 0; font-size: 16px; color: #ffffff; text-shadow: 1px 1px #000;">${bodyText}</p>
-                    <p style="margin: 0; font-size: 12px; color: #b8a890;">Simulation paused for both players to stay in sync</p>
+                    <p style="margin: 0; font-size: 12px; color: #b8a890;">Simulation paused for all players to stay in sync</p>
                     ${showResumeBtn ? `
                         <div style="margin-top: 16px;">
                             <button id="coop-remote-resume-btn" class="ui-button ui-button-go" style="padding: 8px 24px; cursor: pointer;">Resume Co-Op</button>
@@ -1567,16 +1886,18 @@ export class MultiplayerManager {
             const resumeBtn = el.querySelector('#coop-remote-resume-btn');
             if (resumeBtn) {
                 resumeBtn.addEventListener('click', () => {
-                    this.remotePauseState = null;
+                    for (const peer of this.remotePeers.values()) {
+                        peer.pauseState = null;
+                    }
                     this.removePauseOverlay();
-                    this.send({ type: 'coop_pause', state: null, action: 'resume_both' });
+                    this.send({ type: 'coop_pause', slot: this.localSlot, state: null, action: 'resume_both' });
                 });
             }
         }
     }
 
     sendLoadoutSync(client, healed = false) {
-        if (!client || !client.sim || !this.peerConnected) return;
+        if (!client || !client.sim || this.remotePeers.size === 0) return;
         const sim = client.sim;
         try {
             client.updateHud?.(true);
@@ -1638,6 +1959,7 @@ export class MultiplayerManager {
         }
         this.send({
             type: 'coop_loadout',
+            slot: this.localSlot,
             weapons,
             passives,
             gear,
@@ -1649,14 +1971,15 @@ export class MultiplayerManager {
         });
     }
 
-    async bakePlayer2Appearance(client, appearance) {
-        if (!client || !client.assets || !appearance || !Array.isArray(appearance.equipment)) return;
+    async bakeRemotePeerAppearance(client, peer, appearance) {
+        if (!client || !client.assets || !peer || !appearance || !Array.isArray(appearance.equipment)) return;
         const equipKey = appearance.equipment.join(',');
-        if (this.lastP2EquipKey === equipKey && client.assets.models.has('player2_dynamic')) {
-            if (client.sim?.player2) client.sim.player2.hasDynamicModel = true;
+        const dynKey = `player_dynamic_${peer.slot}`;
+        if (peer.lastEquipKey === equipKey && client.assets.models.has(dynKey)) {
+            if (peer.entity) peer.entity.hasDynamicModel = true;
             return;
         }
-        this.lastP2EquipKey = equipKey;
+        peer.lastEquipKey = equipKey;
         const seqIds = this.playerSeqIds || [
             808, 819, 824, 836,
             386, 390, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
@@ -1665,7 +1988,7 @@ export class MultiplayerManager {
         try {
             const bakeRes = await client.assets.bake([{
                 kind: 'player',
-                key: 'player2_dynamic',
+                key: dynKey,
                 appearance: {
                     gender: appearance.gender === 1 ? 1 : 0,
                     colors: Array.isArray(appearance.colors) ? appearance.colors.slice(0, 5).map(n => Number(n) || 0) : [0, 0, 0, 0, 0],
@@ -1681,19 +2004,22 @@ export class MultiplayerManager {
             for (const [k, v] of added) {
                 client.assets.models.set(k, v);
             }
-            if (client.sim?.player2) {
-                client.sim.player2.hasDynamicModel = true;
+            if (peer.entity) {
+                peer.entity.hasDynamicModel = true;
             }
         } catch (err) {
-            console.warn('[Multiplayer] Failed baking dynamic Player 2 model:', err);
+            console.warn(`[Multiplayer] Failed baking dynamic model for slot ${peer.slot}:`, err);
         }
     }
 
     applyRemoteLoadout(msg) {
         const client = window.gameClient;
-        if (!client || !client.sim || !client.sim.player2 || !msg || typeof msg !== 'object') return;
+        if (!client || !client.sim || !msg || typeof msg !== 'object') return;
         const sim = client.sim;
-        const p2 = sim.player2;
+        const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, 0);
+        const peer = this.remotePeers.get(senderSlot);
+        if (!peer || !peer.entity) return;
+        const p2 = peer.entity;
 
         if (Number.isFinite(Number(msg.maxHp))) {
             const newMaxHp = Math.max(1, Math.min(1000, Math.round(Number(msg.maxHp))));
@@ -1724,15 +2050,15 @@ export class MultiplayerManager {
                     }
                 }
             } catch (err) {
-                console.warn('[Multiplayer] Error syncing Player 2 weapons:', err);
+                console.warn(`[Multiplayer] Error syncing slot ${senderSlot} weapons:`, err);
             } finally {
                 sim.weapons = savedWeapons;
             }
             if (built.length > 0) {
-                sim.player2Weapons = built;
+                peer.weapons = built;
             }
 
-            this.remoteLoadout.weapons = msg.weapons.slice(0, 6).map(w => ({
+            peer.loadout.weapons = msg.weapons.slice(0, 6).map(w => ({
                 id: String(w.id || ''),
                 name: String(w.name || w.id || 'Weapon'),
                 level: Math.max(1, Math.round(Number(w.level) || 1)),
@@ -1743,7 +2069,7 @@ export class MultiplayerManager {
         }
 
         if (Array.isArray(msg.passives)) {
-            this.remoteLoadout.passives = msg.passives.slice(0, 6).map(p => ({
+            peer.loadout.passives = msg.passives.slice(0, 6).map(p => ({
                 id: String(p?.id || ''),
                 name: String(p?.name || p?.id || 'Passive'),
                 level: Math.max(1, Math.round(Number(p?.level) || 1)),
@@ -1754,7 +2080,7 @@ export class MultiplayerManager {
         }
 
         if (Array.isArray(msg.gear)) {
-            this.remoteLoadout.gear = msg.gear.slice(0, 8).map(g => ({
+            peer.loadout.gear = msg.gear.slice(0, 8).map(g => ({
                 slot: String(g?.slot || ''),
                 slotName: String(g?.slotName || 'Slot'),
                 item: g?.item ? {
@@ -1767,7 +2093,7 @@ export class MultiplayerManager {
         }
 
         if (Array.isArray(msg.inventory)) {
-            this.remoteLoadout.inventory = [0, 1, 2, 3].map(idx => {
+            peer.loadout.inventory = [0, 1, 2, 3].map(idx => {
                 const slot = msg.inventory[idx];
                 if (!slot || typeof slot !== 'object') return null;
                 return {
@@ -1784,7 +2110,7 @@ export class MultiplayerManager {
         this.lastPartyHudKey = '';
 
         if (msg.appearance && p2.characterId !== 'dipper') {
-            this.bakePlayer2Appearance(client, msg.appearance);
+            this.bakeRemotePeerAppearance(client, peer, msg.appearance);
         }
     }
 
@@ -1812,6 +2138,7 @@ export class MultiplayerManager {
             client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'coins', value: val }]);
             client.updateHud(false);
         } else if (kind === 'food') {
+            if (msg.targetSlot && sanitizeSlot(msg.targetSlot, 0) !== this.localSlot) return;
             if (val <= 0) return;
             sim.heal(val);
             client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'food', value: val }]);
@@ -1855,89 +2182,49 @@ export class MultiplayerManager {
         return null;
     }
 
-    // Partner HUD widget on the bottom-right showing Partner HP, Weapons, Passives, Worn Gear, and Inventory (1-4)
-    updatePartyHUD(p2) {
+    // Multi-Partner HUD widget on the bottom-right showing 1 to 3 teammates' HP, Weapons, Passives, Gear, and Inventory
+    updatePartyHUD() {
+        const peersList = Array.from(this.remotePeers.values()).sort((a, b) => a.slot - b.slot);
         let hud = document.getElementById('coop-party-hud');
+        if (peersList.length === 0) {
+            if (hud) hud.remove();
+            return;
+        }
         if (!hud) {
             hud = document.createElement('div');
             hud.id = 'coop-party-hud';
             hud.style.cssText = `
                 position: fixed;
-                bottom: 24px;
-                right: 24px;
+                bottom: 18px;
+                right: 18px;
                 z-index: 99;
                 zoom: var(--ui-scale, 1);
-                background: rgba(22, 17, 12, 0.94);
-                border: 2px solid #5a4a35;
-                outline: 1px solid #120e0a;
-                padding: 8px 12px;
-                border-radius: 4px;
-                color: #ff981f;
-                font-family: 'OSRS Bold', monospace;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.8);
                 display: flex;
                 flex-direction: column;
-                gap: 4px;
+                gap: 6px;
                 pointer-events: auto;
-                min-width: 192px;
+                max-height: calc(72vh / var(--ui-scale, 1));
+                overflow-y: auto;
                 user-select: none;
             `;
             document.body.appendChild(hud);
         }
 
-        const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
-        const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
-        const fastKey = `${p2.characterId}:${this.remoteName}:${hp}:${maxHp}:${this.loadoutVersion || 0}`;
+        const fastKeyParts = [`v:${this.loadoutVersion || 0}`];
+        for (const peer of peersList) {
+            const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
+            const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
+            fastKeyParts.push(`${peer.slot}:${peer.name}:${peer.characterId}:${hp}:${maxHp}`);
+        }
+        const fastKey = fastKeyParts.join('|');
         if (this.lastPartyHudFastKey === fastKey) return;
         this.lastPartyHudFastKey = fastKey;
 
-        const isCorgi = p2.characterId === 'dipper';
-        const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase());
-        const displayName = escapeHtml(this.remoteName.toUpperCase());
-        const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
-        const hpPercent = Math.round(hpRatio * 100);
-        const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
+        const isCompact = peersList.length > 1;
+        const slotSize = isCompact ? 22 : 28;
+        const smallSlotSize = isCompact ? 20 : 25;
 
-        const loadout = this.remoteLoadout || { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
-
-        // Fallback to sim.player2Weapons if remoteLoadout.weapons has not arrived yet
-        const simP2Weapons = (window.gameClient?.sim?.player2Weapons || []).map(w => {
-            const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
-            return {
-                id: w.def?.id || 'weapon',
-                name: lvlDef?.name || w.def?.name || 'Weapon',
-                level: w.level || 1,
-                maxLevel: w.def?.levels?.length || 8,
-                iconObjId: lvlDef?.objId ?? w.def?.iconObjId ?? 0,
-                rarityColor: '#ff981f'
-            };
-        });
-        const weapons = loadout.weapons.length > 0 ? loadout.weapons : simP2Weapons;
-        const passives = loadout.passives || [];
-        const gear = loadout.gear || [];
-        const inventory = loadout.inventory || [null, null, null, null];
-
-        // Resolve icon URLs and build state key so we only update innerHTML when state or icons change
-        const weaponUrls = [0, 1, 2, 3].map(i => weapons[i] ? (this.getIconUrl(weapons[i].iconObjId) || '') : '');
-        const passiveUrls = [0, 1, 2, 3].map(i => passives[i] ? (this.getIconUrl(passives[i].iconObjId) || '') : '');
-        const gearUrls = gear.map(g => g?.item ? (this.getIconUrl(g.item.iconObjId) || '') : '');
-        const invUrls = [0, 1, 2, 3].map(i => inventory[i] ? (this.getIconUrl(inventory[i].iconObjId) || '') : '');
-
-        const stateKey = JSON.stringify({
-            displayName,
-            charName,
-            hp,
-            maxHp,
-            w: weapons.map((x, i) => [x.id, x.level, Boolean(weaponUrls[i])]),
-            p: passives.map((x, i) => [x.id, x.level, Boolean(passiveUrls[i])]),
-            g: gear.map((x, i) => [x.slot, x.item?.id || '', Boolean(gearUrls[i])]),
-            inv: inventory.map((x, i) => x ? [x.id, x.count, Boolean(invUrls[i])] : null)
-        });
-
-        if (this.lastPartyHudKey === stateKey) return;
-        this.lastPartyHudKey = stateKey;
-
-        const renderMiniSlot = (entry, iconUrl, size = 28, badgeText = '', emptyLabel = '') => {
+        const renderMiniSlot = (entry, iconUrl, size = 26, badgeText = '', emptyLabel = '') => {
             const border = entry ? escapeHtml(entry.rarityColor || '#8a7558') : '#3d3123';
             const title = entry ? escapeHtml(`${entry.name}${badgeText ? ` (${badgeText})` : ''}`) : escapeHtml(emptyLabel);
             return `
@@ -1954,16 +2241,16 @@ export class MultiplayerManager {
                     box-sizing: border-box;
                 ">
                     ${iconUrl ? `<img src="${iconUrl}" width="${size - 4}" height="${size - 4}" style="image-rendering: pixelated; pointer-events: none;" alt="" />` : (
-                        entry ? `<span style="font-size: 9px; color: #ff981f; text-align: center; line-height: 1;">${escapeHtml(entry.name.slice(0, 3).toUpperCase())}</span>` : (
-                            emptyLabel ? `<span style="font-size: 9px; color: #554736;">${escapeHtml(emptyLabel[0])}</span>` : ''
+                        entry ? `<span style="font-size: 8px; color: #ff981f; text-align: center; line-height: 1;">${escapeHtml(entry.name.slice(0, 3).toUpperCase())}</span>` : (
+                            emptyLabel ? `<span style="font-size: 8px; color: #554736;">${escapeHtml(emptyLabel[0])}</span>` : ''
                         )
                     )}
                     ${badgeText ? `
                         <span style="
                             position: absolute;
                             bottom: 0px;
-                            right: 2px;
-                            font-size: 9px;
+                            right: 1px;
+                            font-size: 8px;
                             color: #ffff00;
                             text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
                             line-height: 1;
@@ -1973,70 +2260,111 @@ export class MultiplayerManager {
             `;
         };
 
-        const weaponsRow = [0, 1, 2, 3].map(i => {
-            const w = weapons[i];
-            const lvl = w ? (w.level >= w.maxLevel ? 'max' : String(w.level)) : '';
-            return renderMiniSlot(w, weaponUrls[i], 30, lvl, 'Weapon slot');
+        const cardsHtml = peersList.map(peer => {
+            const p2 = peer.entity || { hp: 25, maxHp: 25, characterId: peer.characterId };
+            const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
+            const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
+            const isCorgi = p2.characterId === 'dipper';
+            const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase());
+            const displayName = escapeHtml((peer.name || `Player ${peer.slot}`).toUpperCase());
+            const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
+            const hpPercent = Math.round(hpRatio * 100);
+            const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
+
+            const loadout = peer.loadout || { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
+            const fallbackWeapons = (peer.weapons || []).map(w => {
+                const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
+                return {
+                    id: w.def?.id || 'weapon',
+                    name: lvlDef?.name || w.def?.name || 'Weapon',
+                    level: w.level || 1,
+                    maxLevel: w.def?.levels?.length || 8,
+                    iconObjId: lvlDef?.objId ?? w.def?.iconObjId ?? 0,
+                    rarityColor: '#ff981f'
+                };
+            });
+            const weapons = loadout.weapons.length > 0 ? loadout.weapons : fallbackWeapons;
+            const passives = loadout.passives || [];
+            const gear = loadout.gear || [];
+            const inventory = loadout.inventory || [null, null, null, null];
+
+            const weaponUrls = [0, 1, 2, 3].map(i => weapons[i] ? (this.getIconUrl(weapons[i].iconObjId) || '') : '');
+            const passiveUrls = [0, 1, 2, 3].map(i => passives[i] ? (this.getIconUrl(passives[i].iconObjId) || '') : '');
+            const gearUrls = gear.map(g => g?.item ? (this.getIconUrl(g.item.iconObjId) || '') : '');
+            const invUrls = [0, 1, 2, 3].map(i => inventory[i] ? (this.getIconUrl(inventory[i].iconObjId) || '') : '');
+
+            const weaponsRow = [0, 1, 2, 3].map(i => {
+                const w = weapons[i];
+                const lvl = w ? (w.level >= w.maxLevel ? 'max' : String(w.level)) : '';
+                return renderMiniSlot(w, weaponUrls[i], slotSize, lvl, 'Weapon');
+            }).join('');
+
+            const passivesRow = [0, 1, 2, 3].map(i => {
+                const p = passives[i];
+                const lvl = p ? (p.level >= p.maxLevel ? 'max' : String(p.level)) : '';
+                return renderMiniSlot(p, passiveUrls[i], smallSlotSize, lvl, 'Passive');
+            }).join('');
+
+            const defaultGearSlots = [
+                { slot: 'head', slotName: 'Head', item: null },
+                { slot: 'cape', slotName: 'Cape', item: null },
+                { slot: 'amulet', slotName: 'Neck', item: null },
+                { slot: 'body', slotName: 'Body', item: null },
+                { slot: 'legs', slotName: 'Legs', item: null },
+                { slot: 'hands', slotName: 'Hands', item: null }
+            ];
+            const gearList = gear.length > 0 ? gear.slice(0, 6) : defaultGearSlots;
+            const gearRow = gearList.map((g, i) => (
+                renderMiniSlot(g.item, gearUrls[i] || '', smallSlotSize, '', g.slotName || 'Gear')
+            )).join('');
+
+            const invRow = [0, 1, 2, 3].map(i => {
+                const item = inventory[i];
+                const countBadge = item && item.count > 1 ? String(item.count) : '';
+                return renderMiniSlot(item, invUrls[i], smallSlotSize, countBadge, `${i + 1}`);
+            }).join('');
+
+            return `
+                <div style="
+                    background: rgba(22, 17, 12, 0.94);
+                    border: 2px solid #5a4a35;
+                    outline: 1px solid #120e0a;
+                    padding: ${isCompact ? '6px 10px' : '8px 12px'};
+                    border-radius: 4px;
+                    color: #ff981f;
+                    font-family: 'OSRS Bold', monospace;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 3px;
+                    min-width: ${isCompact ? '176px' : '192px'};
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 6px;">
+                        <span style="font-size: 12px; color: #ffffff; text-shadow: 1px 1px #000;">P${peer.slot}: ${displayName}</span>
+                        <span style="font-size: 9px; color: #ff981f;">${charName}</span>
+                    </div>
+                    <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 8px; border-radius: 2px; overflow: hidden;">
+                        <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
+                    </div>
+                    <div style="font-size: 9px; color: #bbb; text-align: right;">${hp} / ${maxHp} HP</div>
+                    <div style="border-top: 1px solid #3d3123; padding-top: 3px; display: flex; flex-direction: column; gap: 2px;">
+                        <div style="display: flex; gap: 2px;">${weaponsRow}</div>
+                        <div style="display: flex; gap: 2px;">${passivesRow}</div>
+                        <div style="display: flex; gap: 2px;">${gearRow}</div>
+                        <div style="display: flex; gap: 2px;">${invRow}</div>
+                    </div>
+                </div>
+            `;
         }).join('');
 
-        const passivesRow = [0, 1, 2, 3].map(i => {
-            const p = passives[i];
-            const lvl = p ? (p.level >= p.maxLevel ? 'max' : String(p.level)) : '';
-            return renderMiniSlot(p, passiveUrls[i], 26, lvl, 'Passive slot');
-        }).join('');
-
-        const defaultGearSlots = [
-            { slot: 'head', slotName: 'Head', item: null },
-            { slot: 'cape', slotName: 'Cape', item: null },
-            { slot: 'amulet', slotName: 'Neck', item: null },
-            { slot: 'body', slotName: 'Body', item: null },
-            { slot: 'legs', slotName: 'Legs', item: null },
-            { slot: 'hands', slotName: 'Hands', item: null }
-        ];
-        const gearList = gear.length > 0 ? gear.slice(0, 6) : defaultGearSlots;
-        const gearRow = gearList.map((g, i) => {
-            return renderMiniSlot(g.item, gearUrls[i] || '', 26, '', g.slotName || 'Gear');
-        }).join('');
-
-        const invRow = [0, 1, 2, 3].map(i => {
-            const item = inventory[i];
-            const countBadge = item && item.count > 1 ? String(item.count) : '';
-            return renderMiniSlot(item, invUrls[i], 30, countBadge, `${i + 1}`);
-        }).join('');
-
-        hud.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px;">
-                <span style="color: #ff981f; letter-spacing: 1px;">CO-OP PARTNER</span>
-                <span style="color: #00ff00; font-size: 9px;">● ONLINE</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-                <span style="font-size: 13px; color: #ffffff; text-shadow: 1px 1px #000;">${displayName}</span>
-                <span style="font-size: 10px; color: #ff981f;">${charName}</span>
-            </div>
-            <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 9px; border-radius: 2px; overflow: hidden;">
-                <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
-            </div>
-            <div style="font-size: 10px; color: #bbb; text-align: right; margin-bottom: 2px;">${hp} / ${maxHp} HP</div>
-
-            <div style="border-top: 1px solid #3d3123; padding-top: 4px; display: flex; flex-direction: column; gap: 3px;">
-                <div style="font-size: 9px; color: #b8a890; letter-spacing: 0.5px;">WEAPONS &amp; PASSIVES</div>
-                <div style="display: flex; gap: 3px;">${weaponsRow}</div>
-                <div style="display: flex; gap: 3px;">${passivesRow}</div>
-            </div>
-
-            <div style="border-top: 1px solid #3d3123; padding-top: 4px; display: flex; flex-direction: column; gap: 3px;">
-                <div style="font-size: 9px; color: #b8a890; letter-spacing: 0.5px;">WORN GEAR &amp; INVENTORY</div>
-                <div style="display: flex; gap: 3px;">${gearRow}</div>
-                <div style="display: flex; gap: 3px;">${invRow}</div>
-            </div>
-        `;
+        hud.innerHTML = cardsHtml;
     }
 
     endGameOnDisconnect(reason) {
         if (!this.gameStarted) return;
         this.gameStarted = false;
         this.localPauseState = null;
-        this.remotePauseState = null;
+        this.remotePeers.clear();
         this.removePauseOverlay();
         this.showToast(reason);
 
@@ -2061,23 +2389,27 @@ export class MultiplayerManager {
         }
     }
 
-    stepPlayer2Pickups(sim, p2) {
-        if (!sim.pickups || sim.pickups.length === 0) return;
+    stepRemotePlayerPickups(sim, peer) {
+        if (!sim.pickups || sim.pickups.length === 0 || !peer || !peer.entity) return;
+        const p2 = peer.entity;
         const client = window.gameClient;
         const magnet = 2.5 * (1 + (sim.stats?.magnet || 0));
+        const attractKey = `attracted_s${peer.slot}`;
+        const speedKey = `speed_s${peer.slot}`;
+
         for (const pickup of sim.pickups) {
             if (pickup.value < 0) continue;
             const dx = p2.x - pickup.x;
             const dy = p2.y - pickup.y;
             const dist = Math.hypot(dx, dy);
             const magnetic = pickup.kind !== 'casket' && pickup.kind !== 'powerUp';
-            if (!pickup.attracted && !pickup.attractedP2 && magnetic && dist < magnet) {
-                pickup.attractedP2 = true;
-                pickup.speedP2 = 0.05;
+            if (!pickup.attracted && !pickup[attractKey] && magnetic && dist < magnet) {
+                pickup[attractKey] = true;
+                pickup[speedKey] = 0.05;
             }
-            if (pickup.attractedP2 && dist > 0.001) {
-                pickup.speedP2 = Math.min((pickup.speedP2 || 0.05) + 0.02, 0.6);
-                const step = Math.min(pickup.speedP2, dist);
+            if (pickup[attractKey] && dist > 0.001) {
+                pickup[speedKey] = Math.min((pickup[speedKey] || 0.05) + 0.02, 0.6);
+                const step = Math.min(pickup[speedKey], dist);
                 pickup.x += (dx / dist) * step;
                 pickup.y += (dy / dist) * step;
             }
@@ -2085,7 +2417,6 @@ export class MultiplayerManager {
                 const origVal = pickup.value;
                 pickup.value = -1;
                 if (pickup.kind === 'bones' || pickup.kind === 'big_bones' || pickup.kind === 'coins') {
-                    // Shared XP and coins: apply on Host (which also broadcasts coop_pickup to Guest)
                     pickup.value = origVal;
                     sim.collect(pickup);
                     pickup.value = -1;
@@ -2100,14 +2431,16 @@ export class MultiplayerManager {
                     this.send({
                         type: 'coop_pickup',
                         kind: 'food',
+                        targetSlot: peer.slot,
                         value: origVal
                     });
                 } else if (pickup.kind === 'casket') {
-                    // Casket collected by Player 2 prompts BOTH Host and Guest with independent, unique item rolls
                     const tier = pickup.tier || 'medium';
                     sim.openCasket(tier);
                     const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
-                    this.remotePauseState = 'chest';
+                    for (const rp of this.remotePeers.values()) {
+                        rp.pauseState = 'chest';
+                    }
                     this.send({
                         type: 'coop_pickup',
                         kind: 'casket',
@@ -2133,7 +2466,7 @@ export class MultiplayerManager {
                     this.send({
                         type: 'coop_pickup',
                         kind: 'powerUp',
-                        message: `${this.remoteName} activated a power-up!`
+                        message: `${peer.name} activated a power-up!`
                     });
                 }
             }
@@ -2145,82 +2478,99 @@ export class MultiplayerManager {
         const client = window.gameClient;
         if (!client || !client.sim) return;
         const sim = client.sim;
+        const now = performance.now();
 
-        // 0. Synchronize simulation clock, kills, and remote pause state
-        // Only snap sim.tick if it drifts by more than 2 ticks so local projectile/enemy anims do not jitter
         if (Number.isFinite(Number(msg.tick)) && msg.tick >= 0) {
             const hostTick = Math.round(Number(msg.tick));
-            if (Math.abs(hostTick - sim.tick) > 2) {
+            if (Math.abs(hostTick - sim.tick) > 3) {
                 sim.tick = hostTick;
             }
         }
         if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
             sim.kills = Math.round(Number(msg.kills));
         }
-        if (msg.pauseState !== undefined) {
+
+        // 1. Synchronize all players in the party (2 to 4 players)
+        if (Array.isArray(msg.players)) {
             const allowedStates = new Set(['levelUp', 'chest', 'paused']);
-            const nextRemote = (typeof msg.pauseState === 'string' && allowedStates.has(msg.pauseState)) ? msg.pauseState : null;
-            if (nextRemote !== this.remotePauseState) {
-                this.remotePauseState = nextRemote;
+            let pauseChanged = false;
+
+            for (const pState of msg.players) {
+                if (!pState || typeof pState !== 'object') continue;
+                const slot = sanitizeSlot(pState.slot, 0);
+                if (slot === this.localSlot) {
+                    if (sim.player && Number.isFinite(Number(pState.hp))) {
+                        sim.player.hp = Math.max(0, Number(pState.hp));
+                        if (Number.isFinite(Number(pState.maxHp))) {
+                            sim.player.maxHp = Math.max(1, Math.round(Number(pState.maxHp)));
+                        }
+                        if (sim.player.hp <= 0 && !sim.runOver) {
+                            this.endGameOnDisconnect('You have died - Game Over');
+                        }
+                    }
+                    continue;
+                }
+
+                const peer = this.remotePeers.get(slot);
+                if (!peer || !peer.entity) continue;
+                const re = peer.entity;
+
+                if (pState.pauseState !== undefined) {
+                    const nextRemote = (typeof pState.pauseState === 'string' && allowedStates.has(pState.pauseState)) ? pState.pauseState : null;
+                    if (nextRemote !== peer.pauseState) {
+                        peer.pauseState = nextRemote;
+                        pauseChanged = true;
+                    }
+                }
+
+                if (Number.isFinite(pState.x) && Number.isFinite(pState.y)) {
+                    const nx = Math.max(0, Math.min(16384, pState.x));
+                    const ny = Math.max(0, Math.min(16384, pState.y));
+                    if (Number.isFinite(pState.vx) && Number.isFinite(pState.vy)) {
+                        re.vx = Math.max(-1.5, Math.min(1.5, pState.vx));
+                        re.vy = Math.max(-1.5, Math.min(1.5, pState.vy));
+                    } else if (Number.isFinite(re.netX) && Number.isFinite(re.netY)) {
+                        re.vx = Math.max(-1.5, Math.min(1.5, nx - re.netX));
+                        re.vy = Math.max(-1.5, Math.min(1.5, ny - re.netY));
+                    }
+                    re.netX = nx;
+                    re.netY = ny;
+                    re.lastPacketTime = now;
+                }
+                if (Number.isFinite(pState.yaw)) {
+                    re.yaw = Math.round(pState.yaw) & 2047;
+                }
+                if (Number.isFinite(pState.facingX) && Number.isFinite(pState.facingY)) {
+                    re.facingX = pState.facingX;
+                    re.facingY = pState.facingY;
+                }
+                if (typeof pState.moving === 'boolean') {
+                    if (pState.moving !== re.moving) {
+                        re.moveStart = Number.isFinite(pState.moveStart) ? pState.moveStart : sim.tick;
+                    }
+                    re.moving = pState.moving;
+                }
+                if (Number.isFinite(pState.attackSeq) && pState.attackSeq !== -1) {
+                    re.attackSeq = pState.attackSeq;
+                    if (Number.isFinite(pState.attackStart)) {
+                        re.attackStart = pState.attackStart;
+                    }
+                }
+                if (Number.isFinite(Number(pState.hp))) {
+                    re.hp = Math.max(0, Number(pState.hp));
+                    if (Number.isFinite(Number(pState.maxHp))) {
+                        re.maxHp = Math.max(1, Math.round(Number(pState.maxHp)));
+                    }
+                }
+            }
+
+            if (pauseChanged) {
                 client.accumulator = 0;
                 this.updatePauseOverlay(client);
             }
         }
 
-        // 1. Synchronize player states (Host -> Guest)
-        if (sim.player2) {
-            if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
-                const targetX = Math.max(0, Math.min(16384, msg.x));
-                const targetY = Math.max(0, Math.min(16384, msg.y));
-                sim.player2.targetX = targetX;
-                sim.player2.targetY = targetY;
-                if (Math.hypot(targetX - sim.player2.x, targetY - sim.player2.y) > 4.0) {
-                    sim.player2.prevX = targetX;
-                    sim.player2.prevY = targetY;
-                    sim.player2.x = targetX;
-                    sim.player2.y = targetY;
-                }
-            }
-            if (Number.isFinite(msg.yaw)) {
-                sim.player2.yaw = Math.round(msg.yaw) & 2047;
-            }
-            if (Number.isFinite(msg.facingX) && Number.isFinite(msg.facingY)) {
-                sim.player2.facingX = msg.facingX;
-                sim.player2.facingY = msg.facingY;
-            }
-            if (typeof msg.moving === 'boolean') {
-                if (msg.moving !== sim.player2.moving) {
-                    sim.player2.moveStart = Number.isFinite(msg.moveStart) ? msg.moveStart : sim.tick;
-                }
-                sim.player2.moving = msg.moving;
-            }
-            if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1) {
-                sim.player2.attackSeq = msg.attackSeq;
-                if (Number.isFinite(msg.attackStart)) {
-                    sim.player2.attackStart = msg.attackStart;
-                }
-            }
-            if (Number.isFinite(Number(msg.p1Hp))) {
-                sim.player2.hp = Math.max(0, Number(msg.p1Hp));
-                if (Number.isFinite(Number(msg.p1MaxHp))) {
-                    sim.player2.maxHp = Math.max(1, Math.round(Number(msg.p1MaxHp)));
-                }
-            }
-        }
-
-        if (sim.player) {
-            if (Number.isFinite(Number(msg.p2Hp))) {
-                sim.player.hp = Math.max(0, Number(msg.p2Hp));
-                if (Number.isFinite(Number(msg.p2MaxHp))) {
-                    sim.player.maxHp = Math.max(1, Math.round(Number(msg.p2MaxHp)));
-                }
-                if (sim.player.hp <= 0 && !sim.runOver) {
-                    this.endGameOnDisconnect('You have died - Game Over');
-                }
-            }
-        }
-
-        // 2. Synchronize monsters
+        // 2. Synchronize monsters with velocity extrapolation + soft correction
         if (msg.enemies && Array.isArray(msg.enemies)) {
             const existingMap = new Map();
             for (let i = 0; i < sim.enemies.length; i++) {
@@ -2237,15 +2587,12 @@ export class MultiplayerManager {
 
                 let enemy = existingMap.get(uid);
                 if (enemy) {
-                    // Store target position for tick-synchronized interpolation in sim.stepEnemies
-                    enemy.targetX = x;
-                    enemy.targetY = y;
-                    if (Math.hypot(x - enemy.x, y - enemy.y) > 4.0) {
-                        enemy.prevX = x;
-                        enemy.prevY = y;
-                        enemy.x = x;
-                        enemy.y = y;
+                    if (Number.isFinite(enemy.netX) && Number.isFinite(enemy.netY)) {
+                        enemy.vx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
+                        enemy.vy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
                     }
+                    enemy.netX = x;
+                    enemy.netY = y;
                     enemy.hp = hp;
                     enemy.maxHp = maxHp;
                     enemy.yaw = yaw;
@@ -2269,8 +2616,10 @@ export class MultiplayerManager {
                                 enemy.y = y;
                                 enemy.prevX = x;
                                 enemy.prevY = y;
-                                enemy.targetX = x;
-                                enemy.targetY = y;
+                                enemy.netX = x;
+                                enemy.netY = y;
+                                enemy.vx = 0;
+                                enemy.vy = 0;
                                 enemy.hp = hp;
                                 enemy.maxHp = maxHp;
                                 enemy.yaw = yaw;
@@ -2290,10 +2639,8 @@ export class MultiplayerManager {
                 }
             }
 
-            // Cull removed enemies while allowing dead enemies to finish their 45-tick death animation locally
             sim.enemies = sim.enemies.filter(e => hostUids.has(e.uid) || (e.dead && (sim.tick - (e.deathTick || 0) < 45)));
 
-            // Rebuild spatial hash so guest weapons and radar target the synced enemies
             if (sim.rebuildEnemyHash) {
                 sim.rebuildEnemyHash();
             }
@@ -2347,26 +2694,27 @@ export class MultiplayerManager {
         }
     }
 
-    applyRemoteInput(p2, msg) {
-        if (!msg || typeof msg !== 'object') return;
+    applyRemoteInput(peer, msg) {
+        if (!peer || !peer.entity || !msg || typeof msg !== 'object') return;
+        const p2 = peer.entity;
         const moveX = Number.isFinite(msg.moveX) ? Math.max(-1, Math.min(1, msg.moveX)) : 0;
         const moveY = Number.isFinite(msg.moveY) ? Math.max(-1, Math.min(1, msg.moveY)) : 0;
-        this.remoteInput = { moveX, moveY, tick: Number.isFinite(msg.tick) ? msg.tick : 0 };
+        p2.moveX = moveX;
+        p2.moveY = moveY;
+        p2.lastPacketTime = performance.now();
 
         if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
-            const targetX = Math.max(0, Math.min(16384, msg.x));
-            const targetY = Math.max(0, Math.min(16384, msg.y));
-            const dx = targetX - p2.x;
-            const dy = targetY - p2.y;
-            const dist = Math.hypot(dx, dy);
-            const maxStep = 6.0;
-            if (dist <= maxStep) {
-                p2.targetX = targetX;
-                p2.targetY = targetY;
-            } else if (dist > 0) {
-                p2.targetX = p2.x + (dx / dist) * maxStep;
-                p2.targetY = p2.y + (dy / dist) * maxStep;
+            const nx = Math.max(0, Math.min(16384, msg.x));
+            const ny = Math.max(0, Math.min(16384, msg.y));
+            if (Number.isFinite(msg.vx) && Number.isFinite(msg.vy)) {
+                p2.vx = Math.max(-1.5, Math.min(1.5, msg.vx));
+                p2.vy = Math.max(-1.5, Math.min(1.5, msg.vy));
+            } else if (Number.isFinite(p2.netX) && Number.isFinite(p2.netY)) {
+                p2.vx = Math.max(-1.5, Math.min(1.5, nx - p2.netX));
+                p2.vy = Math.max(-1.5, Math.min(1.5, ny - p2.netY));
             }
+            p2.netX = nx;
+            p2.netY = ny;
         }
 
         if (Number.isFinite(msg.facingX) && Number.isFinite(msg.facingY)) {
@@ -2381,7 +2729,6 @@ export class MultiplayerManager {
         if (Number.isFinite(msg.yaw)) {
             p2.yaw = Math.round(msg.yaw) & 2047;
         } else if (moveX !== 0 || moveY !== 0) {
-            // Exact OSRS Qi(dx, dy) yaw formula
             p2.yaw = Math.round(Math.atan2(-moveX, -moveY) / (2 * Math.PI) * 2048) & 2047;
         }
 
@@ -2399,28 +2746,48 @@ export class MultiplayerManager {
         }
     }
 
-    stepPlayer2(sim, p2) {
+    // Dead-reckoning velocity extrapolation + soft exponential position blending at 30Hz
+    // Eliminates freeze-then-jump jitter when a player has Wi-Fi packet jitter or latency spikes
+    stepRemotePlayer(sim, peer) {
+        const p2 = peer.entity;
+        if (!p2) return;
         if (p2.flash > 0) p2.flash--;
         if (p2.invulnerable > 0) p2.invulnerable--;
 
-        // Advance previous position once per simulation tick for smooth frame interpolation
         p2.prevX = p2.x;
         p2.prevY = p2.y;
-        if (Number.isFinite(p2.targetX) && Number.isFinite(p2.targetY)) {
-            p2.x = p2.targetX;
-            p2.y = p2.targetY;
+
+        const ageMs = performance.now() - (p2.lastPacketTime || 0);
+        // Continue extrapolating along velocity vector for up to 160ms (~5 ticks) during packet jitter
+        const extrapFactor = ageMs < 160 ? 1.0 : Math.max(0, 1.0 - (ageMs - 160) / 200);
+        const predX = p2.x + (p2.vx || 0) * extrapFactor;
+        const predY = p2.y + (p2.vy || 0) * extrapFactor;
+
+        if (Number.isFinite(p2.netX) && Number.isFinite(p2.netY)) {
+            const errX = p2.netX - predX;
+            const errY = p2.netY - predY;
+            const errDist = Math.hypot(errX, errY);
+            if (errDist > 4.0) {
+                p2.x = p2.netX;
+                p2.y = p2.netY;
+                p2.prevX = p2.netX;
+                p2.prevY = p2.netY;
+            } else {
+                p2.x = predX + errX * 0.42;
+                p2.y = predY + errY * 0.42;
+            }
+        } else {
+            p2.x = predX;
+            p2.y = predY;
         }
 
-        if (this.role === 'host') {
-            const input = this.remoteInput;
-            const moveX = input.moveX || 0;
-            const moveY = input.moveY || 0;
-            if (moveX !== 0 || moveY !== 0) {
-                const len = Math.hypot(moveX, moveY);
-                p2.facingX = moveX / len;
-                p2.facingY = moveY / len;
-                p2.yaw = Math.round(Math.atan2(-moveX, -moveY) / (2 * Math.PI) * 2048) & 2047;
-            }
+        // Decay velocity slightly so if a player stops moving and a packet drops, they decelerate smoothly
+        if (!p2.moving) {
+            p2.vx = (p2.vx || 0) * 0.5;
+            p2.vy = (p2.vy || 0) * 0.5;
+        } else {
+            p2.vx = (p2.vx || 0) * 0.92;
+            p2.vy = (p2.vy || 0) * 0.92;
         }
     }
 
@@ -2488,9 +2855,9 @@ export class MultiplayerManager {
             background: #2b231a;
             border: 3px solid #5a4a35;
             outline: 2px solid #111;
-            padding: 24px 32px;
-            width: min(640px, calc(92vw / var(--ui-scale, 1)));
-            max-height: calc(90vh / var(--ui-scale, 1));
+            padding: 20px 28px;
+            width: min(680px, calc(94vw / var(--ui-scale, 1)));
+            max-height: calc(92vh / var(--ui-scale, 1));
             overflow-y: auto;
             box-sizing: border-box;
             box-shadow: 0 8px 32px rgba(0,0,0,0.9);
@@ -2510,18 +2877,17 @@ export class MultiplayerManager {
         const box = this.modalEl.firstElementChild;
         if (!box) return;
 
+        this.syncLocalToLobbyPlayers();
         const isHost = this.role === 'host' || this.role === null;
         const safeRoomId = escapeHtml(this.roomId || 'CONNECTING...');
         const safeInviteLink = escapeHtml(this.getInviteLink());
         const safeLocalName = escapeHtml(this.localName);
-        const safeRemoteName = escapeHtml(this.remoteName);
-        const safeRemoteCharGuestView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'wizard')).replace(/_/g, ' ').toUpperCase());
-        const safeRemoteCharHostView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'warrior')).replace(/_/g, ' ').toUpperCase());
 
         const hostUnlocked = this.getUnlockedCharacters();
         const unlockedSet = new Set(hostUnlocked);
         if (!unlockedSet.has(this.localCharacter)) {
             this.localCharacter = hostUnlocked[0] || 'warrior';
+            this.syncLocalToLobbyPlayers();
         }
 
         const unlockedChars = ALL_CHARACTERS.filter(c => unlockedSet.has(c.id));
@@ -2537,130 +2903,152 @@ export class MultiplayerManager {
             `<option value="${r.id}" ${currentRegion.id === r.id ? 'selected' : ''}>${escapeHtml(r.name)} (${escapeHtml(r.difficulty)})</option>`
         )).join('');
 
+        const partyCount = Math.max(1, this.lobbyPlayers.size);
+        const hpScaleLabel = partyCount <= 2 ? '2.0x' : (partyCount === 3 ? '2.7x' : '3.55x');
+        const allGuestsReady = Array.from(this.lobbyPlayers.values())
+            .filter(p => p.slot !== this.localSlot)
+            .every(p => p.ready);
+
+        // Render 4 player slots (2x2 grid)
+        const slotsHtml = [1, 2, 3, 4].map(slotNum => {
+            const p = this.lobbyPlayers.get(slotNum);
+            const isLocal = slotNum === this.localSlot;
+            const isSlotHost = p ? Boolean(p.isHost || slotNum === this.hostSlot) : (slotNum === 1 && isHost);
+            const roleBadge = isSlotHost ? 'HOST' : 'GUEST';
+            const borderColor = isLocal ? '#ff981f' : (p ? '#6b5842' : '#2d2319');
+
+            if (isLocal) {
+                return `
+                    <div style="background: #1e1812; border: 2px solid ${borderColor}; padding: 10px 12px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #ff981f; margin-bottom: 4px;">
+                            <span>PLAYER ${slotNum} (YOU)</span>
+                            <span style="color: #ffff00;">${roleBadge}</span>
+                        </div>
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
+                        <input id="coop-local-name" type="text" maxlength="14" value="${safeLocalName}"
+                            style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 4px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px; margin-bottom: 6px;" />
+                        <label style="font-size: 11px; color: #aaa; display: block; margin-bottom: 2px;">Adventurer (Host Save):</label>
+                        <select id="coop-local-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 5px; font-family: 'OSRS Small', monospace; font-size: 13px;">
+                            ${charOptionsHtml}
+                        </select>
+                    </div>
+                `;
+            }
+
+            if (p) {
+                const safePName = escapeHtml(p.name || `Player ${slotNum}`);
+                const charObj = ALL_CHARACTERS.find(c => c.id === p.character);
+                const safePChar = escapeHtml((charObj ? charObj.name : (p.character || 'warrior')).toUpperCase());
+                return `
+                    <div style="background: #1e1812; border: 2px solid ${borderColor}; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 4px;">
+                                <span>PLAYER ${slotNum}</span>
+                                <span style="color: ${isSlotHost ? '#ffff00' : '#40e0ff'};">${roleBadge}</span>
+                            </div>
+                            <div style="font-size: 16px; color: #ffff00; margin-bottom: 4px;">${safePName}</div>
+                            <div style="font-size: 12px; color: #ff981f;">
+                                Class: <strong>${safePChar}</strong>
+                            </div>
+                        </div>
+                        <div style="font-size: 11px; color: ${p.ready || isSlotHost ? '#00ff00' : '#ffff00'}; margin-top: 8px;">
+                            ${p.ready || isSlotHost ? '● Ready' : '⏳ Loading Assets...'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div style="background: #16110c; border: 2px dashed #3d3123; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 98px;">
+                    <div style="font-size: 11px; color: #665846; margin-bottom: 4px;">PLAYER ${slotNum} SLOT</div>
+                    <div style="font-size: 12px; color: #776855; font-style: italic;">Open Slot (Share Link)</div>
+                </div>
+            `;
+        }).join('');
+
         box.innerHTML = `
-            <h2 style="margin: 0 0 8px; font-size: 26px; color: #ff981f; text-shadow: 2px 2px #000;">
-                Online Co-Op Lobby
+            <h2 style="margin: 0 0 6px; font-size: 24px; color: #ff981f; text-shadow: 2px 2px #000;">
+                Online Co-Op Lobby (2-4 Players)
             </h2>
-            <div style="font-size: 14px; color: #bbb; margin-bottom: 10px;">
-                ${isHost ? 'Share the generated link below with Player 2 to join your run.' : 'Connected as Player 2 (Guest).'}
+            <div style="font-size: 13px; color: #bbb; margin-bottom: 8px;">
+                ${isHost ? 'Share the invite link with up to 3 friends (start anytime with 2 to 4 players).' : `Connected as Player ${this.localSlot} (Guest).`}
             </div>
-            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 14px; font-size: 11px;">
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; font-size: 11px;">
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #40e0ff; padding: 3px 10px; border-radius: 3px;">
+                    👥 Party: ${partyCount}/4 Players Connected
+                </span>
                 <span style="background: #231a12; border: 1px solid #6b5842; color: #ff6040; padding: 3px 10px; border-radius: 3px;">
-                    ⚔ Co-Op Difficulty: 2x Monster HP
+                    ⚔ Co-Op Scaling: ${hpScaleLabel} Monster HP
                 </span>
                 <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 10px; border-radius: 3px;">
-                    ★ Host Save Classes: ${unlockedChars.length}/${visibleTotal} Unlocked
+                    ★ Host Classes: ${unlockedChars.length}/${visibleTotal} Unlocked
                 </span>
             </div>
 
             <!-- Room Code & Link Box -->
-            <div style="background: #1a1510; border: 2px solid #3d3123; padding: 12px; margin-bottom: 14px; text-align: left;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-size: 14px; color: #888;">ROOM CODE:</span>
-                    <span style="font-size: 20px; color: #ffff00; letter-spacing: 2px;">${safeRoomId}</span>
+            <div style="background: #1a1510; border: 2px solid #3d3123; padding: 10px 12px; margin-bottom: 12px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13px; color: #888;">ROOM CODE:</span>
+                    <span style="font-size: 18px; color: #ffff00; letter-spacing: 2px;">${safeRoomId}</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <input id="coop-link-input" type="text" readonly value="${safeInviteLink}" 
-                        style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #fff; padding: 6px 10px; font-family: monospace; font-size: 13px;" />
+                        style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #fff; padding: 5px 10px; font-family: monospace; font-size: 12px;" />
                     <button id="coop-copy-btn" style="
-                        background: #4a3c2c; border: 2px solid #6b5842; color: #ff981f; padding: 6px 14px; 
-                        cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 13px; font-weight: bold;">
+                        background: #4a3c2c; border: 2px solid #6b5842; color: #ff981f; padding: 5px 14px; 
+                        cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; font-weight: bold;">
                         Copy Link
                     </button>
                 </div>
             </div>
 
             <!-- Region / Map Selection Box -->
-            <div style="background: #1e1812; border: 2px solid #5a4a35; padding: 12px 14px; margin-bottom: 16px; text-align: left;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div style="background: #1e1812; border: 2px solid #5a4a35; padding: 10px 12px; margin-bottom: 12px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <span style="font-size: 12px; color: #ff981f; letter-spacing: 0.5px;">DESTINATION REGION:</span>
-                    <span style="font-size: 11px; color: #ffff00;">${escapeHtml(currentRegion.difficulty)} (x2 Co-Op HP)</span>
+                    <span style="font-size: 11px; color: #ffff00;">${escapeHtml(currentRegion.difficulty)} (${hpScaleLabel} Co-Op HP)</span>
                 </div>
                 ${isHost ? `
-                    <select id="coop-map-select" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 6px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 6px;">
+                    <select id="coop-map-select" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px; margin-bottom: 4px;">
                         ${regionOptionsHtml}
                     </select>
                 ` : `
-                    <div style="font-size: 16px; color: #ffff00; margin-bottom: 4px;">${escapeHtml(currentRegion.name)} <span style="font-size: 11px; color: #888;">(Selected by Host)</span></div>
+                    <div style="font-size: 15px; color: #ffff00; margin-bottom: 4px;">${escapeHtml(currentRegion.name)} <span style="font-size: 11px; color: #888;">(Selected by Host)</span></div>
                 `}
                 <div style="font-size: 11px; color: #b8a890;">
                     Bosses: <strong style="color: #ff981f;">${escapeHtml(currentRegion.bosses)}</strong>
                 </div>
             </div>
 
-            <!-- Players Cards with Custom Name Fields -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; text-align: left;">
-                <!-- Player 1 Card -->
-                <div style="background: #1e1812; border: 2px solid ${isHost ? '#ff981f' : '#3d3123'}; padding: 14px;">
-                    <div style="font-size: 12px; color: #888; margin-bottom: 4px;">PLAYER 1 (HOST)</div>
-                    ${isHost ? `
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
-                        <input id="coop-p1-name" type="text" maxlength="14" value="${safeLocalName}"
-                            style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character (Host Save):</label>
-                        <select id="coop-p1-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
-                            ${charOptionsHtml}
-                        </select>
-                    ` : `
-                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
-                        <div style="font-size: 13px; color: #ff981f;">
-                            Class: <strong>${safeRemoteCharGuestView}</strong>
-                        </div>
-                    `}
-                </div>
-
-                <!-- Player 2 Card -->
-                <div style="background: #1e1812; border: 2px solid ${!isHost ? '#ff981f' : '#3d3123'}; padding: 14px;">
-                    <div style="font-size: 12px; color: #888; margin-bottom: 4px;">PLAYER 2 (GUEST)</div>
-                    ${!isHost ? `
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
-                        <input id="coop-p2-name" type="text" maxlength="14" value="${safeLocalName}"
-                            style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character (Host Save):</label>
-                        <select id="coop-p2-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
-                            ${charOptionsHtml}
-                        </select>
-                    ` : (this.peerConnected ? `
-                        <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
-                        <div style="font-size: 13px; color: #ff981f;">
-                            Class: <strong>${safeRemoteCharHostView}</strong>
-                            <div style="font-size: 11px; color: ${this.remoteReady ? '#00ff00' : '#ffff00'}; margin-top: 4px;">
-                                ${this.remoteReady ? '● Assets Ready' : '⏳ Baking Assets...'}
-                            </div>
-                        </div>
-                    ` : `
-                        <div style="font-size: 13px; color: #888; font-style: italic; margin-top: 12px;">
-                            Waiting for Player 2 to join...
-                        </div>
-                    `)}
-                </div>
+            <!-- 4-Player 2x2 Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; text-align: left;">
+                ${slotsHtml}
             </div>
 
             <!-- Action Buttons -->
-            <div style="display: flex; justify-content: space-between; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; gap: 12px;">
                 <button id="coop-close-btn" style="
-                    flex: 1; background: #3d2f21; border: 2px solid #5a4a35; color: #aaa; padding: 10px;
-                    cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 16px;">
+                    flex: 1; background: #3d2f21; border: 2px solid #5a4a35; color: #aaa; padding: 9px;
+                    cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 15px;">
                     Leave Lobby
                 </button>
                 ${isHost ? `
-                    <button id="coop-start-btn" ${!this.peerConnected ? 'disabled' : ''} style="
-                        flex: 2; background: ${this.peerConnected ? '#8a6414' : '#332719'}; 
-                        border: 2px solid ${this.peerConnected ? '#d4af37' : '#443522'}; 
-                        color: ${this.peerConnected ? '#fff' : '#665'}; padding: 10px;
-                        cursor: ${this.peerConnected ? 'pointer' : 'not-allowed'}; 
-                        font-family: 'OSRS Bold', monospace; font-size: 18px; text-shadow: 1px 1px #000;">
-                        ${this.peerConnected ? (this.remoteReady ? `Enter ${escapeHtml(currentRegion.name)} (Start Co-Op)` : 'Player 2 Loading Assets...') : 'Waiting for Player 2...'}
+                    <button id="coop-start-btn" ${partyCount < 2 ? 'disabled' : ''} style="
+                        flex: 2; background: ${partyCount >= 2 ? '#8a6414' : '#332719'}; 
+                        border: 2px solid ${partyCount >= 2 ? '#d4af37' : '#443522'}; 
+                        color: ${partyCount >= 2 ? '#fff' : '#665'}; padding: 9px;
+                        cursor: ${partyCount >= 2 ? 'pointer' : 'not-allowed'}; 
+                        font-family: 'OSRS Bold', monospace; font-size: 16px; text-shadow: 1px 1px #000;">
+                        ${partyCount >= 2 ? (allGuestsReady ? `Enter ${escapeHtml(currentRegion.name)} (${partyCount}P Co-Op)` : `Start ${partyCount}P Co-Op (Guests Loading...)`) : 'Waiting for at least 1 more player...'}
                     </button>
                 ` : `
-                    <div style="flex: 2; padding: 10px; color: #ffff00; font-size: 15px; align-self: center;">
-                        ${this.localReady ? `Assets Ready! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : 'Loading assets...'}
+                    <div style="flex: 2; padding: 9px; color: #ffff00; font-size: 14px; align-self: center;">
+                        ${this.localReady ? `Ready (${partyCount}/4)! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : 'Loading assets...'}
                     </div>
                 `}
             </div>
         `;
 
-        // Attach event listeners
         const copyBtn = box.querySelector('#coop-copy-btn');
         if (copyBtn) {
             copyBtn.onclick = () => {
@@ -2684,28 +3072,18 @@ export class MultiplayerManager {
             mapSelect.onchange = (e) => this.selectMap(e.target.value);
         }
 
-        const p1NameInput = box.querySelector('#coop-p1-name');
-        if (p1NameInput) {
-            p1NameInput.oninput = (e) => this.setPlayerName(e.target.value);
+        const localNameInput = box.querySelector('#coop-local-name');
+        if (localNameInput) {
+            localNameInput.oninput = (e) => this.setPlayerName(e.target.value);
         }
 
-        const p2NameInput = box.querySelector('#coop-p2-name');
-        if (p2NameInput) {
-            p2NameInput.oninput = (e) => this.setPlayerName(e.target.value);
-        }
-
-        const p1Select = box.querySelector('#coop-p1-char');
-        if (p1Select) {
-            p1Select.onchange = (e) => this.selectCharacter(e.target.value);
-        }
-
-        const p2Select = box.querySelector('#coop-p2-char');
-        if (p2Select) {
-            p2Select.onchange = (e) => this.selectCharacter(e.target.value);
+        const localCharSelect = box.querySelector('#coop-local-char');
+        if (localCharSelect) {
+            localCharSelect.onchange = (e) => this.selectCharacter(e.target.value);
         }
 
         const startBtn = box.querySelector('#coop-start-btn');
-        if (startBtn && this.peerConnected) {
+        if (startBtn && partyCount >= 2) {
             startBtn.onclick = () => this.startRun();
         }
 
