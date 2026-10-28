@@ -1492,6 +1492,7 @@ export class MultiplayerManager {
                 position: fixed;
                 inset: 0;
                 z-index: 9500;
+                zoom: var(--ui-scale, 1);
                 background: rgba(0, 0, 0, 0.58);
                 display: flex;
                 align-items: center;
@@ -1843,6 +1844,7 @@ export class MultiplayerManager {
                 bottom: 24px;
                 right: 24px;
                 z-index: 99;
+                zoom: var(--ui-scale, 1);
                 background: rgba(22, 17, 12, 0.94);
                 border: 2px solid #5a4a35;
                 outline: 1px solid #120e0a;
@@ -2394,6 +2396,7 @@ export class MultiplayerManager {
                 bottom: 24px;
                 left: 50%;
                 transform: translateX(-50%);
+                zoom: var(--ui-scale, 1);
                 background: rgba(30, 20, 10, 0.95);
                 border: 2px solid #5a4a35;
                 color: #ff981f;
@@ -2433,6 +2436,7 @@ export class MultiplayerManager {
         modal.style.cssText = `
             position: fixed;
             inset: 0;
+            zoom: var(--ui-scale, 1);
             background: rgba(0, 0, 0, 0.75);
             display: flex;
             align-items: center;
@@ -2447,8 +2451,10 @@ export class MultiplayerManager {
             border: 3px solid #5a4a35;
             outline: 2px solid #111;
             padding: 24px 32px;
-            width: 580px;
-            max-width: 90vw;
+            width: min(640px, calc(92vw / var(--ui-scale, 1)));
+            max-height: calc(90vh / var(--ui-scale, 1));
+            overflow-y: auto;
+            box-sizing: border-box;
             box-shadow: 0 8px 32px rgba(0,0,0,0.9);
             color: #ff981f;
             font-family: 'OSRS Bold', monospace;
