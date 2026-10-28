@@ -287,9 +287,7 @@ export class MultiplayerManager {
                 break;
 
             case 'coop_loadout':
-                if (this.role === 'host') {
-                    this.applyRemoteLoadout(msg);
-                }
+                this.applyRemoteLoadout(msg);
                 break;
 
             case 'game_over':
@@ -357,7 +355,12 @@ export class MultiplayerManager {
             monk: { 4: 544, 7: 542, 2: 1718, 3: 1389 } // monk top, bottom, amulet, staff
         };
 
-        const seqIds = [808, 819, 824, 836, 390, 426, 711];
+        const seqIds = [
+            808, 819, 824, 836,
+            386, 390, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
+            2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
+        ];
+        this.playerSeqIds = seqIds;
         const bakes = [];
 
         // Ensure Corgi is baked
@@ -686,13 +689,39 @@ export class MultiplayerManager {
             console.error('[Multiplayer] Failed adding Player 2 weapon:', err);
         }
 
+        // Hook sim.stepOrbit so Player 2's orbiting weapons orbit around Player 2
+        if (sim.stepOrbit) {
+            const origStepOrbit = sim.stepOrbit.bind(sim);
+            sim.stepOrbit = (proj, orbit) => {
+                if (orbit && orbit.owner && sim.player2) {
+                    const savedPlayer = sim.player;
+                    sim.player = sim.player2;
+                    try {
+                        origStepOrbit(proj, orbit);
+                    } finally {
+                        sim.player = savedPlayer;
+                    }
+                } else {
+                    origStepOrbit(proj, orbit);
+                }
+            };
+        }
+
         // Hook sim.stepWeapons to fire Player 2's weapons
         const origStepWeapons = sim.stepWeapons.bind(sim);
         sim.stepWeapons = () => {
+            // Preserve Player 2's orbit projectiles when Player 1 fires orbit weapons
+            const p2Orbits = sim.projectiles.filter(p => p.orbit && p.owner === 'p2');
+            sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner === 'p2'));
             origStepWeapons();
+            if (p2Orbits.length > 0) {
+                sim.projectiles.push(...p2Orbits);
+            }
 
             if (sim.player2 && sim.player2Weapons) {
                 const origPlayer = sim.player;
+                const p1Orbits = sim.projectiles.filter(p => p.orbit && p.owner !== 'p2');
+                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner !== 'p2'));
                 sim.player = sim.player2;
                 try {
                     for (const t of sim.player2Weapons) {
@@ -718,8 +747,17 @@ export class MultiplayerManager {
                             }
                         }
                     }
+                    for (const p of sim.projectiles) {
+                        if (p.orbit && !p.owner) {
+                            p.owner = 'p2';
+                            p.orbit.owner = sim.player2;
+                        }
+                    }
                 } finally {
                     sim.player = origPlayer;
+                    if (p1Orbits.length > 0) {
+                        sim.projectiles.push(...p1Orbits);
+                    }
                 }
             }
         };
@@ -798,6 +836,13 @@ export class MultiplayerManager {
                         pauseState: this.getLocalPauseState(client),
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
+                        yaw: sim.player.yaw & 2047,
+                        facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
+                        facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
+                        moving: Boolean(sim.player.moving),
+                        moveStart: sim.player.moveStart || 0,
+                        attackSeq: sim.player.attackSeq ?? -1,
+                        attackStart: sim.player.attackStart || 0,
                         p1Hp: sim.player.hp,
                         p1MaxHp: sim.player.maxHp,
                         p2Hp: sim.player2 ? sim.player2.hp : 25,
@@ -813,7 +858,7 @@ export class MultiplayerManager {
                         return;
                     }
 
-                    // Guest transmits input, local position, and pause state
+                    // Guest transmits input, local position, orientation, and pause state
                     this.send({
                         type: 'input',
                         tick: sim.tick,
@@ -821,7 +866,14 @@ export class MultiplayerManager {
                         moveX: moveX,
                         moveY: moveY,
                         x: Math.round(sim.player.x * 100) / 100,
-                        y: Math.round(sim.player.y * 100) / 100
+                        y: Math.round(sim.player.y * 100) / 100,
+                        yaw: sim.player.yaw & 2047,
+                        facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
+                        facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
+                        moving: Boolean(sim.player.moving),
+                        moveStart: sim.player.moveStart || 0,
+                        attackSeq: sim.player.attackSeq ?? -1,
+                        attackStart: sim.player.attackStart || 0
                     });
                 }
             }
@@ -911,10 +963,8 @@ export class MultiplayerManager {
             this.clientMethodsHooked = true;
         }
 
-        // Send initial loadout sync from Guest to Host
-        if (!isHost) {
-            this.sendLoadoutSync(client, true);
-        }
+        // Send initial loadout sync from both Host and Guest
+        this.sendLoadoutSync(client, true);
 
         // Hook view.submitActors to render both characters with authentic models and colors
         if (client.view && !this.inGameHooked) {
@@ -929,34 +979,47 @@ export class MultiplayerManager {
                     let model;
                     if (isCorgi) {
                         model = client.assets.get('corgi');
+                    } else if (p2.hasDynamicModel && client.assets.get('player2_dynamic')) {
+                        model = client.assets.get('player2_dynamic');
                     } else {
                         model = client.assets.get('player_' + p2.characterId) || client.assets.getPlayer();
                     }
 
                     if (model && model.anims && model.anims.length > 0) {
                         let anim;
+                        let frame = 0;
                         if (isCorgi) {
                             anim = p2.moving ? 
                                 (model.getAnim(6560) || model.anims[0]) : 
                                 (model.getAnim(6561) || model.anims[0]);
+                            frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                         } else {
-                            if (p2.attackSeq !== -1 && !p2.moving && (s.tick - p2.attackStart < 15)) {
-                                anim = model.getAnim(p2.attackSeq) || model.getAnim(808) || model.anims[0];
+                            const attackAnim = p2.attackSeq !== -1 ? model.getAnim(p2.attackSeq) : null;
+                            const isAttacking = Boolean(
+                                attackAnim &&
+                                attackAnim.seqId === p2.attackSeq &&
+                                !p2.moving &&
+                                (s.tick - p2.attackStart) >= 0 &&
+                                (s.tick - p2.attackStart) < (attackAnim.totalTicks || 15)
+                            );
+                            if (isAttacking) {
+                                anim = attackAnim;
+                                frame = anim.getFrame(Math.max(0, s.tick - p2.attackStart), false);
                             } else if (p2.moving) {
                                 anim = model.getAnim(824) || model.getAnim(819) || model.anims[0];
+                                frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                             } else {
                                 anim = model.getAnim(808) || model.anims[0];
+                                frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                             }
                         }
 
-                        const startTick = (p2.attackSeq !== -1 && !p2.moving) ? p2.attackStart : p2.moveStart;
-                        const frame = anim ? anim.getFrame(s.tick - startTick) : 0;
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isCorgi ? 0.22 : 0);
 
                         // Renders with full vibrant colors: scale 3.0 for Corgi so it is chunky, proud, and clearly visible
-                        actors.draw(model, anim, frame, px, height, py, p2.yaw, {
+                        actors.draw(model, anim, frame, px, height, py, p2.yaw & 2047, {
                             scale: isCorgi ? 3.0 : 1.0,
                             flash: (p2.flash > 0) ? 0.4 : 0,
                             tint: isCorgi ? 16777215 : (p2.tint || 16777215)
@@ -1270,13 +1333,62 @@ export class MultiplayerManager {
             level: Number(w.level) || 1,
             bonus: Number(w.bonus) || 0
         }));
+        let appearance = null;
+        if (client.getSimAppearance && sim.characterId !== 'dipper') {
+            try {
+                appearance = client.getSimAppearance(sim);
+            } catch (err) {
+                console.warn('[Multiplayer] Failed getting local appearance:', err);
+            }
+        }
         this.send({
             type: 'coop_loadout',
             weapons,
+            appearance,
             hp: Math.round(sim.player.hp),
             maxHp: Math.round(sim.player.maxHp),
             healed: Boolean(healed)
         });
+    }
+
+    async bakePlayer2Appearance(client, appearance) {
+        if (!client || !client.assets || !appearance || !Array.isArray(appearance.equipment)) return;
+        const equipKey = appearance.equipment.join(',');
+        if (this.lastP2EquipKey === equipKey && client.assets.models.has('player2_dynamic')) {
+            if (client.sim?.player2) client.sim.player2.hasDynamicModel = true;
+            return;
+        }
+        this.lastP2EquipKey = equipKey;
+        const seqIds = this.playerSeqIds || [
+            808, 819, 824, 836,
+            386, 390, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
+            2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
+        ];
+        try {
+            const bakeRes = await client.assets.bake([{
+                kind: 'player',
+                key: 'player2_dynamic',
+                appearance: {
+                    gender: appearance.gender === 1 ? 1 : 0,
+                    colors: Array.isArray(appearance.colors) ? appearance.colors.slice(0, 5).map(n => Number(n) || 0) : [0, 0, 0, 0, 0],
+                    kits: Array.isArray(appearance.kits) ? appearance.kits.slice(0, 7).map(n => Number(n) || 0) : [0, 10, 18, 26, 33, 36, 42],
+                    equipment: appearance.equipment.slice(0, 12).map(n => Number.isFinite(Number(n)) ? Math.round(Number(n)) : -1)
+                },
+                seqIds
+            }]);
+            if (bakeRes.loadedTextures?.length > 0) {
+                client.assets.renderer.updateTextureArray(bakeRes.loadedTextures);
+            }
+            const added = client.assets.actors.addBake(bakeRes);
+            for (const [k, v] of added) {
+                client.assets.models.set(k, v);
+            }
+            if (client.sim?.player2) {
+                client.sim.player2.hasDynamicModel = true;
+            }
+        } catch (err) {
+            console.warn('[Multiplayer] Failed baking dynamic Player 2 model:', err);
+        }
     }
 
     applyRemoteLoadout(msg) {
@@ -1321,6 +1433,10 @@ export class MultiplayerManager {
             if (built.length > 0) {
                 sim.player2Weapons = built;
             }
+        }
+
+        if (msg.appearance && p2.characterId !== 'dipper') {
+            this.bakePlayer2Appearance(client, msg.appearance);
         }
     }
 
@@ -1548,13 +1664,38 @@ export class MultiplayerManager {
             }
         }
 
-        // 1. Synchronize player states
+        // 1. Synchronize player states (Host -> Guest)
         if (sim.player2) {
             if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
-                sim.player2.prevX = sim.player2.x;
-                sim.player2.prevY = sim.player2.y;
-                sim.player2.x = msg.x;
-                sim.player2.y = msg.y;
+                const targetX = Math.max(0, Math.min(16384, msg.x));
+                const targetY = Math.max(0, Math.min(16384, msg.y));
+                sim.player2.targetX = targetX;
+                sim.player2.targetY = targetY;
+                if (Math.hypot(targetX - sim.player2.x, targetY - sim.player2.y) > 4.0) {
+                    sim.player2.prevX = targetX;
+                    sim.player2.prevY = targetY;
+                    sim.player2.x = targetX;
+                    sim.player2.y = targetY;
+                }
+            }
+            if (Number.isFinite(msg.yaw)) {
+                sim.player2.yaw = Math.round(msg.yaw) & 2047;
+            }
+            if (Number.isFinite(msg.facingX) && Number.isFinite(msg.facingY)) {
+                sim.player2.facingX = msg.facingX;
+                sim.player2.facingY = msg.facingY;
+            }
+            if (typeof msg.moving === 'boolean') {
+                if (msg.moving !== sim.player2.moving) {
+                    sim.player2.moveStart = Number.isFinite(msg.moveStart) ? msg.moveStart : sim.tick;
+                }
+                sim.player2.moving = msg.moving;
+            }
+            if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1) {
+                sim.player2.attackSeq = msg.attackSeq;
+                if (Number.isFinite(msg.attackStart)) {
+                    sim.player2.attackStart = msg.attackStart;
+                }
             }
             if (Number.isFinite(Number(msg.p1Hp))) {
                 sim.player2.hp = Math.max(0, Number(msg.p1Hp));
@@ -1698,21 +1839,42 @@ export class MultiplayerManager {
             const dy = targetY - p2.y;
             const dist = Math.hypot(dx, dy);
             const maxStep = 6.0;
-            p2.prevX = p2.x;
-            p2.prevY = p2.y;
             if (dist <= maxStep) {
-                p2.x = targetX;
-                p2.y = targetY;
+                p2.targetX = targetX;
+                p2.targetY = targetY;
             } else if (dist > 0) {
-                p2.x += (dx / dist) * maxStep;
-                p2.y += (dy / dist) * maxStep;
+                p2.targetX = p2.x + (dx / dist) * maxStep;
+                p2.targetY = p2.y + (dy / dist) * maxStep;
             }
         }
-        if (moveX !== 0 || moveY !== 0) {
-            p2.yaw = Math.round(Math.atan2(moveX, moveY) * (1024 / Math.PI));
-            p2.moving = true;
-        } else {
-            p2.moving = false;
+
+        if (Number.isFinite(msg.facingX) && Number.isFinite(msg.facingY)) {
+            p2.facingX = Math.max(-1, Math.min(1, msg.facingX));
+            p2.facingY = Math.max(-1, Math.min(1, msg.facingY));
+        } else if (moveX !== 0 || moveY !== 0) {
+            const len = Math.hypot(moveX, moveY);
+            p2.facingX = moveX / len;
+            p2.facingY = moveY / len;
+        }
+
+        if (Number.isFinite(msg.yaw)) {
+            p2.yaw = Math.round(msg.yaw) & 2047;
+        } else if (moveX !== 0 || moveY !== 0) {
+            // Exact OSRS Qi(dx, dy) yaw formula
+            p2.yaw = Math.round(Math.atan2(-moveX, -moveY) / (2 * Math.PI) * 2048) & 2047;
+        }
+
+        const moving = typeof msg.moving === 'boolean' ? msg.moving : (moveX !== 0 || moveY !== 0);
+        if (moving !== p2.moving) {
+            p2.moveStart = Number.isFinite(msg.moveStart) ? msg.moveStart : (window.gameClient?.sim?.tick || 0);
+        }
+        p2.moving = moving;
+
+        if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1) {
+            p2.attackSeq = msg.attackSeq;
+            if (Number.isFinite(msg.attackStart)) {
+                p2.attackStart = msg.attackStart;
+            }
         }
     }
 
@@ -1720,18 +1882,24 @@ export class MultiplayerManager {
         if (p2.flash > 0) p2.flash--;
         if (p2.invulnerable > 0) p2.invulnerable--;
 
-        const input = this.remoteInput;
-        const moveX = input.moveX || 0;
-        const moveY = input.moveY || 0;
-        const moving = moveX !== 0 || moveY !== 0;
-
-        if (moving) {
-            p2.yaw = Math.round(Math.atan2(moveX, moveY) * (1024 / Math.PI));
+        // Advance previous position once per simulation tick for smooth frame interpolation
+        p2.prevX = p2.x;
+        p2.prevY = p2.y;
+        if (Number.isFinite(p2.targetX) && Number.isFinite(p2.targetY)) {
+            p2.x = p2.targetX;
+            p2.y = p2.targetY;
         }
 
-        if (moving !== p2.moving) {
-            p2.moving = moving;
-            p2.moveStart = sim.tick;
+        if (this.role === 'host') {
+            const input = this.remoteInput;
+            const moveX = input.moveX || 0;
+            const moveY = input.moveY || 0;
+            if (moveX !== 0 || moveY !== 0) {
+                const len = Math.hypot(moveX, moveY);
+                p2.facingX = moveX / len;
+                p2.facingY = moveY / len;
+                p2.yaw = Math.round(Math.atan2(-moveX, -moveY) / (2 * Math.PI) * 2048) & 2047;
+            }
         }
     }
 
