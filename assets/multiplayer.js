@@ -3,7 +3,32 @@
 // mutual player awareness (custom lobby names, overhead HP bars, nametags, party HUD, off-screen arrows),
 // and automatic run termination on partner disconnect.
 
-const ALLOWED_CHARACTERS = new Set(['dipper', 'warrior', 'wizard', 'ranger', 'barbarian', 'monk', 'dwarf']);
+const ALL_CHARACTERS = [
+    { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: true },
+    { id: 'warrior', name: 'Warrior', weapon: 'scimitar', defaultUnlocked: true },
+    { id: 'wizard', name: 'Wizard', weapon: 'fire_spells', defaultUnlocked: true },
+    { id: 'ranger', name: 'Ranger', weapon: 'throwing_knives', defaultUnlocked: true },
+    { id: 'monk', name: 'Monk', weapon: 'saradomin_strike', defaultUnlocked: false },
+    { id: 'barbarian', name: 'Barbarian', weapon: 'two_handed_sword', defaultUnlocked: false },
+    { id: 'ancient_mage', name: 'Ancient Mage', weapon: 'ice_burst', defaultUnlocked: false },
+    { id: 'hunter', name: 'Hunter', weapon: 'shortbow', defaultUnlocked: false },
+    { id: 'rogue', name: 'Rogue', weapon: 'throwing_knives', defaultUnlocked: false },
+    { id: 'dragon_slayer', name: 'Dragon Slayer', weapon: 'scimitar', defaultUnlocked: false },
+    { id: 'nomad', name: 'Nomad', weapon: 'throwing_axes', defaultUnlocked: false },
+    { id: 'menaphite', name: 'Menaphite', weapon: 'smoke_burst', defaultUnlocked: false },
+    { id: 'seer', name: 'Seer', weapon: 'elemental_runes', defaultUnlocked: false },
+    { id: 'berserker', name: 'Berserker', weapon: 'two_handed_sword', defaultUnlocked: false },
+    { id: 'obby_mauler', name: 'Obby Mauler', weapon: 'tzhaar_ket_om', defaultUnlocked: false },
+    { id: 'pirate', name: 'Pirate', weapon: 'throwing_knives', defaultUnlocked: false },
+    { id: 'pyromancer', name: 'Pyromancer', weapon: 'fire_spells', defaultUnlocked: false },
+    { id: 'shayzien_soldier', name: 'Shayzien Soldier', weapon: 'scimitar', defaultUnlocked: false },
+    { id: 'gladiator', name: 'Gladiator', weapon: 'dual_macuahuitl', defaultUnlocked: false },
+    { id: 'javelineer', name: 'Javelineer', weapon: 'eclipse_atlatl', defaultUnlocked: false }
+];
+
+const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
+const CHAR_WEAPONS = Object.fromEntries(ALL_CHARACTERS.map(c => [c.id, c.weapon]));
+const DEFAULT_UNLOCKED_CHARACTERS = ALL_CHARACTERS.filter(c => c.defaultUnlocked).map(c => c.id);
 
 function sanitizeName(name) {
     if (!name || typeof name !== 'string') return '';
@@ -45,14 +70,19 @@ export class MultiplayerManager {
         this.remoteName = 'Player 2';
         this.localReady = false;
         this.remoteReady = false;
+        this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
         
         this.gameStarted = false;
-        this.gameConfig = null; // { seed, mapId, p1Char, p2Char, p1Name, p2Name }
+        this.gameConfig = null; // { seed, mapId, p1Char, p2Char, p1Name, p2Name, unlockedItems }
         
         this.remoteInput = { moveX: 0, moveY: 0, tick: 0 };
         this.remoteState = null;
         this.localPauseState = null;
         this.remotePauseState = null;
+        this.remoteLoadout = { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
+        this.pendingIcons = new Set();
+        this.lastPartyHudKey = '';
+        this.nextChestExcludeId = undefined;
         
         this.modalEl = null;
         this.inGameHooked = false;
@@ -212,10 +242,23 @@ export class MultiplayerManager {
             case 'lobby_update':
                 const incomingLobbyName = sanitizeName(msg.name);
                 if (this.role === 'host') {
-                    this.remoteCharacter = sanitizeCharacter(msg.character, this.remoteCharacter);
+                    const hostUnlocked = this.getUnlockedCharacters();
+                    const candidate = sanitizeCharacter(msg.character, this.remoteCharacter);
+                    this.remoteCharacter = hostUnlocked.includes(candidate) ? candidate : (hostUnlocked[0] || 'warrior');
                     if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
                 } else {
+                    if (Array.isArray(msg.unlockedCharacters)) {
+                        const validUnlocked = msg.unlockedCharacters
+                            .filter(c => typeof c === 'string' && ALLOWED_CHARACTERS.has(c.trim().toLowerCase()))
+                            .map(c => c.trim().toLowerCase());
+                        const merged = new Set([...DEFAULT_UNLOCKED_CHARACTERS, ...validUnlocked]);
+                        this.hostUnlockedCharacters = ALL_CHARACTERS.filter(c => merged.has(c.id)).map(c => c.id);
+                        if (!this.hostUnlockedCharacters.includes(this.localCharacter)) {
+                            this.localCharacter = this.hostUnlockedCharacters[0] || 'warrior';
+                            this.sendLobbyUpdate();
+                        }
+                    }
                     this.remoteCharacter = sanitizeCharacter(msg.hostCharacter || msg.character, this.remoteCharacter);
                     if (incomingLobbyName) this.remoteName = incomingLobbyName;
                     this.remoteReady = !!msg.ready;
@@ -233,7 +276,10 @@ export class MultiplayerManager {
                     p1Char: sanitizeCharacter(msg.config.p1Char, 'dipper'),
                     p2Char: sanitizeCharacter(msg.config.p2Char, 'warrior'),
                     p1Name: sanitizeName(msg.config.p1Name) || 'Player 1',
-                    p2Name: sanitizeName(msg.config.p2Name) || 'Player 2'
+                    p2Name: sanitizeName(msg.config.p2Name) || 'Player 2',
+                    unlockedItems: Array.isArray(msg.config.unlockedItems)
+                        ? msg.config.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
+                        : []
                 };
                 if (this.gameConfig.p1Name) this.remoteName = this.gameConfig.p1Name;
                 console.log('[Multiplayer] Game Starting with config:', this.gameConfig);
@@ -296,13 +342,57 @@ export class MultiplayerManager {
         }
     }
 
+    readLocalSaveUnlockedCharacters() {
+        const unlocked = new Set(DEFAULT_UNLOCKED_CHARACTERS);
+        try {
+            const clientSave = window.gameClient?.save;
+            if (clientSave && Array.isArray(clientSave.unlockedCharacters)) {
+                for (const cid of clientSave.unlockedCharacters) {
+                    if (typeof cid === 'string' && ALLOWED_CHARACTERS.has(cid)) {
+                        unlocked.add(cid);
+                    }
+                }
+            } else {
+                const raw = window.localStorage.getItem('rune-survivors-save');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && Array.isArray(parsed.unlockedCharacters)) {
+                        for (const cid of parsed.unlockedCharacters) {
+                            if (typeof cid === 'string' && ALLOWED_CHARACTERS.has(cid)) {
+                                unlocked.add(cid);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('[Multiplayer] Failed reading local save unlocked characters:', err);
+        }
+        return ALL_CHARACTERS.filter(c => unlocked.has(c.id)).map(c => c.id);
+    }
+
+    getUnlockedCharacters() {
+        if (this.role === 'host' || this.role === null) {
+            this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
+        }
+        if (!Array.isArray(this.hostUnlockedCharacters) || this.hostUnlockedCharacters.length === 0) {
+            this.hostUnlockedCharacters = [...DEFAULT_UNLOCKED_CHARACTERS];
+        }
+        return this.hostUnlockedCharacters;
+    }
+
     sendLobbyUpdate() {
+        const unlocked = this.getUnlockedCharacters();
+        if (!unlocked.includes(this.localCharacter)) {
+            this.localCharacter = unlocked[0] || 'warrior';
+        }
         if (this.role === 'host') {
             this.send({
                 type: 'lobby_update',
                 hostCharacter: this.localCharacter,
                 name: this.localName,
-                ready: this.localReady
+                ready: this.localReady,
+                unlockedCharacters: unlocked
             });
         } else {
             this.send({
@@ -320,13 +410,20 @@ export class MultiplayerManager {
     }
 
     selectCharacter(charId) {
-        this.localCharacter = charId;
+        const unlocked = this.getUnlockedCharacters();
+        const cleanChar = sanitizeCharacter(charId, unlocked[0] || 'warrior');
+        if (!unlocked.includes(cleanChar)) {
+            this.showToast('That class is locked on the Host save!');
+            this.updateLobbyUI();
+            return;
+        }
+        this.localCharacter = cleanChar;
         const client = window.gameClient;
         if (client) {
-            client.store?.set({ characterId: charId });
-            if (charId !== 'dipper' && client.getAppearance) {
+            client.store?.set({ characterId: cleanChar });
+            if (cleanChar !== 'dipper' && client.getAppearance) {
                 try {
-                    client.assets?.setPlayerAppearance(client.getAppearance(charId));
+                    client.assets?.setPlayerAppearance(client.getAppearance(cleanChar));
                 } catch(e) {}
             }
         }
@@ -342,17 +439,20 @@ export class MultiplayerManager {
         return window.gameClient;
     }
 
-    async ensureAllCharacterModels(client) {
+    async ensureAllCharacterModels(client, extraChars = []) {
         if (!client || !client.assets || !client.assets.models) return;
-        const required = ['player_warrior', 'player_wizard', 'player_ranger', 'player_barbarian', 'player_monk'];
+        const charIds = new Set(['warrior', 'wizard', 'ranger', 'barbarian', 'monk', ...extraChars]);
+        const required = Array.from(charIds)
+            .filter(id => id && id !== 'dipper' && ALLOWED_CHARACTERS.has(id))
+            .map(id => `player_${id}`);
         const missing = required.filter(k => !client.assets.models.has(k));
 
         const CLASS_EQUIPMENT = {
-            warrior: { 0: 1153, 4: 1115, 7: 1067, 3: 1321 }, // helm, torso, legs, scimitar
-            wizard: { 0: 1017, 4: 577, 7: 1011, 1: 1021, 3: 1389 }, // hat, robe top, bottom, cape, staff
-            ranger: { 0: 1169, 4: 1129, 7: 1095, 9: 1063, 3: 864 }, // coif, body, chaps, vambs, knives
-            barbarian: { 0: 3751, 4: 3767, 7: 23246, 10: 3791, 3: 1307 }, // helm, shirt, skirt, boots, 2h
-            monk: { 4: 544, 7: 542, 2: 1718, 3: 1389 } // monk top, bottom, amulet, staff
+            warrior: { 0: 1153, 4: 1115, 7: 1067, 3: 1321 },
+            wizard: { 0: 1017, 4: 577, 7: 1011, 1: 1021, 3: 1389 },
+            ranger: { 0: 1169, 4: 1129, 7: 1095, 9: 1063, 3: 864 },
+            barbarian: { 0: 3751, 4: 3767, 7: 23246, 10: 3791, 3: 1307 },
+            monk: { 4: 544, 7: 542, 2: 1718, 3: 1389 }
         };
 
         const seqIds = [
@@ -375,21 +475,30 @@ export class MultiplayerManager {
 
         for (const cid of missing) {
             const pureId = cid.replace('player_', '');
-            const eqMap = CLASS_EQUIPMENT[pureId];
-            if (!eqMap) continue;
-            const equip = new Array(12).fill(-1);
-            for (const [slot, objId] of Object.entries(eqMap)) {
-                equip[parseInt(slot)] = objId;
+            let appearance = null;
+            if (client.getAppearance) {
+                try {
+                    appearance = client.getAppearance(pureId);
+                } catch (err) {}
             }
-            bakes.push({
-                kind: 'player',
-                key: cid,
-                appearance: {
+            if (!appearance) {
+                const eqMap = CLASS_EQUIPMENT[pureId];
+                if (!eqMap) continue;
+                const equip = new Array(12).fill(-1);
+                for (const [slot, objId] of Object.entries(eqMap)) {
+                    equip[parseInt(slot)] = objId;
+                }
+                appearance = {
                     gender: 0,
                     colors: [0, 0, 0, 0, 0],
                     kits: [0, 10, 18, 26, 33, 36, 42],
                     equipment: equip
-                },
+                };
+            }
+            bakes.push({
+                kind: 'player',
+                key: cid,
+                appearance,
                 seqIds
             });
         }
@@ -431,14 +540,19 @@ export class MultiplayerManager {
             return;
         }
 
+        const hostUnlocked = this.getUnlockedCharacters();
+        const p1Char = hostUnlocked.includes(this.localCharacter) ? this.localCharacter : (hostUnlocked[0] || 'warrior');
+        const p2Char = hostUnlocked.includes(this.remoteCharacter) ? this.remoteCharacter : (hostUnlocked[0] || 'warrior');
+
         const seed = Math.floor(Math.random() * 2147483647);
         const config = {
             seed,
             mapId: 'lumbridge',
-            p1Char: this.localCharacter,
+            p1Char,
             p1Name: this.localName,
-            p2Char: this.remoteCharacter || 'warrior',
-            p2Name: this.remoteName
+            p2Char,
+            p2Name: this.remoteName,
+            unlockedItems: Array.isArray(client.save?.unlockedItems) ? [...client.save.unlockedItems] : []
         };
 
         this.send({
@@ -471,12 +585,12 @@ export class MultiplayerManager {
             await new Promise(r => setTimeout(r, 250));
         }
 
-        // Bake all player character models so Player 1 and Player 2 always render correctly
-        await this.ensureAllCharacterModels(client);
-
         const isHost = this.role === 'host';
         const localChar = isHost ? config.p1Char : config.p2Char;
         const remoteChar = isHost ? config.p2Char : config.p1Char;
+
+        // Bake all player character models (including any unlocked class selected by P1 or P2)
+        await this.ensureAllCharacterModels(client, [localChar, remoteChar]);
 
         console.log(`[Multiplayer] Launching run: Local=${localChar} (${this.localName}), Remote=${remoteChar} (${this.remoteName})`);
 
@@ -509,7 +623,45 @@ export class MultiplayerManager {
 
         this.localPauseState = null;
         this.remotePauseState = null;
+        this.lastPartyHudKey = '';
+        this.remoteLoadout = { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
         this.removePauseOverlay();
+
+        // Sync Host's unlocked items into Guest's simulation so casket & level-up pools match Host's save state
+        if (!isHost && Array.isArray(this.gameConfig?.unlockedItems) && sim.unlockedItems instanceof Set) {
+            for (const itemId of this.gameConfig.unlockedItems) {
+                sim.unlockedItems.add(itemId);
+            }
+        }
+
+        // Ensure every casket roll and reroll uses fresh independent random entropy per player
+        const mixRandomSeed = () => {
+            const arr = new Uint32Array(1);
+            if (window.crypto && window.crypto.getRandomValues) {
+                window.crypto.getRandomValues(arr);
+            } else {
+                arr[0] = (Math.random() * 0x100000000) >>> 0;
+            }
+            if (sim.rng) {
+                sim.rng.state = ((sim.rng.state ^ arr[0]) >>> 0) || 1;
+            }
+        };
+
+        if (sim.openCasket) {
+            const origOpenCasket = sim.openCasket.bind(sim);
+            sim.openCasket = (tier) => {
+                mixRandomSeed();
+                return origOpenCasket(tier);
+            };
+        }
+
+        if (sim.rollChestItem) {
+            const origRollChestItem = sim.rollChestItem.bind(sim);
+            sim.rollChestItem = (tier, excludeId) => {
+                mixRandomSeed();
+                return origRollChestItem(tier, excludeId || this.nextChestExcludeId);
+            };
+        }
 
         // Prevent window blur from auto-pausing during Co-Op; explicit Esc/P, Level-Up, and Chests pause both players
         if (client.input) {
@@ -577,6 +729,25 @@ export class MultiplayerManager {
         }
 
         if (isHost) {
+            // Co-Op Difficulty Scaling: 2x Monster HP on all spawned enemies (normal, elite, and bosses)
+            const origSpawnEnemy = sim.spawnEnemy.bind(sim);
+            sim.spawnEnemy = (def, kind, pos, bossHp) => {
+                const enemy = origSpawnEnemy(def, kind, pos, bossHp);
+                if (enemy && !enemy._coopHpScaled) {
+                    enemy._coopHpScaled = true;
+                    enemy.hp = Math.max(1, Math.round(enemy.hp * 2));
+                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * 2));
+                }
+                return enemy;
+            };
+            for (const enemy of sim.enemies) {
+                if (enemy && !enemy._coopHpScaled) {
+                    enemy._coopHpScaled = true;
+                    enemy.hp = Math.max(1, Math.round(enemy.hp * 2));
+                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * 2));
+                }
+            }
+
             // Spawn initial courtyard goblins on Host so both players immediately engage monsters
             if (client.getEnemyDef && sim.enemies.length < 5) {
                 try {
@@ -590,25 +761,37 @@ export class MultiplayerManager {
                     for (const pos of courtyardSpawns) {
                         sim.spawnEnemy(client.getEnemyDef('goblin'), 'normal', pos);
                     }
-                    console.log('[Multiplayer] Courtyard enemies spawned authoritatively on Host.');
+                    console.log('[Multiplayer] Courtyard enemies spawned authoritatively on Host (2x Co-Op HP).');
                 } catch (e) {
                     console.warn('[Multiplayer] Courtyard spawn note:', e);
                 }
             }
 
-            // Hook sim.collect on Host so XP (bones/big_bones) and coins collected by Player 1 are shared with Player 2
+            // Hook sim.collect on Host so XP, coins, AND caskets collected by Player 1 are shared with Player 2
             const origCollect = sim.collect.bind(sim);
             sim._origCollect = origCollect;
             sim.collect = (pickup) => {
                 const kind = pickup.kind;
                 const val = pickup.value;
+                const tier = pickup.tier || 'medium';
                 origCollect(pickup);
-                if (this.peerConnected && (kind === 'bones' || kind === 'big_bones' || kind === 'coins') && val > 0) {
-                    this.send({
-                        type: 'coop_pickup',
-                        kind: kind,
-                        value: val
-                    });
+                if (this.peerConnected) {
+                    if ((kind === 'bones' || kind === 'big_bones' || kind === 'coins') && val > 0) {
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: kind,
+                            value: val
+                        });
+                    } else if (kind === 'casket') {
+                        const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
+                        this.remotePauseState = 'chest';
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: 'casket',
+                            tier: tier,
+                            excludeItemId: latestChest?.itemId || undefined
+                        });
+                    }
                 }
                 if (sim.state !== 'playing') {
                     this.syncLocalPauseState(client, true);
@@ -670,16 +853,7 @@ export class MultiplayerManager {
             console.log('[Multiplayer] Guest initialized in client sync mode.');
         }
 
-        // Arm Player 2 with their class weapon
-        const CHAR_WEAPONS = {
-            dipper: 'throwing_knives',
-            warrior: 'scimitar',
-            wizard: 'fire_spells',
-            ranger: 'throwing_knives',
-            barbarian: 'two_handed_sword',
-            monk: 'saradomin_strike',
-            ancient_mage: 'ice_burst'
-        };
+        // Arm Player 2 with their class starting weapon
         const p2WeaponId = CHAR_WEAPONS[remoteChar] || 'throwing_knives';
         try {
             sim.addWeapon(p2WeaponId);
@@ -778,6 +952,11 @@ export class MultiplayerManager {
             // Detect immediate transition into chest or levelUp on this exact tick
             if (sim.state !== 'playing') {
                 this.syncLocalPauseState(client, true);
+            }
+
+            // Re-broadcast initial loadout shortly after run start so partner HUD is always populated
+            if (sim.tick === 10) {
+                this.sendLoadoutSync(client, false);
             }
 
             // Network transmission
@@ -1328,11 +1507,56 @@ export class MultiplayerManager {
     sendLoadoutSync(client, healed = false) {
         if (!client || !client.sim || !this.peerConnected) return;
         const sim = client.sim;
-        const weapons = (sim.weapons || []).map(w => ({
-            id: w.def?.id || 'scimitar',
-            level: Number(w.level) || 1,
-            bonus: Number(w.bonus) || 0
+        try {
+            client.updateHud?.(true);
+        } catch (err) {}
+        const hud = client.store?.getSnapshot()?.hud;
+
+        const weapons = (sim.weapons || []).map((w, idx) => {
+            const hw = hud?.weapons?.[idx];
+            const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
+            return {
+                id: w.def?.id || 'scimitar',
+                name: String(hw?.name || lvlDef?.name || w.def?.name || 'Weapon').slice(0, 48),
+                level: Number(w.level) || 1,
+                maxLevel: Number(w.def?.levels?.length) || 8,
+                bonus: Number(w.bonus) || 0,
+                iconObjId: Number(hw?.iconObjId ?? lvlDef?.objId ?? w.def?.iconObjId) || 0,
+                rarityColor: String(hw?.rarityColor || '#ff981f').slice(0, 16)
+            };
+        });
+
+        const passives = (hud?.passives || []).slice(0, 8).map(p => ({
+            id: String(p.id || '').slice(0, 40),
+            name: String(p.name || p.id || 'Passive').slice(0, 48),
+            level: Number(p.level) || 1,
+            maxLevel: Number(p.maxLevel) || 5,
+            iconObjId: Number(p.iconObjId) || 0,
+            rarityColor: String(p.rarityColor || '#ff981f').slice(0, 16)
         }));
+
+        const gear = (hud?.gear || []).slice(0, 8).map(g => ({
+            slot: String(g.slot || '').slice(0, 24),
+            slotName: String(g.name || 'Slot').slice(0, 24),
+            item: g.item ? {
+                id: String(g.item.id || '').slice(0, 40),
+                name: String(g.item.name || 'Gear').slice(0, 48),
+                iconObjId: Number(g.item.objId) || 0,
+                rarityColor: String(g.item.rarity?.color || '#ff981f').slice(0, 16)
+            } : null
+        }));
+
+        const inventory = (hud?.inventory || [null, null, null, null]).slice(0, 4).map(slot => {
+            if (!slot || !slot.item) return null;
+            return {
+                id: String(slot.item.id || '').slice(0, 40),
+                name: String(slot.item.name || 'Item').slice(0, 48),
+                iconObjId: Number(slot.item.objId) || 0,
+                count: Math.max(1, Math.round(Number(slot.count) || 1)),
+                rarityColor: String(slot.item.rarity?.color || '#ff981f').slice(0, 16)
+            };
+        });
+
         let appearance = null;
         if (client.getSimAppearance && sim.characterId !== 'dipper') {
             try {
@@ -1344,6 +1568,9 @@ export class MultiplayerManager {
         this.send({
             type: 'coop_loadout',
             weapons,
+            passives,
+            gear,
+            inventory,
             appearance,
             hp: Math.round(sim.player.hp),
             maxHp: Math.round(sim.player.maxHp),
@@ -1433,7 +1660,56 @@ export class MultiplayerManager {
             if (built.length > 0) {
                 sim.player2Weapons = built;
             }
+
+            this.remoteLoadout.weapons = msg.weapons.slice(0, 6).map(w => ({
+                id: String(w.id || ''),
+                name: String(w.name || w.id || 'Weapon'),
+                level: Math.max(1, Math.round(Number(w.level) || 1)),
+                maxLevel: Math.max(1, Math.round(Number(w.maxLevel) || 8)),
+                iconObjId: Number(w.iconObjId) || 0,
+                rarityColor: String(w.rarityColor || '#ff981f')
+            }));
         }
+
+        if (Array.isArray(msg.passives)) {
+            this.remoteLoadout.passives = msg.passives.slice(0, 6).map(p => ({
+                id: String(p?.id || ''),
+                name: String(p?.name || p?.id || 'Passive'),
+                level: Math.max(1, Math.round(Number(p?.level) || 1)),
+                maxLevel: Math.max(1, Math.round(Number(p?.maxLevel) || 5)),
+                iconObjId: Number(p?.iconObjId) || 0,
+                rarityColor: String(p?.rarityColor || '#ff981f')
+            }));
+        }
+
+        if (Array.isArray(msg.gear)) {
+            this.remoteLoadout.gear = msg.gear.slice(0, 8).map(g => ({
+                slot: String(g?.slot || ''),
+                slotName: String(g?.slotName || 'Slot'),
+                item: g?.item ? {
+                    id: String(g.item.id || ''),
+                    name: String(g.item.name || 'Gear'),
+                    iconObjId: Number(g.item.iconObjId) || 0,
+                    rarityColor: String(g.item.rarityColor || '#ff981f')
+                } : null
+            }));
+        }
+
+        if (Array.isArray(msg.inventory)) {
+            this.remoteLoadout.inventory = [0, 1, 2, 3].map(idx => {
+                const slot = msg.inventory[idx];
+                if (!slot || typeof slot !== 'object') return null;
+                return {
+                    id: String(slot.id || ''),
+                    name: String(slot.name || 'Item'),
+                    iconObjId: Number(slot.iconObjId) || 0,
+                    count: Math.max(1, Math.round(Number(slot.count) || 1)),
+                    rarityColor: String(slot.rarityColor || '#ff981f')
+                };
+            });
+        }
+
+        this.lastPartyHudKey = '';
 
         if (msg.appearance && p2.characterId !== 'dipper') {
             this.bakePlayer2Appearance(client, msg.appearance);
@@ -1471,7 +1747,12 @@ export class MultiplayerManager {
         } else if (kind === 'casket') {
             const allowedTiers = new Set(['beginner', 'easy', 'medium', 'hard', 'elite', 'master']);
             const tier = (typeof msg.tier === 'string' && allowedTiers.has(msg.tier)) ? msg.tier : 'medium';
-            sim.openCasket(tier);
+            this.nextChestExcludeId = (typeof msg.excludeItemId === 'string' && msg.excludeItemId) ? msg.excludeItemId : undefined;
+            try {
+                sim.openCasket(tier);
+            } finally {
+                this.nextChestExcludeId = undefined;
+            }
             client.accumulator = 0;
             client.handleEvents(sim, sim.takeEvents());
             client.syncOverlay();
@@ -1484,7 +1765,24 @@ export class MultiplayerManager {
         }
     }
 
-    // Party HUD widget located at bottom-left so it NEVER occludes top-left item/equipment infographs
+    getIconUrl(objId) {
+        const id = Math.round(Number(objId) || 0);
+        if (id <= 0) return null;
+        const cache = window.gameClient?.iconCache;
+        if (!cache) return null;
+        const existing = cache.get(id, 1);
+        if (existing) return existing;
+        if (!this.pendingIcons.has(id)) {
+            this.pendingIcons.add(id);
+            cache.request(id, 1, () => {
+                this.pendingIcons.delete(id);
+                this.lastPartyHudKey = '';
+            });
+        }
+        return null;
+    }
+
+    // Partner HUD widget on the bottom-right showing Partner HP, Weapons, Passives, Worn Gear, and Inventory (1-4)
     updatePartyHUD(p2) {
         let hud = document.getElementById('coop-party-hud');
         if (!hud) {
@@ -1495,25 +1793,26 @@ export class MultiplayerManager {
                 bottom: 24px;
                 right: 24px;
                 z-index: 99;
-                background: rgba(22, 17, 12, 0.92);
+                background: rgba(22, 17, 12, 0.94);
                 border: 2px solid #5a4a35;
-                padding: 6px 12px;
+                outline: 1px solid #120e0a;
+                padding: 8px 12px;
                 border-radius: 4px;
                 color: #ff981f;
                 font-family: 'OSRS Bold', monospace;
-                box-shadow: 0 4px 14px rgba(0,0,0,0.7);
+                box-shadow: 0 4px 16px rgba(0,0,0,0.8);
                 display: flex;
                 flex-direction: column;
-                gap: 2px;
-                pointer-events: none;
-                min-width: 155px;
+                gap: 4px;
+                pointer-events: auto;
+                min-width: 192px;
                 user-select: none;
             `;
             document.body.appendChild(hud);
         }
 
         const isCorgi = p2.characterId === 'dipper';
-        const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase());
+        const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase());
         const displayName = escapeHtml(this.remoteName.toUpperCase());
         const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
         const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
@@ -1521,19 +1820,137 @@ export class MultiplayerManager {
         const hpPercent = Math.round(hpRatio * 100);
         const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
 
+        const loadout = this.remoteLoadout || { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
+
+        // Fallback to sim.player2Weapons if remoteLoadout.weapons has not arrived yet
+        const simP2Weapons = (window.gameClient?.sim?.player2Weapons || []).map(w => {
+            const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
+            return {
+                id: w.def?.id || 'weapon',
+                name: lvlDef?.name || w.def?.name || 'Weapon',
+                level: w.level || 1,
+                maxLevel: w.def?.levels?.length || 8,
+                iconObjId: lvlDef?.objId ?? w.def?.iconObjId ?? 0,
+                rarityColor: '#ff981f'
+            };
+        });
+        const weapons = loadout.weapons.length > 0 ? loadout.weapons : simP2Weapons;
+        const passives = loadout.passives || [];
+        const gear = loadout.gear || [];
+        const inventory = loadout.inventory || [null, null, null, null];
+
+        // Resolve icon URLs and build state key so we only update innerHTML when state or icons change
+        const weaponUrls = [0, 1, 2, 3].map(i => weapons[i] ? (this.getIconUrl(weapons[i].iconObjId) || '') : '');
+        const passiveUrls = [0, 1, 2, 3].map(i => passives[i] ? (this.getIconUrl(passives[i].iconObjId) || '') : '');
+        const gearUrls = gear.map(g => g?.item ? (this.getIconUrl(g.item.iconObjId) || '') : '');
+        const invUrls = [0, 1, 2, 3].map(i => inventory[i] ? (this.getIconUrl(inventory[i].iconObjId) || '') : '');
+
+        const stateKey = JSON.stringify({
+            displayName,
+            charName,
+            hp,
+            maxHp,
+            w: weapons.map((x, i) => [x.id, x.level, Boolean(weaponUrls[i])]),
+            p: passives.map((x, i) => [x.id, x.level, Boolean(passiveUrls[i])]),
+            g: gear.map((x, i) => [x.slot, x.item?.id || '', Boolean(gearUrls[i])]),
+            inv: inventory.map((x, i) => x ? [x.id, x.count, Boolean(invUrls[i])] : null)
+        });
+
+        if (this.lastPartyHudKey === stateKey) return;
+        this.lastPartyHudKey = stateKey;
+
+        const renderMiniSlot = (entry, iconUrl, size = 28, badgeText = '', emptyLabel = '') => {
+            const border = entry ? escapeHtml(entry.rarityColor || '#8a7558') : '#3d3123';
+            const title = entry ? escapeHtml(`${entry.name}${badgeText ? ` (${badgeText})` : ''}`) : escapeHtml(emptyLabel);
+            return `
+                <div title="${title}" style="
+                    position: relative;
+                    width: ${size}px;
+                    height: ${size}px;
+                    background: #14100b;
+                    border: 1px solid ${border};
+                    border-radius: 3px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                ">
+                    ${iconUrl ? `<img src="${iconUrl}" width="${size - 4}" height="${size - 4}" style="image-rendering: pixelated; pointer-events: none;" alt="" />` : (
+                        entry ? `<span style="font-size: 9px; color: #ff981f; text-align: center; line-height: 1;">${escapeHtml(entry.name.slice(0, 3).toUpperCase())}</span>` : (
+                            emptyLabel ? `<span style="font-size: 9px; color: #554736;">${escapeHtml(emptyLabel[0])}</span>` : ''
+                        )
+                    )}
+                    ${badgeText ? `
+                        <span style="
+                            position: absolute;
+                            bottom: 0px;
+                            right: 2px;
+                            font-size: 9px;
+                            color: #ffff00;
+                            text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
+                            line-height: 1;
+                        ">${escapeHtml(badgeText)}</span>
+                    ` : ''}
+                </div>
+            `;
+        };
+
+        const weaponsRow = [0, 1, 2, 3].map(i => {
+            const w = weapons[i];
+            const lvl = w ? (w.level >= w.maxLevel ? 'max' : String(w.level)) : '';
+            return renderMiniSlot(w, weaponUrls[i], 30, lvl, 'Weapon slot');
+        }).join('');
+
+        const passivesRow = [0, 1, 2, 3].map(i => {
+            const p = passives[i];
+            const lvl = p ? (p.level >= p.maxLevel ? 'max' : String(p.level)) : '';
+            return renderMiniSlot(p, passiveUrls[i], 26, lvl, 'Passive slot');
+        }).join('');
+
+        const defaultGearSlots = [
+            { slot: 'head', slotName: 'Head', item: null },
+            { slot: 'cape', slotName: 'Cape', item: null },
+            { slot: 'amulet', slotName: 'Neck', item: null },
+            { slot: 'body', slotName: 'Body', item: null },
+            { slot: 'legs', slotName: 'Legs', item: null },
+            { slot: 'hands', slotName: 'Hands', item: null }
+        ];
+        const gearList = gear.length > 0 ? gear.slice(0, 6) : defaultGearSlots;
+        const gearRow = gearList.map((g, i) => {
+            return renderMiniSlot(g.item, gearUrls[i] || '', 26, '', g.slotName || 'Gear');
+        }).join('');
+
+        const invRow = [0, 1, 2, 3].map(i => {
+            const item = inventory[i];
+            const countBadge = item && item.count > 1 ? String(item.count) : '';
+            return renderMiniSlot(item, invUrls[i], 30, countBadge, `${i + 1}`);
+        }).join('');
+
         hud.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; margin-bottom: 1px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px;">
                 <span style="color: #ff981f; letter-spacing: 1px;">CO-OP PARTNER</span>
                 <span style="color: #00ff00; font-size: 9px;">● ONLINE</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
                 <span style="font-size: 13px; color: #ffffff; text-shadow: 1px 1px #000;">${displayName}</span>
                 <span style="font-size: 10px; color: #ff981f;">${charName}</span>
             </div>
-            <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 9px; border-radius: 2px; overflow: hidden; margin-top: 2px;">
+            <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 9px; border-radius: 2px; overflow: hidden;">
                 <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
             </div>
-            <div style="font-size: 10px; color: #bbb; text-align: right;">${hp} / ${maxHp} HP</div>
+            <div style="font-size: 10px; color: #bbb; text-align: right; margin-bottom: 2px;">${hp} / ${maxHp} HP</div>
+
+            <div style="border-top: 1px solid #3d3123; padding-top: 4px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="font-size: 9px; color: #b8a890; letter-spacing: 0.5px;">WEAPONS &amp; PASSIVES</div>
+                <div style="display: flex; gap: 3px;">${weaponsRow}</div>
+                <div style="display: flex; gap: 3px;">${passivesRow}</div>
+            </div>
+
+            <div style="border-top: 1px solid #3d3123; padding-top: 4px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="font-size: 9px; color: #b8a890; letter-spacing: 0.5px;">WORN GEAR &amp; INVENTORY</div>
+                <div style="display: flex; gap: 3px;">${gearRow}</div>
+                <div style="display: flex; gap: 3px;">${invRow}</div>
+            </div>
         `;
     }
 
@@ -1608,17 +2025,21 @@ export class MultiplayerManager {
                         value: origVal
                     });
                 } else if (pickup.kind === 'casket') {
+                    // Casket collected by Player 2 prompts BOTH Host and Guest with independent, unique item rolls
                     const tier = pickup.tier || 'medium';
+                    sim.openCasket(tier);
+                    const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
                     this.remotePauseState = 'chest';
-                    if (client) {
-                        client.accumulator = 0;
-                        this.updatePauseOverlay(client);
-                    }
                     this.send({
                         type: 'coop_pickup',
                         kind: 'casket',
-                        tier: tier
+                        tier: tier,
+                        excludeItemId: latestChest?.itemId || undefined
                     });
+                    if (client) {
+                        client.accumulator = 0;
+                        this.syncLocalPauseState(client, true);
+                    }
                 } else if (pickup.kind === 'powerUp') {
                     const savedPlayer = sim.player;
                     sim.player = p2;
@@ -1990,23 +2411,36 @@ export class MultiplayerManager {
         const safeInviteLink = escapeHtml(this.getInviteLink());
         const safeLocalName = escapeHtml(this.localName);
         const safeRemoteName = escapeHtml(this.remoteName);
-        const safeRemoteCharGuestView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'wizard')).toUpperCase());
-        const safeRemoteCharHostView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'warrior')).toUpperCase());
+        const safeRemoteCharGuestView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'wizard')).replace(/_/g, ' ').toUpperCase());
+        const safeRemoteCharHostView = escapeHtml((sanitizeCharacter(this.remoteCharacter, 'warrior')).replace(/_/g, ' ').toUpperCase());
 
-        const characters = [
-            { id: 'dipper', name: 'Dipper (Corgi)' },
-            { id: 'warrior', name: 'Warrior' },
-            { id: 'wizard', name: 'Wizard' },
-            { id: 'ranger', name: 'Ranger' },
-            { id: 'barbarian', name: 'Barbarian' },
-        ];
+        const hostUnlocked = this.getUnlockedCharacters();
+        const unlockedSet = new Set(hostUnlocked);
+        if (!unlockedSet.has(this.localCharacter)) {
+            this.localCharacter = hostUnlocked[0] || 'warrior';
+        }
+
+        const unlockedChars = ALL_CHARACTERS.filter(c => unlockedSet.has(c.id));
+        const lockedChars = ALL_CHARACTERS.filter(c => !unlockedSet.has(c.id));
+        const charOptionsHtml = [
+            ...unlockedChars.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`),
+            ...lockedChars.map(c => `<option value="${c.id}" disabled>🔒 ${escapeHtml(c.name)} (Locked on Host)</option>`)
+        ].join('');
 
         box.innerHTML = `
-            <h2 style="margin: 0 0 12px; font-size: 26px; color: #ff981f; text-shadow: 2px 2px #000;">
+            <h2 style="margin: 0 0 8px; font-size: 26px; color: #ff981f; text-shadow: 2px 2px #000;">
                 Online Co-Op Lobby
             </h2>
-            <div style="font-size: 14px; color: #bbb; margin-bottom: 20px;">
+            <div style="font-size: 14px; color: #bbb; margin-bottom: 10px;">
                 ${isHost ? 'Share the generated link below with Player 2 to join your run.' : 'Connected as Player 2 (Guest).'}
+            </div>
+            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 16px; font-size: 11px;">
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #ff6040; padding: 3px 10px; border-radius: 3px;">
+                    ⚔ Co-Op Difficulty: 2x Monster HP
+                </span>
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 10px; border-radius: 3px;">
+                    ★ Host Save Classes: ${unlockedChars.length}/${ALL_CHARACTERS.length} Unlocked
+                </span>
             </div>
 
             <!-- Room Code & Link Box -->
@@ -2035,9 +2469,9 @@ export class MultiplayerManager {
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
                         <input id="coop-p1-name" type="text" maxlength="14" value="${safeLocalName}"
                             style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character:</label>
+                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character (Host Save):</label>
                         <select id="coop-p1-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
-                            ${characters.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                            ${charOptionsHtml}
                         </select>
                     ` : `
                         <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
@@ -2054,9 +2488,9 @@ export class MultiplayerManager {
                         <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Your Name:</label>
                         <input id="coop-p2-name" type="text" maxlength="14" value="${safeLocalName}"
                             style="width: 100%; box-sizing: border-box; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 14px; margin-bottom: 8px;" />
-                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character:</label>
+                        <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 2px;">Character (Host Save):</label>
                         <select id="coop-p2-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 6px; font-family: 'OSRS Small', monospace;">
-                            ${characters.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                            ${charOptionsHtml}
                         </select>
                     ` : (this.peerConnected ? `
                         <div style="font-size: 18px; color: #ffff00; margin-bottom: 4px;">${safeRemoteName}</div>
