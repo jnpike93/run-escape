@@ -912,6 +912,8 @@ export class MultiplayerManager {
         this.lastPartyHudKey = '';
         this.lastPartyHudFastKey = '';
         this.loadoutVersion = 0;
+        this._gameOverSent = false;
+        this._victorySent = false;
         this.remotePeers.clear();
         this.removePauseOverlay();
 
@@ -1228,14 +1230,27 @@ export class MultiplayerManager {
                 }
 
                 const savedPlayer = sim.player;
+                const origGetStep = sim.flowField?.getStep ? sim.flowField.getStep.bind(sim.flowField) : null;
                 try {
                     for (const t of activeTargets) {
                         if (t.bucket.length === 0) continue;
+                        const initialLen = t.bucket.length;
                         sim.enemies = t.bucket;
                         sim.player = t.entity;
+                        if (origGetStep && sim.flowField) {
+                            sim.flowField.getStep = (t.slot === this.localSlot) ? origGetStep : () => false;
+                        }
                         origStepEnemies();
+                        if (t.bucket.length > initialLen) {
+                            for (let k = initialLen; k < t.bucket.length; k++) {
+                                allEnemies.push(t.bucket[k]);
+                            }
+                        }
                     }
                 } finally {
+                    if (origGetStep && sim.flowField) {
+                        sim.flowField.getStep = origGetStep;
+                    }
                     sim.enemies = allEnemies;
                     sim.player = savedPlayer;
                 }
@@ -1414,8 +1429,19 @@ export class MultiplayerManager {
 
             if (this.remotePeers.size > 0) {
                 if (isHost) {
+                    if (sim.state === 'victory' && !this._victorySent) {
+                        this._victorySent = true;
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: 'victory',
+                            kills: sim.kills,
+                            tick: sim.tick
+                        });
+                        return;
+                    }
+
                     let deadHeroName = null;
-                    if (sim.player.hp <= 0) {
+                    if (sim.player.hp <= 0 || sim.state === 'dead') {
                         deadHeroName = this.localName;
                     } else {
                         for (const peer of this.remotePeers.values()) {
@@ -1425,7 +1451,8 @@ export class MultiplayerManager {
                             }
                         }
                     }
-                    if (!sim.runOver && deadHeroName) {
+                    if (!this._gameOverSent && deadHeroName) {
+                        this._gameOverSent = true;
                         this.send({ type: 'game_over', reason: `${deadHeroName} has fallen in battle!` });
                         this.endGameOnDisconnect(`${deadHeroName} has fallen - Game Over`);
                         return;
@@ -1521,7 +1548,8 @@ export class MultiplayerManager {
                         pickups: pickupData
                     });
                 } else {
-                    if (!sim.runOver && sim.player.hp <= 0) {
+                    if (!this._gameOverSent && (sim.player.hp <= 0 || sim.state === 'dead')) {
+                        this._gameOverSent = true;
                         this.send({ type: 'game_over', reason: `${this.localName} has fallen in battle!` });
                         this.endGameOnDisconnect('You have died - Game Over');
                         return;
@@ -1873,8 +1901,9 @@ export class MultiplayerManager {
             this.inGameHooked = true;
         }
 
+        const activePartyCount = Math.max(2, Math.min(4, this.remotePeers.size + 1));
         const partnerNames = Array.from(this.remotePeers.values()).map(p => p.name.toUpperCase()).join(', ');
-        this.showToast(`Co-Op Active (${partySize}P)! Party: ${partnerNames}`);
+        this.showToast(`Co-Op Active (${activePartyCount}P)! Party: ${partnerNames}`);
     }
 
     hasAnyRemotePause() {
@@ -2007,7 +2036,8 @@ export class MultiplayerManager {
 
         const weapons = (sim.weapons || []).map((w, idx) => {
             const hw = hud?.weapons?.[idx];
-            const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
+            const maxLen = w.def?.levels?.length || 1;
+            const lvlDef = w.def?.levels?.[Math.min(w.level || 1, maxLen) - 1];
             return {
                 id: w.def?.id || 'scimitar',
                 name: String(hw?.name || lvlDef?.name || w.def?.name || 'Weapon').slice(0, 48),
@@ -2261,6 +2291,25 @@ export class MultiplayerManager {
             if (typeof msg.message === 'string' && msg.message) {
                 client.store?.toast(msg.message.slice(0, 80));
             }
+        } else if (kind === 'victory') {
+            if (this._victorySent) return;
+            this._victorySent = true;
+            if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
+                sim.kills = Math.round(Number(msg.kills));
+            }
+            for (const e of sim.enemies) {
+                if (e.boss && e.def?.id && !sim.bossesKilled?.includes(e.def.id)) {
+                    sim.bossesKilled?.push(e.def.id);
+                }
+            }
+            this.removePauseOverlay();
+            const hud = document.getElementById('coop-party-hud');
+            if (hud) hud.remove();
+            this.gameStarted = false;
+            sim.endRun('victory');
+            client.finishRun();
+            client.syncOverlay();
+            client.updateHud(true);
         }
     }
 
@@ -2373,7 +2422,8 @@ export class MultiplayerManager {
 
             const loadout = peer.loadout || { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] };
             const fallbackWeapons = (peer.weapons || []).map(w => {
-                const lvlDef = w.def?.levels?.[(w.level || 1) - 1];
+                const maxLen = w.def?.levels?.length || 1;
+                const lvlDef = w.def?.levels?.[Math.min(w.level || 1, maxLen) - 1];
                 return {
                     id: w.def?.id || 'weapon',
                     name: lvlDef?.name || w.def?.name || 'Weapon',
@@ -2395,13 +2445,13 @@ export class MultiplayerManager {
 
             const weaponsRow = [0, 1, 2, 3].map(i => {
                 const w = weapons[i];
-                const lvl = w ? (w.level >= w.maxLevel ? 'max' : String(w.level)) : '';
+                const lvl = w ? (w.level > w.maxLevel ? `+${w.level - w.maxLevel}` : (w.level === w.maxLevel ? 'max' : String(w.level))) : '';
                 return renderMiniSlot(w, weaponUrls[i], slotSize, lvl, 'Weapon');
             }).join('');
 
             const passivesRow = [0, 1, 2, 3].map(i => {
                 const p = passives[i];
-                const lvl = p ? (p.level >= p.maxLevel ? 'max' : String(p.level)) : '';
+                const lvl = p ? (p.level > p.maxLevel ? `+${p.level - p.maxLevel}` : (p.level === p.maxLevel ? 'max' : String(p.level))) : '';
                 return renderMiniSlot(p, passiveUrls[i], smallSlotSize, lvl, 'Passive');
             }).join('');
 
@@ -2701,8 +2751,18 @@ export class MultiplayerManager {
                 let enemy = existingMap.get(uid);
                 if (enemy) {
                     if (Number.isFinite(enemy.netX) && Number.isFinite(enemy.netY)) {
-                        enemy.netVx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
-                        enemy.netVy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
+                        const jumpDist = Math.hypot(x - enemy.netX, y - enemy.netY);
+                        if (jumpDist > 4.0) {
+                            enemy.x = x;
+                            enemy.y = y;
+                            enemy.prevX = x;
+                            enemy.prevY = y;
+                            enemy.netVx = 0;
+                            enemy.netVy = 0;
+                        } else {
+                            enemy.netVx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
+                            enemy.netVy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
+                        }
                     }
                     enemy.netX = x;
                     enemy.netY = y;
