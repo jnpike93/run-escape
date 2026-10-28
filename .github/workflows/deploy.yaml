@@ -1,0 +1,73 @@
+name: Deploy Run Escape
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Deployment Secrets
+        run: |
+          echo "Verifying deployment configuration..."
+          ERRORS=0
+          if [ -z "${{ secrets.SERVER_HOST }}" ]; then
+            echo "::error::Missing GitHub Actions Secret: SERVER_HOST."
+            ERRORS=1
+          fi
+          if [ -z "${{ secrets.SERVER_USER }}" ]; then
+            echo "::error::Missing GitHub Actions Secret: SERVER_USER."
+            ERRORS=1
+          fi
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "::error::Missing GitHub Actions Secret: SSH_PRIVATE_KEY."
+            ERRORS=1
+          fi
+          if [ "$ERRORS" -eq 1 ]; then
+            exit 1
+          fi
+          echo "All deployment secrets configured."
+
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 2323 }}
+          script: |
+            set -e
+
+            echo "=== 1. Syncing Run Escape Repository ==="
+            if [ -d "/opt/run-escape/.git" ]; then
+              cd /opt/run-escape
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              git clone https://github.com/jnpike93/run-escape.git /opt/run-escape
+              cd /opt/run-escape
+            fi
+
+            echo "=== 2. Configuring and Reloading Nginx ==="
+            cp /opt/run-escape/nginx.conf /etc/nginx/sites-available/run-escape
+            ln -sf /etc/nginx/sites-available/run-escape /etc/nginx/sites-enabled/
+            nginx -t && systemctl reload nginx
+
+            echo "=== 3. Starting / Restarting Run Escape with PM2 ==="
+            pm2 describe run-escape > /dev/null 2>&1 && pm2 restart run-escape || pm2 start ecosystem.config.js
+            pm2 save
+
+            echo "=== 4. Checking SSL Certificate via Certbot ==="
+            if dig +short run-escape.cuteanimegirls.moe @1.1.1.1 | grep -q '167.71.157.5'; then
+              echo "DNS is pointing to 167.71.157.5. Securing with Certbot..."
+              certbot --nginx -d run-escape.cuteanimegirls.moe --non-interactive --agree-tos --email jakepike2011@gmail.com --redirect || true
+            else
+              echo "Notice: run-escape.cuteanimegirls.moe DNS does not point to 167.71.157.5 yet."
+              echo "Point an A record in DigitalOcean DNS to 167.71.157.5 to enable automatic HTTPS."
+            fi
+
+            echo "=== Deployment Succeeded! ==="

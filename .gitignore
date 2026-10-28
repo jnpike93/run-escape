@@ -1,0 +1,14 @@
+# Development & Scratch
+scratch/
+*.log
+*.png
+scratch_model_55847.dat
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS
+.DS_Store
+Thumbs.db
