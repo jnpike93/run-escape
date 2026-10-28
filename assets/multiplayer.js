@@ -128,6 +128,7 @@ export class MultiplayerManager {
         this.gameConfig = null; // { seed, mapId, partySize, players: [{slot, name, character, isHost}], unlockedItems }
 
         this.localPauseState = null;
+        this.spectateSlot = null;
         this.pendingIcons = new Set();
         this.lastPartyHudKey = '';
         this.lastPartyHudFastKey = '';
@@ -910,6 +911,7 @@ export class MultiplayerManager {
         const isHost = this.role === 'host';
 
         this.localPauseState = null;
+        this.spectateSlot = null;
         this.lastPartyHudKey = '';
         this.lastPartyHudFastKey = '';
         this.loadoutVersion = 0;
@@ -917,6 +919,46 @@ export class MultiplayerManager {
         this._victorySent = false;
         this.remotePeers.clear();
         this.removePauseOverlay();
+
+        // Hook sim.playerDied so that dying while any teammate is still alive enters Spectator Mode instead of ending the lobby
+        const localPlayerRef = sim.player;
+        if (sim.playerDied) {
+            const origPlayerDied = sim.playerDied.bind(sim);
+            sim.playerDied = () => {
+                // Case A: Host's stepEnemies swapped sim.player to a remote peer.entity when that peer took lethal damage
+                if (sim.player !== localPlayerRef) {
+                    const p = sim.player;
+                    p.hp = 0;
+                    p.spectating = true;
+                    p.activePrayer = null;
+                    p.moving = false;
+                    p.moveX = 0;
+                    p.moveY = 0;
+                    if (p.deathTick === -1) {
+                        p.deathTick = sim.tick;
+                        sim.events.push({ type: 'playerDied' });
+                    }
+                    return;
+                }
+                // Case B: Local player took lethal damage
+                if (sim.revivesLeft > 0) {
+                    origPlayerDied();
+                    return;
+                }
+                let anyPeerAlive = false;
+                for (const peer of this.remotePeers.values()) {
+                    if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                        anyPeerAlive = true;
+                        break;
+                    }
+                }
+                if (anyPeerAlive) {
+                    this.enterSpectatorMode(client, sim);
+                    return;
+                }
+                origPlayerDied();
+            };
+        }
 
         // Sync Host's unlocked items into Guest's simulation
         if (!isHost && Array.isArray(this.gameConfig?.unlockedItems) && sim.unlockedItems instanceof Set) {
@@ -1097,9 +1139,12 @@ export class MultiplayerManager {
                 sim.spawnRing = (def, count) => {
                     const w = getActiveWeights();
                     const scaledCount = Math.max(1, Math.round((count || 12) * w.ringMult));
-                    const livingTargets = [sim.player];
+                    const livingTargets = [];
+                    if (sim.player && sim.player.hp > 0 && !sim.player.spectating) {
+                        livingTargets.push(sim.player);
+                    }
                     for (const peer of this.remotePeers.values()) {
-                        if (peer.entity && peer.entity.hp > 0) {
+                        if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
                             livingTargets.push(peer.entity);
                         }
                     }
@@ -1180,7 +1225,9 @@ export class MultiplayerManager {
                     } else if (kind === 'casket') {
                         const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
                         for (const peer of this.remotePeers.values()) {
-                            peer.pauseState = 'chest';
+                            if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                                peer.pauseState = 'chest';
+                            }
                         }
                         this.send({
                             type: 'coop_pickup',
@@ -1242,7 +1289,7 @@ export class MultiplayerManager {
             // Helper: collect all living players with their dedicated BFS FlowFields
             const getLivingPlayerTargets = () => {
                 const targets = [];
-                if (sim.player && sim.player.hp > 0 && sim.player.deathTick === -1) {
+                if (sim.player && sim.player.hp > 0 && sim.player.deathTick === -1 && !sim.player.spectating) {
                     targets.push({
                         slot: this.localSlot,
                         entity: sim.player,
@@ -1251,7 +1298,7 @@ export class MultiplayerManager {
                     });
                 }
                 for (const peer of this.remotePeers.values()) {
-                    if (peer.entity && peer.entity.hp > 0 && peer.entity.deathTick === -1) {
+                    if (peer.entity && peer.entity.hp > 0 && peer.entity.deathTick === -1 && !peer.entity.spectating) {
                         if (!peer.flowField && sim.flowField && sim.flowField.constructor) {
                             peer.flowField = new sim.flowField.constructor(sim.flowField.size);
                         }
@@ -1407,6 +1454,64 @@ export class MultiplayerManager {
                     sim.player = savedPlayer;
                 }
             };
+
+            // Hook sim.stepEnemyProjectiles on Host so enemy projectiles home toward and collide with ALL living players (not a dead/spectating Host)
+            if (sim.stepEnemyProjectiles) {
+                sim.stepEnemyProjectiles = () => {
+                    const living = getLivingPlayerTargets();
+                    const savedPlayer = sim.player;
+                    try {
+                        for (const t of sim.enemyProjectiles) {
+                            if (t.dead) continue;
+                            t.prevX = t.x;
+                            t.prevY = t.y;
+                            // Select closest living player to this enemy projectile
+                            let targetEntity = living[0]?.entity || savedPlayer;
+                            let bestD = Math.hypot(targetEntity.x - t.x, targetEntity.y - t.y);
+                            for (let k = 1; k < living.length; k++) {
+                                const d = Math.hypot(living[k].entity.x - t.x, living[k].entity.y - t.y);
+                                if (d < bestD) {
+                                    bestD = d;
+                                    targetEntity = living[k].entity;
+                                }
+                            }
+                            if (t.homing) {
+                                const e = targetEntity.x - t.x;
+                                const n = targetEntity.y - t.y;
+                                const s = Math.hypot(e, n) || 1;
+                                const r = Math.hypot(t.vx, t.vy);
+                                t.vx = t.vx * (1 - t.homing) + e / s * r * t.homing;
+                                t.vy = t.vy * (1 - t.homing) + n / s * r * t.homing;
+                            }
+                            t.x += t.vx;
+                            t.y += t.vy;
+                            t.life--;
+                            if (!t.ignoresSolids && sim.grid.isSolid(Math.floor(t.x), Math.floor(t.y))) {
+                                t.dead = true;
+                                continue;
+                            }
+                            const e = targetEntity.x - t.x;
+                            const n = targetEntity.y - t.y;
+                            const s = targetEntity.radius + t.radius;
+                            if (e * e + n * n <= s * s) {
+                                sim.player = targetEntity;
+                                if (t.freezeTicks && targetEntity.invulnerable <= 0) {
+                                    targetEntity.frozen = Math.max(targetEntity.frozen || 0, t.freezeTicks);
+                                }
+                                sim.damagePlayer(t.damage);
+                                t.dead = true;
+                                continue;
+                            }
+                            if (t.life <= 0) {
+                                t.dead = true;
+                            }
+                        }
+                        sim.enemyProjectiles = sim.enemyProjectiles.filter(t => !t.dead);
+                    } finally {
+                        sim.player = savedPlayer;
+                    }
+                };
+            }
         } else {
             // Guest disables autonomous wave spawner and local pickup resolution; steps enemy/pickup velocity interpolation at 30Hz
             sim.stepDirector = () => {};
@@ -1485,26 +1590,31 @@ export class MultiplayerManager {
         // Hook sim.stepWeapons to fire all remote players' weapons
         const origStepWeapons = sim.stepWeapons.bind(sim);
         sim.stepWeapons = () => {
-            const hasRemoteOrbits = sim.projectiles.some(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
-            let remoteOrbits = null;
-            if (hasRemoteOrbits) {
-                remoteOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
-                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot));
-            }
-            this._activeAttackerSlot = this.localSlot;
-            try {
-                origStepWeapons();
-            } finally {
-                this._activeAttackerSlot = null;
-            }
-            for (const p of sim.projectiles) {
-                if (!p.ownerSlot) {
-                    p.ownerSlot = this.localSlot;
-                    if (p.orbit) p.orbit.owner = sim.player;
+            const localAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating;
+            if (!localAlive) {
+                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && (!p.ownerSlot || p.ownerSlot === this.localSlot)));
+            } else {
+                const hasRemoteOrbits = sim.projectiles.some(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
+                let remoteOrbits = null;
+                if (hasRemoteOrbits) {
+                    remoteOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
+                    sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot));
                 }
-            }
-            if (remoteOrbits && remoteOrbits.length > 0) {
-                sim.projectiles.push(...remoteOrbits);
+                this._activeAttackerSlot = this.localSlot;
+                try {
+                    origStepWeapons();
+                } finally {
+                    this._activeAttackerSlot = null;
+                }
+                for (const p of sim.projectiles) {
+                    if (!p.ownerSlot) {
+                        p.ownerSlot = this.localSlot;
+                        if (p.orbit) p.orbit.owner = sim.player;
+                    }
+                }
+                if (remoteOrbits && remoteOrbits.length > 0) {
+                    sim.projectiles.push(...remoteOrbits);
+                }
             }
 
             if (this.remotePeers.size > 0) {
@@ -1512,7 +1622,10 @@ export class MultiplayerManager {
                 for (const peer of this.remotePeers.values()) {
                     const rEntity = peer.entity;
                     const rWeapons = peer.weapons;
-                    if (!rEntity || rEntity.hp <= 0 || !rWeapons || rWeapons.length === 0) continue;
+                    if (!rEntity || rEntity.hp <= 0 || rEntity.spectating || !rWeapons || rWeapons.length === 0) {
+                        sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot === peer.slot));
+                        continue;
+                    }
 
                     const hasOtherOrbits = sim.projectiles.some(p => p.orbit && p.ownerSlot !== peer.slot);
                     let otherOrbits = null;
@@ -1606,21 +1719,33 @@ export class MultiplayerManager {
                         return;
                     }
 
-                    let deadHeroName = null;
-                    if (sim.player.hp <= 0 || sim.state === 'dead') {
-                        deadHeroName = this.localName;
-                    } else {
-                        for (const peer of this.remotePeers.values()) {
-                            if (peer.entity && peer.entity.hp <= 0) {
-                                deadHeroName = peer.name;
-                                break;
+                    const hostAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
+                    let anyPeerAlive = false;
+                    for (const peer of this.remotePeers.values()) {
+                        if (peer.entity) {
+                            if (peer.entity.hp > 0 && !peer.entity.spectating) {
+                                anyPeerAlive = true;
+                            } else if (!peer._deathAnnounced) {
+                                peer._deathAnnounced = true;
+                                peer.entity.spectating = true;
+                                peer.entity.activePrayer = null;
+                                peer.pauseState = null;
+                                if (peer.entity.deathTick === -1) {
+                                    peer.entity.deathTick = sim.tick;
+                                }
+                                this.showToast(`${peer.name} has fallen! Spectating surviving party...`);
                             }
                         }
                     }
-                    if (!this._gameOverSent && deadHeroName) {
+
+                    if (!hostAlive && anyPeerAlive && !sim.player.spectating) {
+                        this.enterSpectatorMode(client, sim);
+                    }
+
+                    if (!this._gameOverSent && !hostAlive && !anyPeerAlive) {
                         this._gameOverSent = true;
-                        this.send({ type: 'game_over', reason: `${deadHeroName} has fallen in battle!` });
-                        this.endGameOnDisconnect(`${deadHeroName} has fallen - Game Over`);
+                        this.send({ type: 'game_over', reason: 'All party members have fallen in battle!' });
+                        this.endGameOnDisconnect('All party members have fallen - Game Over');
                         return;
                     }
 
@@ -1716,32 +1841,49 @@ export class MultiplayerManager {
                         pickups: pickupData
                     });
                 } else {
-                    if (!this._gameOverSent && (sim.player.hp <= 0 || sim.state === 'dead')) {
-                        this._gameOverSent = true;
-                        this.send({ type: 'game_over', reason: `${this.localName} has fallen in battle!` });
-                        this.endGameOnDisconnect('You have died - Game Over');
-                        return;
+                    const localAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
+                    let anyPeerAlive = false;
+                    for (const peer of this.remotePeers.values()) {
+                        if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                            anyPeerAlive = true;
+                            break;
+                        }
                     }
 
+                    if (!localAlive) {
+                        if (anyPeerAlive) {
+                            if (!sim.player.spectating) {
+                                this.enterSpectatorMode(client, sim);
+                            }
+                        } else if (!this._gameOverSent) {
+                            this._gameOverSent = true;
+                            this.send({ type: 'game_over', reason: 'All party members have fallen in battle!' });
+                            this.endGameOnDisconnect('All party members have fallen - Game Over');
+                            return;
+                        }
+                    }
+
+                    const isSpectating = Boolean(sim.player.spectating || sim.player.hp <= 0);
                     this.send({
                         type: 'input',
                         slot: this.localSlot,
                         tick: sim.tick,
-                        pauseState: this.getLocalPauseState(client),
-                        moveX: moveX,
-                        moveY: moveY,
+                        dead: isSpectating,
+                        pauseState: isSpectating ? null : this.getLocalPauseState(client),
+                        moveX: isSpectating ? 0 : moveX,
+                        moveY: isSpectating ? 0 : moveY,
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
-                        vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
-                        vy: Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
+                        vx: isSpectating ? 0 : Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
+                        vy: isSpectating ? 0 : Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
                         yaw: sim.player.yaw & 2047,
                         facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
                         facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
-                        moving: Boolean(sim.player.moving),
+                        moving: isSpectating ? false : Boolean(sim.player.moving),
                         moveStart: sim.player.moveStart || 0,
-                        attackSeq: sim.player.attackSeq ?? -1,
+                        attackSeq: isSpectating ? -1 : (sim.player.attackSeq ?? -1),
                         attackStart: sim.player.attackStart || 0,
-                        activePrayer: sim.player.activePrayer || window._osrsPrayer || null
+                        activePrayer: isSpectating ? null : (sim.player.activePrayer || window._osrsPrayer || null)
                     });
                 }
             }
@@ -1844,6 +1986,10 @@ export class MultiplayerManager {
                 for (const peer of this.remotePeers.values()) {
                     const p2 = peer.entity;
                     if (!p2) continue;
+                    const isDeadPeer = p2.hp <= 0 || p2.spectating;
+                    if (isDeadPeer && p2.deathTick >= 0 && (s.tick - p2.deathTick) >= 35) {
+                        continue;
+                    }
                     const isCorgi = p2.characterId === 'dipper';
                     const dynKey = `player_dynamic_${peer.slot}`;
                     let model;
@@ -1858,7 +2004,10 @@ export class MultiplayerManager {
                     if (model && model.anims && model.anims.length > 0) {
                         let anim;
                         let frame = 0;
-                        if (isCorgi) {
+                        if (isDeadPeer) {
+                            anim = model.getAnim(836) || model.anims[0];
+                            frame = anim ? anim.getFrame(Math.max(0, s.tick - (p2.deathTick >= 0 ? p2.deathTick : s.tick)), false) : 0;
+                        } else if (isCorgi) {
                             anim = p2.moving ?
                                 (model.getAnim(6560) || model.anims[0]) :
                                 (model.getAnim(6561) || model.anims[0]);
@@ -1897,7 +2046,7 @@ export class MultiplayerManager {
                 }
             };
 
-            // Hook client.view.drawOverlay for overhead HP bars, custom nametags, off-screen pointers, and party HUD
+            // Hook client.view.drawOverlay for overhead HP bars, custom nametags, off-screen pointers, spectator banner, and party HUD
             const origDrawOverlay = client.view.drawOverlay.bind(client.view);
             const peerScreen = { x: 0, y: 0, visible: false };
             const p1Screen = { x: 0, y: 0, visible: false };
@@ -1913,9 +2062,11 @@ export class MultiplayerManager {
                     const w = overlayRenderer.width;
                     const h = overlayRenderer.height;
                     const scale = Math.max(h / 900, 0.75);
+                    const isLocalSpectating = Boolean(s.player && (s.player.spectating || s.player.hp <= 0));
+                    const spectatedPeer = isLocalSpectating ? this.getSpectatedPeer() : null;
 
-                    // 1. Draw Local Player Name Tag
-                    if (s.player && s.player.deathTick === -1) {
+                    // 1. Draw Local Player Name Tag (only while alive)
+                    if (s.player && s.player.deathTick === -1 && !isLocalSpectating) {
                         const p1 = s.player;
                         const px1 = p1.prevX + (p1.x - p1.prevX) * alpha;
                         const py1 = p1.prevY + (p1.y - p1.prevY) * alpha;
@@ -1940,10 +2091,11 @@ export class MultiplayerManager {
                         }
                     }
 
-                    // 2. Draw all Remote Teammates
+                    // 2. Draw all Living Remote Teammates
+                    const refEntity = (isLocalSpectating && spectatedPeer?.entity) ? spectatedPeer.entity : s.player;
                     for (const peer of this.remotePeers.values()) {
                         const p2 = peer.entity;
-                        if (!p2) continue;
+                        if (!p2 || p2.hp <= 0 || p2.spectating) continue;
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const isCorgi = p2.characterId === 'dipper';
@@ -1990,12 +2142,11 @@ export class MultiplayerManager {
                             if (p2.activePrayer) {
                                 drawOverheadPrayerEmblem(ctx, peerScreen.x, barY - Math.round(28 * scale), scale, p2.activePrayer);
                             }
-                        } else {
+                        } else if (refEntity) {
                             const centerX = w / 2;
                             const centerY = h / 2;
-                            const p1 = s.player;
-                            const p1x = p1.prevX + (p1.x - p1.prevX) * alpha;
-                            const p1y = p1.prevY + (p1.y - p1.prevY) * alpha;
+                            const p1x = refEntity.prevX + (refEntity.x - refEntity.prevX) * alpha;
+                            const p1y = refEntity.prevY + (refEntity.y - refEntity.prevY) * alpha;
                             const worldDx = px - p1x;
                             const worldDy = py - p1y;
                             const worldDist = Math.hypot(worldDx, worldDy) || 1;
@@ -2050,15 +2201,55 @@ export class MultiplayerManager {
                         }
                     }
 
+                    // 3. Draw Spectator Mode Banner when local player has died and is spectating a teammate
+                    if (isLocalSpectating && spectatedPeer && spectatedPeer.entity) {
+                        const sp = spectatedPeer.entity;
+                        const spName = (spectatedPeer.name || `Player ${spectatedPeer.slot}`).toUpperCase();
+                        const spHp = Math.max(0, Math.round(sp.hp || 0));
+                        const spMaxHp = Math.max(1, Math.round(sp.maxHp || 25));
+                        const bannerW = Math.round(390 * scale);
+                        const bannerH = Math.round(54 * scale);
+                        const bannerX = Math.round((w - bannerW) / 2);
+                        const bannerY = Math.round(74 * scale);
+
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(20, 15, 10, 0.92)';
+                        ctx.fillRect(bannerX, bannerY, bannerW, bannerH);
+                        ctx.strokeStyle = '#5a4a35';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(bannerX, bannerY, bannerW, bannerH);
+
+                        ctx.textAlign = 'center';
+                        ctx.font = `bold ${Math.round(15 * scale)}px "OSRS Bold", monospace, sans-serif`;
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillText(`YOU HAVE FALLEN - SPECTATING P${spectatedPeer.slot}: ${spName}`, w / 2, bannerY + Math.round(22 * scale));
+
+                        ctx.font = `${Math.round(12 * scale)}px "OSRS Small", monospace, sans-serif`;
+                        ctx.fillStyle = '#ff981f';
+                        ctx.fillText(`Teammate HP: ${spHp}/${spMaxHp}   •   [TAB] or Click Party Card to Switch`, w / 2, bannerY + Math.round(42 * scale));
+                        ctx.restore();
+                    }
+
                     // Update persistent Party HUD widget on bottom-right
                     this.updatePartyHUD();
                 }
             };
 
-            // Lock CameraRig directly to local player (px, py, pz) to eliminate remote-latency camera shake!
+            // Lock CameraRig directly to local player (or spectated teammate when dead)
             if (client.cameraRig) {
                 const origApply = client.cameraRig.apply.bind(client.cameraRig);
                 client.cameraRig.apply = (camera, px, py, pz) => {
+                    if (this.gameStarted && client.sim && client.sim.player && (client.sim.player.spectating || client.sim.player.hp <= 0)) {
+                        const targetPeer = this.getSpectatedPeer();
+                        if (targetPeer && targetPeer.entity) {
+                            const te = targetPeer.entity;
+                            const tx = te.x;
+                            const tz = te.y;
+                            const ty = client.view ? client.view.ground(client.sim, tx, tz) : py;
+                            origApply(camera, tx, ty, tz);
+                            return;
+                        }
+                    }
                     origApply(camera, px, py, pz);
                 };
             }
@@ -2066,10 +2257,12 @@ export class MultiplayerManager {
             const origQuitRun = client.quitRun?.bind(client);
             if (origQuitRun) {
                 client.quitRun = () => {
+                    window._hideOsrsPrayerBar?.();
                     if (this.gameStarted) {
                         this.send({ type: 'peer_leaving' });
                         this.gameStarted = false;
                         this.localPauseState = null;
+                        this.spectateSlot = null;
                         this.remotePeers.clear();
                         this.removePauseOverlay();
                         const hud = document.getElementById('coop-party-hud');
@@ -2087,6 +2280,63 @@ export class MultiplayerManager {
         this.showToast(`Co-Op Active (${activePartyCount}P)! Party: ${partnerNames}`);
     }
 
+    getSpectatedPeer() {
+        const livingPeers = Array.from(this.remotePeers.values())
+            .filter(p => p.entity && p.entity.hp > 0 && !p.entity.spectating)
+            .sort((a, b) => a.slot - b.slot);
+        if (livingPeers.length === 0) return null;
+        if (this.spectateSlot !== null) {
+            const match = livingPeers.find(p => p.slot === this.spectateSlot);
+            if (match) return match;
+        }
+        this.spectateSlot = livingPeers[0].slot;
+        return livingPeers[0];
+    }
+
+    cycleSpectateTarget(dir = 1) {
+        const livingPeers = Array.from(this.remotePeers.values())
+            .filter(p => p.entity && p.entity.hp > 0 && !p.entity.spectating)
+            .sort((a, b) => a.slot - b.slot);
+        if (livingPeers.length === 0) return null;
+        const currentIdx = livingPeers.findIndex(p => p.slot === this.spectateSlot);
+        const nextIdx = currentIdx === -1 ? 0 : (currentIdx + dir + livingPeers.length) % livingPeers.length;
+        this.spectateSlot = livingPeers[nextIdx].slot;
+        this.lastPartyHudFastKey = '';
+        return livingPeers[nextIdx];
+    }
+
+    enterSpectatorMode(client, sim) {
+        if (!sim || !sim.player) return;
+        const p = sim.player;
+        const wasAlreadySpectating = Boolean(p.spectating);
+        p.hp = 0;
+        p.spectating = true;
+        p.activePrayer = null;
+        p.moving = false;
+        p.moveX = 0;
+        p.moveY = 0;
+        if (p.deathTick === -1) {
+            p.deathTick = sim.tick;
+        }
+        window._hideOsrsPrayerBar?.();
+        sim.runOver = false;
+        if (sim.state === 'dead' || sim.state === 'levelUp' || sim.state === 'chest') {
+            sim.state = 'playing';
+        }
+        const target = this.getSpectatedPeer();
+        if (!wasAlreadySpectating) {
+            client?.sounds?.playerDied?.();
+            const targetName = target ? target.name : 'teammate';
+            this.showToast(`You have fallen! Spectating ${targetName} ([TAB] to switch)`);
+        }
+        if (client) {
+            client.syncOverlay?.();
+            client.updateHud?.(true);
+            this.syncLocalPauseState(client, true);
+        }
+        this.lastPartyHudFastKey = '';
+    }
+
     hasAnyRemotePause() {
         for (const peer of this.remotePeers.values()) {
             if (peer.pauseState !== null) return true;
@@ -2096,9 +2346,10 @@ export class MultiplayerManager {
 
     getLocalPauseState(client) {
         if (!client || !client.sim || client.sim.runOver) return null;
+        if (client.paused) return 'paused';
+        if (client.sim.player?.spectating || client.sim.player?.hp <= 0) return null;
         if (client.sim.state === 'chest') return 'chest';
         if (client.sim.state === 'levelUp') return 'levelUp';
-        if (client.paused) return 'paused';
         return null;
     }
 
@@ -2455,6 +2706,7 @@ export class MultiplayerManager {
             client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'food', value: val }]);
             client.updateHud(true);
         } else if (kind === 'casket') {
+            if (sim.player?.spectating || sim.player?.hp <= 0) return;
             const allowedTiers = new Set(['beginner', 'easy', 'medium', 'hard', 'elite', 'master']);
             const tier = (typeof msg.tier === 'string' && allowedTiers.has(msg.tier)) ? msg.tier : 'medium';
             this.nextChestExcludeId = (typeof msg.excludeItemId === 'string' && msg.excludeItemId) ? msg.excludeItemId : undefined;
@@ -2475,6 +2727,7 @@ export class MultiplayerManager {
         } else if (kind === 'victory') {
             if (this._victorySent) return;
             this._victorySent = true;
+            window._hideOsrsPrayerBar?.();
             if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
                 sim.kills = Math.round(Number(msg.kills));
             }
@@ -2487,6 +2740,7 @@ export class MultiplayerManager {
             const hud = document.getElementById('coop-party-hud');
             if (hud) hud.remove();
             this.gameStarted = false;
+            this.spectateSlot = null;
             sim.endRun('victory');
             client.finishRun();
             client.syncOverlay();
@@ -2540,11 +2794,14 @@ export class MultiplayerManager {
             document.body.appendChild(hud);
         }
 
-        const fastKeyParts = [`v:${this.loadoutVersion || 0}`];
+        const client = window.gameClient;
+        const isLocalSpectating = Boolean(client?.sim?.player && (client.sim.player.spectating || client.sim.player.hp <= 0));
+        const activeSpectatePeer = isLocalSpectating ? this.getSpectatedPeer() : null;
+        const fastKeyParts = [`v:${this.loadoutVersion || 0}`, `sp:${isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1}`];
         for (const peer of peersList) {
             const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
             const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
-            fastKeyParts.push(`${peer.slot}:${peer.name}:${peer.characterId}:${hp}:${maxHp}`);
+            fastKeyParts.push(`${peer.slot}:${peer.name}:${peer.characterId}:${hp}:${maxHp}:${peer.entity?.spectating ? 1 : 0}`);
         }
         const fastKey = fastKeyParts.join('|');
         if (this.lastPartyHudFastKey === fastKey) return;
@@ -2655,10 +2912,16 @@ export class MultiplayerManager {
                 return renderMiniSlot(item, invUrls[i], smallSlotSize, countBadge, `${i + 1}`);
             }).join('');
 
+            const isDeadPeer = hp <= 0 || Boolean(p2.spectating);
+            const isSpectated = Boolean(isLocalSpectating && !isDeadPeer && activeSpectatePeer?.slot === peer.slot);
+            const cardBorder = isSpectated ? '#ffff00' : (isDeadPeer ? '#6e2222' : '#5a4a35');
+            const statusText = isDeadPeer ? 'DEAD' : `${hp} / ${maxHp} HP`;
+            const statusColor = isDeadPeer ? '#ff4444' : '#bbb';
+
             return `
-                <div style="
+                <div data-peer-slot="${peer.slot}" style="
                     background: rgba(22, 17, 12, 0.94);
-                    border: 2px solid #5a4a35;
+                    border: 2px solid ${cardBorder};
                     outline: 1px solid #120e0a;
                     padding: ${isCompact ? '6px 10px' : '8px 12px'};
                     border-radius: 4px;
@@ -2669,15 +2932,17 @@ export class MultiplayerManager {
                     flex-direction: column;
                     gap: 3px;
                     min-width: ${isCompact ? '176px' : '192px'};
+                    opacity: ${isDeadPeer ? '0.68' : '1'};
+                    cursor: ${isLocalSpectating && !isDeadPeer ? 'pointer' : 'default'};
                 ">
                     <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 6px;">
-                        <span style="font-size: 12px; color: #ffffff; text-shadow: 1px 1px #000;">P${peer.slot}: ${displayName}</span>
+                        <span style="font-size: 12px; color: ${isSpectated ? '#ffff00' : '#ffffff'}; text-shadow: 1px 1px #000;">P${peer.slot}: ${displayName}${isSpectated ? ' [SPECTATING]' : ''}</span>
                         <span style="font-size: 9px; color: #ff981f;">${charName}</span>
                     </div>
                     <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 8px; border-radius: 2px; overflow: hidden;">
                         <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
                     </div>
-                    <div style="font-size: 9px; color: #bbb; text-align: right;">${hp} / ${maxHp} HP</div>
+                    <div style="font-size: 9px; color: ${statusColor}; text-align: right;">${statusText}</div>
                     <div style="border-top: 1px solid #3d3123; padding-top: 3px; display: flex; flex-direction: column; gap: 2px;">
                         <div style="display: flex; gap: 2px;">${weaponsRow}</div>
                         <div style="display: flex; gap: 2px;">${passivesRow}</div>
@@ -2689,14 +2954,27 @@ export class MultiplayerManager {
         }).join('');
 
         hud.innerHTML = cardsHtml;
+        hud.querySelectorAll('[data-peer-slot]').forEach(card => {
+            card.addEventListener('click', () => {
+                const slot = Number(card.getAttribute('data-peer-slot'));
+                const peer = this.remotePeers.get(slot);
+                if (peer && peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                    this.spectateSlot = slot;
+                    this.lastPartyHudFastKey = '';
+                    this.updatePartyHUD();
+                }
+            });
+        });
     }
 
     endGameOnDisconnect(reason) {
         if (!this.gameStarted) return;
         this.gameStarted = false;
         this.localPauseState = null;
+        this.spectateSlot = null;
         this.remotePeers.clear();
         this.removePauseOverlay();
+        window._hideOsrsPrayerBar?.();
         this.showToast(reason);
 
         const hud = document.getElementById('coop-party-hud');
@@ -2767,10 +3045,15 @@ export class MultiplayerManager {
                     });
                 } else if (pickup.kind === 'casket') {
                     const tier = pickup.tier || 'medium';
-                    sim.openCasket(tier);
-                    const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
+                    let latestChest = null;
+                    if (!sim.player.spectating && sim.player.hp > 0) {
+                        sim.openCasket(tier);
+                        latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
+                    }
                     for (const rp of this.remotePeers.values()) {
-                        rp.pauseState = 'chest';
+                        if (rp.entity && rp.entity.hp > 0 && !rp.entity.spectating) {
+                            rp.pauseState = 'chest';
+                        }
                     }
                     this.send({
                         type: 'coop_pickup',
@@ -2838,26 +3121,45 @@ export class MultiplayerManager {
         if (Array.isArray(msg.players)) {
             const allowedStates = new Set(['levelUp', 'chest', 'paused']);
             let pauseChanged = false;
+            let localPlayerSnapshot = null;
 
             for (const pState of msg.players) {
                 if (!pState || typeof pState !== 'object') continue;
                 const slot = sanitizeSlot(pState.slot, 0);
                 if (slot === this.localSlot) {
-                    if (sim.player && Number.isFinite(Number(pState.hp))) {
-                        sim.player.hp = Math.max(0, Number(pState.hp));
-                        if (Number.isFinite(Number(pState.maxHp))) {
-                            sim.player.maxHp = Math.max(1, Math.round(Number(pState.maxHp)));
-                        }
-                        if (sim.player.hp <= 0 && !sim.runOver) {
-                            this.endGameOnDisconnect('You have died - Game Over');
-                        }
-                    }
+                    localPlayerSnapshot = pState;
                     continue;
                 }
 
                 const peer = this.remotePeers.get(slot);
                 if (!peer || !peer.entity) continue;
                 const re = peer.entity;
+
+                if (Number.isFinite(Number(pState.hp))) {
+                    re.hp = Math.max(0, Number(pState.hp));
+                    if (Number.isFinite(Number(pState.maxHp))) {
+                        re.maxHp = Math.max(1, Math.round(Number(pState.maxHp)));
+                    }
+                }
+                if (re.hp <= 0) {
+                    re.spectating = true;
+                    re.activePrayer = null;
+                    re.moving = false;
+                    re.vx = 0;
+                    re.vy = 0;
+                    if (re.deathTick === -1) {
+                        re.deathTick = sim.tick;
+                    }
+                    if (peer.pauseState !== null) {
+                        peer.pauseState = null;
+                        pauseChanged = true;
+                    }
+                    if (!peer._deathAnnounced) {
+                        peer._deathAnnounced = true;
+                        this.showToast(`${peer.name} has fallen!`);
+                    }
+                    continue;
+                }
 
                 if (pState.pauseState !== undefined) {
                     const nextRemote = (typeof pState.pauseState === 'string' && allowedStates.has(pState.pauseState)) ? pState.pauseState : null;
@@ -2900,13 +3202,30 @@ export class MultiplayerManager {
                         re.attackStart = pState.attackStart;
                     }
                 }
-                if (Number.isFinite(Number(pState.hp))) {
-                    re.hp = Math.max(0, Number(pState.hp));
-                    if (Number.isFinite(Number(pState.maxHp))) {
-                        re.maxHp = Math.max(1, Math.round(Number(pState.maxHp)));
+                re.activePrayer = (pState.activePrayer === 'magic' || pState.activePrayer === 'ranged' || pState.activePrayer === 'melee') ? pState.activePrayer : null;
+            }
+
+            if (localPlayerSnapshot && sim.player && Number.isFinite(Number(localPlayerSnapshot.hp))) {
+                sim.player.hp = Math.max(0, Number(localPlayerSnapshot.hp));
+                if (Number.isFinite(Number(localPlayerSnapshot.maxHp))) {
+                    sim.player.maxHp = Math.max(1, Math.round(Number(localPlayerSnapshot.maxHp)));
+                }
+                if (sim.player.hp <= 0 && !sim.runOver) {
+                    let anyPeerAlive = false;
+                    for (const peer of this.remotePeers.values()) {
+                        if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                            anyPeerAlive = true;
+                            break;
+                        }
+                    }
+                    if (anyPeerAlive) {
+                        if (!sim.player.spectating) {
+                            this.enterSpectatorMode(client, sim);
+                        }
+                    } else {
+                        this.endGameOnDisconnect('All party members have fallen - Game Over');
                     }
                 }
-                re.activePrayer = (pState.activePrayer === 'magic' || pState.activePrayer === 'ranged' || pState.activePrayer === 'melee') ? pState.activePrayer : null;
             }
 
             if (pauseChanged) {
@@ -3064,6 +3383,22 @@ export class MultiplayerManager {
     applyRemoteInput(peer, msg) {
         if (!peer || !peer.entity || !msg || typeof msg !== 'object') return;
         const p2 = peer.entity;
+        if (msg.dead === true) {
+            p2.hp = 0;
+            p2.spectating = true;
+            if (p2.deathTick === -1) {
+                p2.deathTick = window.gameClient?.sim?.tick || 0;
+            }
+        }
+        if (p2.hp <= 0 || p2.spectating) {
+            p2.moveX = 0;
+            p2.moveY = 0;
+            p2.vx = 0;
+            p2.vy = 0;
+            p2.moving = false;
+            p2.activePrayer = null;
+            return;
+        }
         const moveX = Number.isFinite(msg.moveX) ? Math.max(-1, Math.min(1, msg.moveX)) : 0;
         const moveY = Number.isFinite(msg.moveY) ? Math.max(-1, Math.min(1, msg.moveY)) : 0;
         p2.moveX = moveX;
@@ -3640,11 +3975,51 @@ function updateOsrsPrayerBarUI() {
     });
 }
 
+let _cheatKeyBuffer = '';
+window.l33th4x0r = function() {
+    const client = window.gameClient || window._client;
+    if (client && typeof client.redeemCode === 'function') {
+        const res = client.redeemCode('l33th4x0r');
+        if (multiplayer) {
+            multiplayer.hostUnlockedCharacters = multiplayer.readLocalSaveUnlockedCharacters();
+            multiplayer.updateLobbyUI?.();
+        }
+        return res;
+    }
+    return false;
+};
+
 window.addEventListener('keydown', (ev) => {
     if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'SELECT')) return;
     const client = window.gameClient || window._client;
+
+    // Secret cheat command "l33th4x0r" typed anywhere
+    if (typeof ev.key === 'string' && ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        _cheatKeyBuffer = (_cheatKeyBuffer + ev.key.toLowerCase()).slice(-9);
+        if (_cheatKeyBuffer === 'l33th4x0r') {
+            _cheatKeyBuffer = '';
+            window.l33th4x0r();
+            return;
+        }
+    }
+
     const sim = client?.sim;
     if (!sim || sim.state !== 'playing') return;
+
+    // Spectator camera target switching via [TAB] or [ / ]
+    if (multiplayer?.gameStarted && (sim.player?.spectating || sim.player?.hp <= 0)) {
+        if (ev.code === 'Tab' || ev.code === 'BracketRight') {
+            ev.preventDefault();
+            const next = multiplayer.cycleSpectateTarget(1);
+            if (next) multiplayer.showToast(`Spectating P${next.slot}: ${next.name}`);
+        } else if (ev.code === 'BracketLeft') {
+            ev.preventDefault();
+            const prev = multiplayer.cycleSpectateTarget(-1);
+            if (prev) multiplayer.showToast(`Spectating P${prev.slot}: ${prev.name}`);
+        }
+        return;
+    }
+
     const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && e.def?.id === 'tztok_jad');
     if (!isFightCavesOrJad) return;
     if (ev.code === 'KeyQ') {
@@ -3661,6 +4036,10 @@ window.addEventListener('keydown', (ev) => {
 
 window._hideOsrsPrayerBar = function() {
     window._osrsPrayer = null;
+    const client = window.gameClient || window._client;
+    if (client?.sim?.player) {
+        client.sim.player.activePrayer = null;
+    }
     const bar = document.getElementById('osrs-prayer-bar');
     if (bar && bar.style.display !== 'none') {
         bar.style.display = 'none';
@@ -3668,16 +4047,20 @@ window._hideOsrsPrayerBar = function() {
 };
 
 window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playerScreenPos) {
-    if (!sim) {
+    const client = window.gameClient || window._client;
+    const snap = client?.store?.getSnapshot?.();
+    const activeOverlay = snap?.overlay;
+    const playerDeadOrSpectating = !sim || !sim.player || sim.player.hp <= 0 || sim.player.spectating || sim.player.deathTick !== -1 || sim.state === 'dead' || sim.state === 'victory' || sim.runOver || (snap?.screen && snap.screen !== 'run') || (activeOverlay && activeOverlay !== 'none');
+    if (playerDeadOrSpectating) {
         window._hideOsrsPrayerBar();
         return;
     }
     const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && e.def?.id === 'tztok_jad');
-    const bar = ensureOsrsPrayerBarUI();
-    if (!isFightCavesOrJad || sim.runOver) {
-        if (bar.style.display !== 'none') bar.style.display = 'none';
+    if (!isFightCavesOrJad) {
+        window._hideOsrsPrayerBar();
         return;
     }
+    const bar = ensureOsrsPrayerBarUI();
     if (bar.style.display !== 'flex') {
         bar.style.display = 'flex';
         updateOsrsPrayerBarUI();
@@ -3694,7 +4077,6 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
     }
 
     // 2. If TzTok-Jad (NPC 3127) is winding up an attack, draw a clear attack-style telegraph banner above Jad
-    const client = window.gameClient || window._client;
     for (const enemy of sim.enemies) {
         if (enemy.dead || enemy.def?.id !== 'tztok_jad') continue;
         const windup = enemy.bossState?.windup;
