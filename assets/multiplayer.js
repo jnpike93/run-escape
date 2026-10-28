@@ -884,18 +884,26 @@ export class MultiplayerManager {
         // Hook sim.stepWeapons to fire Player 2's weapons
         const origStepWeapons = sim.stepWeapons.bind(sim);
         sim.stepWeapons = () => {
-            // Preserve Player 2's orbit projectiles when Player 1 fires orbit weapons
-            const p2Orbits = sim.projectiles.filter(p => p.orbit && p.owner === 'p2');
-            sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner === 'p2'));
+            // Fast-path: only allocate filter arrays when orbit projectiles are active
+            const hasP2Orbits = sim.projectiles.some(p => p.orbit && p.owner === 'p2');
+            let p2Orbits = null;
+            if (hasP2Orbits) {
+                p2Orbits = sim.projectiles.filter(p => p.orbit && p.owner === 'p2');
+                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner === 'p2'));
+            }
             origStepWeapons();
-            if (p2Orbits.length > 0) {
+            if (p2Orbits && p2Orbits.length > 0) {
                 sim.projectiles.push(...p2Orbits);
             }
 
             if (sim.player2 && sim.player2Weapons) {
                 const origPlayer = sim.player;
-                const p1Orbits = sim.projectiles.filter(p => p.orbit && p.owner !== 'p2');
-                sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner !== 'p2'));
+                const hasP1Orbits = sim.projectiles.some(p => p.orbit && p.owner !== 'p2');
+                let p1Orbits = null;
+                if (hasP1Orbits) {
+                    p1Orbits = sim.projectiles.filter(p => p.orbit && p.owner !== 'p2');
+                    sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.owner !== 'p2'));
+                }
                 sim.player = sim.player2;
                 try {
                     for (const t of sim.player2Weapons) {
@@ -929,7 +937,7 @@ export class MultiplayerManager {
                     }
                 } finally {
                     sim.player = origPlayer;
-                    if (p1Orbits.length > 0) {
+                    if (p1Orbits && p1Orbits.length > 0) {
                         sim.projectiles.push(...p1Orbits);
                     }
                 }
@@ -969,11 +977,11 @@ export class MultiplayerManager {
                         return;
                     }
 
-                    // Host broadcasts authoritative world state every tick
+                    // Host broadcasts authoritative world state; dead enemies are transmitted for 2 ticks so Guest triggers death anim without 45-tick bandwidth bloat
                     const enemyData = [];
                     for (let i = 0; i < sim.enemies.length; i++) {
                         const e = sim.enemies[i];
-                        if (!e.dead || (sim.tick - e.deathTick < 45)) {
+                        if (!e.dead || (sim.tick - e.deathTick <= 2)) {
                             enemyData.push([
                                 e.uid,
                                 e.def.id,
@@ -1709,6 +1717,7 @@ export class MultiplayerManager {
             });
         }
 
+        this.loadoutVersion = (this.loadoutVersion || 0) + 1;
         this.lastPartyHudKey = '';
 
         if (msg.appearance && p2.characterId !== 'dipper') {
@@ -1776,6 +1785,7 @@ export class MultiplayerManager {
             this.pendingIcons.add(id);
             cache.request(id, 1, () => {
                 this.pendingIcons.delete(id);
+                this.loadoutVersion = (this.loadoutVersion || 0) + 1;
                 this.lastPartyHudKey = '';
             });
         }
@@ -1811,11 +1821,15 @@ export class MultiplayerManager {
             document.body.appendChild(hud);
         }
 
+        const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
+        const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
+        const fastKey = `${p2.characterId}:${this.remoteName}:${hp}:${maxHp}:${this.loadoutVersion || 0}`;
+        if (this.lastPartyHudFastKey === fastKey) return;
+        this.lastPartyHudFastKey = fastKey;
+
         const isCorgi = p2.characterId === 'dipper';
         const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase());
         const displayName = escapeHtml(this.remoteName.toUpperCase());
-        const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
-        const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
         const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
         const hpPercent = Math.round(hpRatio * 100);
         const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
@@ -2163,6 +2177,9 @@ export class MultiplayerManager {
                     enemy.hp = hp;
                     enemy.maxHp = maxHp;
                     enemy.yaw = yaw;
+                    if (dead && !enemy.dead) {
+                        enemy.deathTick = sim.tick;
+                    }
                     enemy.dead = !!dead;
                     enemy.anim = anim;
                     enemy.animStart = animStart;
@@ -2184,6 +2201,9 @@ export class MultiplayerManager {
                                 enemy.maxHp = maxHp;
                                 enemy.yaw = yaw;
                                 enemy.dead = !!dead;
+                                if (enemy.dead) {
+                                    enemy.deathTick = sim.tick;
+                                }
                                 enemy.anim = anim;
                                 enemy.animStart = animStart;
                                 enemy.flash = flash;
@@ -2196,8 +2216,8 @@ export class MultiplayerManager {
                 }
             }
 
-            // Cull dead / removed enemies no longer on host
-            sim.enemies = sim.enemies.filter(e => hostUids.has(e.uid));
+            // Cull removed enemies while allowing dead enemies to finish their 45-tick death animation locally
+            sim.enemies = sim.enemies.filter(e => hostUids.has(e.uid) || (e.dead && (sim.tick - (e.deathTick || 0) < 45)));
 
             // Rebuild spatial hash so guest weapons and radar target the synced enemies
             if (sim.rebuildEnemyHash) {

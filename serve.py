@@ -78,6 +78,10 @@ def read_exact(sock, n):
 
 def handle_ws_client(sock, room_id, client_ip):
     sock.settimeout(SOCKET_TIMEOUT)
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
     sock_lock = threading.Lock()
     registered = False
     role = "guest"
@@ -184,11 +188,9 @@ def handle_ws_client(sock, room_id, client_ip):
             if payload is None:
                 break
 
-            if is_masked and mask:
-                unmasked = bytearray(payload)
-                for i in range(len(unmasked)):
-                    unmasked[i] ^= mask[i % 4]
-                payload = bytes(unmasked)
+            if is_masked and mask and length > 0:
+                mask_rep = (mask * (length // 4 + 1))[:length]
+                payload = (int.from_bytes(payload, "big") ^ int.from_bytes(mask_rep, "big")).to_bytes(length, "big")
 
             if opcode == 8:  # close
                 break
