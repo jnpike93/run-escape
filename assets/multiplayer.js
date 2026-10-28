@@ -51,6 +51,18 @@ const SPAWN_OFFSETS = {
     4: { dx: 0.75, dy: 0.75 }
 };
 
+const COOP_DIFFICULTY_WEIGHTS = {
+    1: { label: '1P Preview (2P Active on Start)', hpMult: 1.85, bossHpMult: 2.25, dmgMult: 1.10, spawnMult: 1.25, heavyWeightBias: 0.25, ringMult: 1.25, xpMult: 0.85 },
+    2: { label: '2P Duo', hpMult: 1.85, bossHpMult: 2.25, dmgMult: 1.10, spawnMult: 1.25, heavyWeightBias: 0.25, ringMult: 1.25, xpMult: 0.85 },
+    3: { label: '3P Trio', hpMult: 2.55, bossHpMult: 3.25, dmgMult: 1.22, spawnMult: 1.50, heavyWeightBias: 0.50, ringMult: 1.50, xpMult: 0.72 },
+    4: { label: '4P Quad', hpMult: 3.30, bossHpMult: 4.25, dmgMult: 1.35, spawnMult: 1.75, heavyWeightBias: 0.80, ringMult: 1.75, xpMult: 0.62 }
+};
+
+function getCoopDifficultyWeights(partyCount) {
+    const clamped = Math.max(1, Math.min(4, Math.round(Number(partyCount) || 2)));
+    return COOP_DIFFICULTY_WEIGHTS[clamped] || COOP_DIFFICULTY_WEIGHTS[2];
+}
+
 function sanitizeMapId(mapId, fallback = 'lumbridge') {
     if (!mapId || typeof mapId !== 'string') return fallback;
     const normalized = mapId.trim().toLowerCase();
@@ -1033,28 +1045,97 @@ export class MultiplayerManager {
         // Maintain sim.player2 alias for compatibility
         sim.player2 = sim.remotePlayers[0] || null;
 
-        const partySize = Math.max(2, Math.min(4, this.remotePeers.size + 1));
-        // Dynamic Monster HP Scaling: 2P = 2.0x, 3P = 2.75x, 4P = 3.5x
-        const hpMultiplier = 1 + (partySize - 1) * 0.85;
-        const effectiveMult = partySize === 2 ? 2.0 : hpMultiplier;
+        const getActiveWeights = () => {
+            const activePartySize = Math.max(2, Math.min(4, this.remotePeers.size + 1));
+            return getCoopDifficultyWeights(activePartySize);
+        };
 
         if (isHost) {
+            // 1. Scale wave density, spawn rate, and enemy tier weights based on 2-4 player party size
+            if (sim.currentWave) {
+                const origCurrentWave = sim.currentWave.bind(sim);
+                sim.currentWave = () => {
+                    const baseWave = origCurrentWave();
+                    if (!baseWave) return baseWave;
+                    const w = getActiveWeights();
+                    let minBaseHp = Infinity;
+                    let maxBaseHp = 0;
+                    const defs = baseWave.enemies.map(e => {
+                        const d = client.getEnemyDef ? client.getEnemyDef(e.id) : null;
+                        const hp = d?.hp || 10;
+                        if (hp < minBaseHp) minBaseHp = hp;
+                        if (hp > maxBaseHp) maxBaseHp = hp;
+                        return { entry: e, hp };
+                    });
+                    const hpSpan = Math.max(1, maxBaseHp - minBaseHp);
+                    const weightedEnemies = defs.map(({ entry, hp }, idx) => {
+                        const toughnessRatio = maxBaseHp > minBaseHp
+                            ? (hp - minBaseHp) / hpSpan
+                            : (defs.length > 1 ? idx / (defs.length - 1) : 0);
+                        const adjustedWeight = Math.max(
+                            0.1,
+                            Math.round(entry.weight * (1 + toughnessRatio * w.heavyWeightBias) * 100) / 100
+                        );
+                        return { ...entry, weight: adjustedWeight };
+                    });
+                    return {
+                        ...baseWave,
+                        minAlive: Math.round(baseWave.minAlive * w.spawnMult),
+                        maxAlive: Math.round(baseWave.maxAlive * w.spawnMult),
+                        spawnRate: baseWave.spawnRate * w.spawnMult,
+                        enemies: weightedEnemies
+                    };
+                };
+            }
+
+            // 2. Scale ring ambush count and target a random living party member
+            if (sim.spawnRing) {
+                const origSpawnRing = sim.spawnRing.bind(sim);
+                sim.spawnRing = (def, count) => {
+                    const w = getActiveWeights();
+                    const scaledCount = Math.max(1, Math.round((count || 12) * w.ringMult));
+                    const livingTargets = [sim.player];
+                    for (const peer of this.remotePeers.values()) {
+                        if (peer.entity && peer.entity.hp > 0) {
+                            livingTargets.push(peer.entity);
+                        }
+                    }
+                    const chosenTarget = livingTargets[Math.floor(Math.random() * livingTargets.length)] || sim.player;
+                    const savedPlayer = sim.player;
+                    sim.player = chosenTarget;
+                    try {
+                        return origSpawnRing(def, scaledCount);
+                    } finally {
+                        sim.player = savedPlayer;
+                    }
+                };
+            }
+
+            // 3. Scale Monster HP, Boss/Elite HP, Monster Damage, and XP weight per party size
+            const scaleEnemyForCoop = (enemy, kind) => {
+                if (!enemy || enemy._coopHpScaled) return;
+                enemy._coopHpScaled = true;
+                const w = getActiveWeights();
+                const isBossOrElite = kind === 'boss' || kind === 'finalBoss' || kind === 'elite' || enemy.boss || enemy.elite;
+                const hpMult = isBossOrElite ? w.bossHpMult : w.hpMult;
+                enemy.hp = Math.max(1, Math.round(enemy.hp * hpMult));
+                enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * hpMult));
+                if (Number.isFinite(enemy.damage)) {
+                    enemy.damage = Math.max(1, Math.round(enemy.damage * w.dmgMult));
+                }
+                if (Number.isFinite(enemy.xp)) {
+                    enemy.xp = Math.max(1, Math.round(enemy.xp * w.xpMult));
+                }
+            };
+
             const origSpawnEnemy = sim.spawnEnemy.bind(sim);
             sim.spawnEnemy = (def, kind, pos, bossHp) => {
                 const enemy = origSpawnEnemy(def, kind, pos, bossHp);
-                if (enemy && !enemy._coopHpScaled) {
-                    enemy._coopHpScaled = true;
-                    enemy.hp = Math.max(1, Math.round(enemy.hp * effectiveMult));
-                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * effectiveMult));
-                }
+                scaleEnemyForCoop(enemy, kind);
                 return enemy;
             };
             for (const enemy of sim.enemies) {
-                if (enemy && !enemy._coopHpScaled) {
-                    enemy._coopHpScaled = true;
-                    enemy.hp = Math.max(1, Math.round(enemy.hp * effectiveMult));
-                    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * effectiveMult));
-                }
+                scaleEnemyForCoop(enemy, enemy?.boss ? 'boss' : (enemy?.elite ? 'elite' : 'normal'));
             }
 
             // Spawn initial wave enemies around the region's spawn point on Host
@@ -2948,7 +3029,11 @@ export class MultiplayerManager {
         )).join('');
 
         const partyCount = Math.max(1, this.lobbyPlayers.size);
-        const hpScaleLabel = partyCount <= 2 ? '2.0x' : (partyCount === 3 ? '2.7x' : '3.55x');
+        const activeScaleParty = Math.max(2, Math.min(4, partyCount));
+        const weights = getCoopDifficultyWeights(activeScaleParty);
+        const hpScaleLabel = `${weights.hpMult}x Mob / ${weights.bossHpMult}x Boss HP`;
+        const spawnScaleLabel = `${weights.spawnMult}x Spawns (+${Math.round(weights.heavyWeightBias * 100)}% Heavy Weight)`;
+        const dmgScaleLabel = `${weights.dmgMult}x Dmg`;
         const allGuestsReady = Array.from(this.lobbyPlayers.values())
             .filter(p => p.slot !== this.localSlot)
             .every(p => p.ready);
@@ -3017,15 +3102,18 @@ export class MultiplayerManager {
             <div style="font-size: 13px; color: #bbb; margin-bottom: 8px;">
                 ${isHost ? 'Share the invite link with up to 3 friends (start anytime with 2 to 4 players).' : `Connected as Player ${this.localSlot} (Guest).`}
             </div>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; font-size: 11px;">
-                <span style="background: #231a12; border: 1px solid #6b5842; color: #40e0ff; padding: 3px 10px; border-radius: 3px;">
-                    👥 Party: ${partyCount}/4 Players Connected
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 12px; font-size: 11px;">
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #40e0ff; padding: 3px 8px; border-radius: 3px;">
+                    👥 Party: ${partyCount}/4 (${weights.label})
                 </span>
-                <span style="background: #231a12; border: 1px solid #6b5842; color: #ff6040; padding: 3px 10px; border-radius: 3px;">
-                    ⚔ Co-Op Scaling: ${hpScaleLabel} Monster HP
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #ff6040; padding: 3px 8px; border-radius: 3px;">
+                    ⚔ ${hpScaleLabel} · ${dmgScaleLabel}
                 </span>
-                <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 10px; border-radius: 3px;">
-                    ★ Host Classes: ${unlockedChars.length}/${visibleTotal} Unlocked
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #ffa834; padding: 3px 8px; border-radius: 3px;">
+                    🔥 ${spawnScaleLabel}
+                </span>
+                <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 8px; border-radius: 3px;">
+                    ★ Classes: ${unlockedChars.length}/${visibleTotal}
                 </span>
             </div>
 
