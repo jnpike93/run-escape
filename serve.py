@@ -25,8 +25,14 @@ rooms = {}
 ip_conns = {}
 rooms_lock = threading.Lock()
 
-HOST_ALLOWED_MSG_TYPES = {"lobby_update", "game_start", "sync_world", "game_over"}
-GUEST_ALLOWED_MSG_TYPES = {"lobby_update", "input", "game_over"}
+HOST_ALLOWED_MSG_TYPES = {
+    "lobby_update", "game_start", "sync_world", "game_over",
+    "coop_pause", "coop_pickup", "coop_loadout"
+}
+GUEST_ALLOWED_MSG_TYPES = {
+    "lobby_update", "input", "game_over",
+    "coop_pause", "coop_pickup", "coop_loadout"
+}
 
 CSP_POLICY = (
     "default-src 'self'; "

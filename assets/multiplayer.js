@@ -51,9 +51,12 @@ export class MultiplayerManager {
         
         this.remoteInput = { moveX: 0, moveY: 0, tick: 0 };
         this.remoteState = null;
+        this.localPauseState = null;
+        this.remotePauseState = null;
         
         this.modalEl = null;
         this.inGameHooked = false;
+        this.clientMethodsHooked = false;
 
         // Clean disconnect on tab close/unload
         window.addEventListener('beforeunload', () => {
@@ -241,6 +244,17 @@ export class MultiplayerManager {
             case 'input':
                 if (this.role !== 'host') break;
                 this.remoteInput = msg;
+                if (msg.pauseState !== undefined) {
+                    const allowedStates = new Set(['levelUp', 'chest', 'paused']);
+                    const nextRemote = (typeof msg.pauseState === 'string' && allowedStates.has(msg.pauseState)) ? msg.pauseState : null;
+                    if (nextRemote !== this.remotePauseState) {
+                        this.remotePauseState = nextRemote;
+                        if (window.gameClient) {
+                            window.gameClient.accumulator = 0;
+                            this.updatePauseOverlay(window.gameClient);
+                        }
+                    }
+                }
                 if (window.gameClient && window.gameClient.sim && window.gameClient.sim.player2) {
                     this.applyRemoteInput(window.gameClient.sim.player2, msg);
                 }
@@ -249,6 +263,32 @@ export class MultiplayerManager {
             case 'sync_world':
                 if (this.role === 'guest') {
                     this.applyWorldSync(msg);
+                }
+                break;
+
+            case 'coop_pause': {
+                const allowedStates = new Set(['levelUp', 'chest', 'paused']);
+                const nextRemote = (typeof msg.state === 'string' && allowedStates.has(msg.state)) ? msg.state : null;
+                this.remotePauseState = nextRemote;
+                if (window.gameClient) {
+                    window.gameClient.accumulator = 0;
+                    if (msg.action === 'resume_both' && window.gameClient.paused) {
+                        window.gameClient.paused = false;
+                        window.gameClient.syncOverlay();
+                        this.syncLocalPauseState(window.gameClient, true);
+                    }
+                    this.updatePauseOverlay(window.gameClient);
+                }
+                break;
+            }
+
+            case 'coop_pickup':
+                this.applyCoopPickup(msg);
+                break;
+
+            case 'coop_loadout':
+                if (this.role === 'host') {
+                    this.applyRemoteLoadout(msg);
                 }
                 break;
 
@@ -464,6 +504,17 @@ export class MultiplayerManager {
         const sim = client.sim;
         const isHost = this.role === 'host';
 
+        this.localPauseState = null;
+        this.remotePauseState = null;
+        this.removePauseOverlay();
+
+        // Prevent window blur from auto-pausing during Co-Op; explicit Esc/P, Level-Up, and Chests pause both players
+        if (client.input) {
+            client.input.onBlur = () => {
+                client.accumulator = 0;
+            };
+        }
+
         const p1 = sim.player;
         p1.characterId = localChar;
 
@@ -542,6 +593,25 @@ export class MultiplayerManager {
                 }
             }
 
+            // Hook sim.collect on Host so XP (bones/big_bones) and coins collected by Player 1 are shared with Player 2
+            const origCollect = sim.collect.bind(sim);
+            sim._origCollect = origCollect;
+            sim.collect = (pickup) => {
+                const kind = pickup.kind;
+                const val = pickup.value;
+                origCollect(pickup);
+                if (this.peerConnected && (kind === 'bones' || kind === 'big_bones' || kind === 'coins') && val > 0) {
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: kind,
+                        value: val
+                    });
+                }
+                if (sim.state !== 'playing') {
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
             // Hook sim.stepEnemies on Host to target whichever player is closest
             const origStepEnemies = sim.stepEnemies.bind(sim);
             sim.stepEnemies = () => {
@@ -585,9 +655,10 @@ export class MultiplayerManager {
                 sim.player = p1;
             };
         } else {
-            // Guest disables autonomous wave spawner, enemy stepping, and local pickup generation
+            // Guest disables autonomous wave spawner, enemy stepping, and local pickup resolution (Host is authoritative)
             sim.stepDirector = () => {};
             sim.stepEnemies = () => {};
+            sim.stepPickups = () => {};
             sim.dropPickup = () => {};
             sim.dropCasket = () => {};
             sim.dropCasketOfTier = () => {};
@@ -661,9 +732,14 @@ export class MultiplayerManager {
             // Step Player 2
             if (sim.player2) {
                 this.stepPlayer2(sim, sim.player2);
-                if (isHost) {
+                if (isHost && sim.state === 'playing') {
                     this.stepPlayer2Pickups(sim, sim.player2);
                 }
+            }
+
+            // Detect immediate transition into chest or levelUp on this exact tick
+            if (sim.state !== 'playing') {
+                this.syncLocalPauseState(client, true);
             }
 
             // Network transmission
@@ -708,7 +784,9 @@ export class MultiplayerManager {
                                 p.kind,
                                 Math.round(p.x * 100) / 100,
                                 Math.round(p.y * 100) / 100,
-                                p.value
+                                p.value,
+                                p.tier || '',
+                                p.powerUp || ''
                             ]);
                         }
                     }
@@ -716,6 +794,8 @@ export class MultiplayerManager {
                     this.send({
                         type: 'sync_world',
                         tick: sim.tick,
+                        kills: sim.kills,
+                        pauseState: this.getLocalPauseState(client),
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
                         p1Hp: sim.player.hp,
@@ -733,10 +813,11 @@ export class MultiplayerManager {
                         return;
                     }
 
-                    // Guest transmits input and local position
+                    // Guest transmits input, local position, and pause state
                     this.send({
                         type: 'input',
                         tick: sim.tick,
+                        pauseState: this.getLocalPauseState(client),
                         moveX: moveX,
                         moveY: moveY,
                         x: Math.round(sim.player.x * 100) / 100,
@@ -745,6 +826,95 @@ export class MultiplayerManager {
                 }
             }
         };
+
+        // Hook client-level lifecycle and modal methods once
+        if (!this.clientMethodsHooked) {
+            const origClientUpdate = client.update.bind(client);
+            client.update = (dt, camera) => {
+                if (this.gameStarted && client.sim) {
+                    this.syncLocalPauseState(client);
+                    const localState = this.getLocalPauseState(client);
+                    if (this.remotePauseState !== null && localState === null && client.sim.state === 'playing' && !client.sim.runOver) {
+                        client.accumulator = 0;
+                        client.sim.state = 'coopWait';
+                        try {
+                            origClientUpdate(dt, camera);
+                        } finally {
+                            if (client.sim && client.sim.state === 'coopWait') {
+                                client.sim.state = 'playing';
+                            }
+                        }
+                        this.updatePauseOverlay(client);
+                        return;
+                    }
+                }
+                origClientUpdate(dt, camera);
+                if (this.gameStarted && client.sim) {
+                    this.syncLocalPauseState(client);
+                }
+            };
+
+            const origChoose = client.choose.bind(client);
+            client.choose = (idx) => {
+                const prevHp = client.sim?.player?.hp ?? 0;
+                origChoose(idx);
+                if (this.gameStarted && client.sim) {
+                    this.sendLoadoutSync(client, client.sim.player.hp > prevHp);
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
+            const origResolveChest = client.resolveChest.bind(client);
+            client.resolveChest = (action) => {
+                const prevHp = client.sim?.player?.hp ?? 0;
+                origResolveChest(action);
+                if (this.gameStarted && client.sim) {
+                    this.sendLoadoutSync(client, client.sim.player.hp > prevHp);
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
+            const origUseItem = client.useItem.bind(client);
+            client.useItem = (slot) => {
+                const prevHp = client.sim?.player?.hp ?? 0;
+                origUseItem(slot);
+                if (this.gameStarted && client.sim) {
+                    this.sendLoadoutSync(client, client.sim.player.hp > prevHp);
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
+            const origPause = client.pause.bind(client);
+            client.pause = () => {
+                origPause();
+                if (this.gameStarted && client.sim) {
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
+            const origResume = client.resume.bind(client);
+            client.resume = () => {
+                origResume();
+                if (this.gameStarted && client.sim) {
+                    this.syncLocalPauseState(client, true);
+                }
+            };
+
+            const origSyncOverlay = client.syncOverlay.bind(client);
+            client.syncOverlay = () => {
+                origSyncOverlay();
+                if (this.gameStarted && client.sim) {
+                    this.syncLocalPauseState(client);
+                }
+            };
+
+            this.clientMethodsHooked = true;
+        }
+
+        // Send initial loadout sync from Guest to Host
+        if (!isHost) {
+            this.sendLoadoutSync(client, true);
+        }
 
         // Hook view.submitActors to render both characters with authentic models and colors
         if (client.view && !this.inGameHooked) {
@@ -968,6 +1138,9 @@ export class MultiplayerManager {
                     if (this.gameStarted) {
                         this.send({ type: 'peer_leaving' });
                         this.gameStarted = false;
+                        this.localPauseState = null;
+                        this.remotePauseState = null;
+                        this.removePauseOverlay();
                         const hud = document.getElementById('coop-party-hud');
                         if (hud) hud.remove();
                     }
@@ -979,6 +1152,220 @@ export class MultiplayerManager {
         }
 
         this.showToast(`Co-Op Run Active! Teammate: ${this.remoteName.toUpperCase()} (${remoteChar.toUpperCase()})`);
+    }
+
+    getLocalPauseState(client) {
+        if (!client || !client.sim || client.sim.runOver) return null;
+        if (client.sim.state === 'chest') return 'chest';
+        if (client.sim.state === 'levelUp') return 'levelUp';
+        if (client.paused) return 'paused';
+        return null;
+    }
+
+    syncLocalPauseState(client, force = false) {
+        const nextState = this.getLocalPauseState(client);
+        if (nextState !== this.localPauseState || force) {
+            this.localPauseState = nextState;
+            if (this.peerConnected) {
+                this.send({
+                    type: 'coop_pause',
+                    state: nextState,
+                    playerName: this.localName
+                });
+            }
+        }
+        this.updatePauseOverlay(client);
+    }
+
+    removePauseOverlay() {
+        const el = document.getElementById('coop-pause-overlay');
+        if (el) el.remove();
+    }
+
+    updatePauseOverlay(client) {
+        if (!this.gameStarted || !client || !client.sim || client.sim.runOver) {
+            this.removePauseOverlay();
+            return;
+        }
+        const localState = this.getLocalPauseState(client);
+        // If local player has their own Chest / Level-Up / Pause modal open, let them interact with it directly
+        if (localState !== null || this.remotePauseState === null) {
+            this.removePauseOverlay();
+            return;
+        }
+
+        let el = document.getElementById('coop-pause-overlay');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'coop-pause-overlay';
+            el.style.cssText = `
+                position: fixed;
+                inset: 0;
+                z-index: 9500;
+                background: rgba(0, 0, 0, 0.58);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: auto;
+                user-select: none;
+            `;
+            document.body.appendChild(el);
+        }
+
+        const partnerName = escapeHtml(this.remoteName.toUpperCase());
+        let titleText = 'CO-OP PAUSED';
+        let bodyText = `Waiting for ${partnerName}...`;
+        let showResumeBtn = false;
+
+        if (this.remotePauseState === 'chest') {
+            titleText = 'TREASURE CASKET';
+            bodyText = `${partnerName} is opening a treasure casket...`;
+        } else if (this.remotePauseState === 'levelUp') {
+            titleText = 'LEVEL UP!';
+            bodyText = `${partnerName} is choosing a level-up reward...`;
+        } else if (this.remotePauseState === 'paused') {
+            titleText = 'GAME PAUSED';
+            bodyText = `${partnerName} paused the game.`;
+            showResumeBtn = true;
+        }
+
+        const stateKey = `${this.remotePauseState}:${partnerName}`;
+        if (el.dataset.stateKey !== stateKey) {
+            el.dataset.stateKey = stateKey;
+            el.innerHTML = `
+                <div class="ui-panel rs-border rs-background" style="
+                    padding: 24px 36px;
+                    text-align: center;
+                    max-width: 440px;
+                    font-family: 'OSRS Bold', monospace;
+                    color: #ff981f;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85);
+                ">
+                    <h2 style="margin: 0 0 10px 0; font-size: 24px; color: #ffff00; text-shadow: 2px 2px #000;">${titleText}</h2>
+                    <p style="margin: 0 0 ${showResumeBtn ? '18px' : '4px'} 0; font-size: 16px; color: #ffffff; text-shadow: 1px 1px #000;">${bodyText}</p>
+                    <p style="margin: 0; font-size: 12px; color: #b8a890;">Simulation paused for both players to stay in sync</p>
+                    ${showResumeBtn ? `
+                        <div style="margin-top: 16px;">
+                            <button id="coop-remote-resume-btn" class="ui-button ui-button-go" style="padding: 8px 24px; cursor: pointer;">Resume Co-Op</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            const resumeBtn = el.querySelector('#coop-remote-resume-btn');
+            if (resumeBtn) {
+                resumeBtn.addEventListener('click', () => {
+                    this.remotePauseState = null;
+                    this.removePauseOverlay();
+                    this.send({ type: 'coop_pause', state: null, action: 'resume_both' });
+                });
+            }
+        }
+    }
+
+    sendLoadoutSync(client, healed = false) {
+        if (!client || !client.sim || !this.peerConnected) return;
+        const sim = client.sim;
+        const weapons = (sim.weapons || []).map(w => ({
+            id: w.def?.id || 'scimitar',
+            level: Number(w.level) || 1,
+            bonus: Number(w.bonus) || 0
+        }));
+        this.send({
+            type: 'coop_loadout',
+            weapons,
+            hp: Math.round(sim.player.hp),
+            maxHp: Math.round(sim.player.maxHp),
+            healed: Boolean(healed)
+        });
+    }
+
+    applyRemoteLoadout(msg) {
+        const client = window.gameClient;
+        if (!client || !client.sim || !client.sim.player2 || !msg || typeof msg !== 'object') return;
+        const sim = client.sim;
+        const p2 = sim.player2;
+
+        if (Number.isFinite(Number(msg.maxHp))) {
+            const newMaxHp = Math.max(1, Math.min(1000, Math.round(Number(msg.maxHp))));
+            if (newMaxHp > p2.maxHp) {
+                p2.hp = Math.min(newMaxHp, p2.hp + (newMaxHp - p2.maxHp));
+            }
+            p2.maxHp = newMaxHp;
+        }
+        if (msg.healed && Number.isFinite(Number(msg.hp))) {
+            p2.hp = Math.max(p2.hp, Math.min(p2.maxHp, Math.round(Number(msg.hp))));
+        }
+
+        if (Array.isArray(msg.weapons) && msg.weapons.length > 0 && msg.weapons.length <= 8) {
+            const savedWeapons = sim.weapons;
+            const built = [];
+            try {
+                for (const w of msg.weapons) {
+                    if (!w || typeof w.id !== 'string') continue;
+                    const cleanId = w.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+                    sim.weapons = [];
+                    sim.addWeapon(cleanId, Number.isFinite(Number(w.bonus)) ? Number(w.bonus) : 0);
+                    if (sim.weapons.length > 0) {
+                        const inst = sim.weapons[0];
+                        const maxLvl = inst.def?.levels?.length || 8;
+                        inst.level = Math.max(1, Math.min(maxLvl, Math.round(Number(w.level) || 1)));
+                        inst.cooldown = Math.min(inst.cooldown || 10, 10);
+                        built.push(inst);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Multiplayer] Error syncing Player 2 weapons:', err);
+            } finally {
+                sim.weapons = savedWeapons;
+            }
+            if (built.length > 0) {
+                sim.player2Weapons = built;
+            }
+        }
+    }
+
+    applyCoopPickup(msg) {
+        const client = window.gameClient;
+        if (!client || !client.sim || !msg || typeof msg !== 'object') return;
+        const sim = client.sim;
+        const kind = msg.kind;
+        const val = Number.isFinite(Number(msg.value)) ? Number(msg.value) : 0;
+
+        if (kind === 'bones' || kind === 'big_bones') {
+            if (val <= 0) return;
+            sim.xp += val * (1 + (sim.stats?.growth || 0));
+            client.sounds?.onEvents(sim, [{ type: 'pickup', kind, value: val }]);
+            sim.checkLevelUp();
+            if (sim.state !== 'playing') {
+                client.accumulator = 0;
+                client.syncOverlay();
+                this.syncLocalPauseState(client, true);
+            }
+            client.updateHud(true);
+        } else if (kind === 'coins') {
+            if (val <= 0) return;
+            sim.coins += Math.round(val * (1 + (sim.stats?.greed || 0)));
+            client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'coins', value: val }]);
+            client.updateHud(false);
+        } else if (kind === 'food') {
+            if (val <= 0) return;
+            sim.heal(val);
+            client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'food', value: val }]);
+            client.updateHud(true);
+        } else if (kind === 'casket') {
+            const allowedTiers = new Set(['beginner', 'easy', 'medium', 'hard', 'elite', 'master']);
+            const tier = (typeof msg.tier === 'string' && allowedTiers.has(msg.tier)) ? msg.tier : 'medium';
+            sim.openCasket(tier);
+            client.accumulator = 0;
+            client.handleEvents(sim, sim.takeEvents());
+            client.syncOverlay();
+            client.updateHud(true);
+            this.syncLocalPauseState(client, true);
+        } else if (kind === 'powerUp') {
+            if (typeof msg.message === 'string' && msg.message) {
+                client.store?.toast(msg.message.slice(0, 80));
+            }
+        }
     }
 
     // Party HUD widget located at bottom-left so it NEVER occludes top-left item/equipment infographs
@@ -1037,6 +1424,9 @@ export class MultiplayerManager {
     endGameOnDisconnect(reason) {
         if (!this.gameStarted) return;
         this.gameStarted = false;
+        this.localPauseState = null;
+        this.remotePauseState = null;
+        this.removePauseOverlay();
         this.showToast(reason);
 
         const hud = document.getElementById('coop-party-hud');
@@ -1062,6 +1452,7 @@ export class MultiplayerManager {
 
     stepPlayer2Pickups(sim, p2) {
         if (!sim.pickups || sim.pickups.length === 0) return;
+        const client = window.gameClient;
         const magnet = 2.5 * (1 + (sim.stats?.magnet || 0));
         for (const pickup of sim.pickups) {
             if (pickup.value < 0) continue;
@@ -1069,21 +1460,93 @@ export class MultiplayerManager {
             const dy = p2.y - pickup.y;
             const dist = Math.hypot(dx, dy);
             const magnetic = pickup.kind !== 'casket' && pickup.kind !== 'powerUp';
-            if (!pickup.attracted && magnetic && dist < magnet) {
-                pickup.attracted = true;
-                pickup.speed = 0.05;
+            if (!pickup.attracted && !pickup.attractedP2 && magnetic && dist < magnet) {
+                pickup.attractedP2 = true;
+                pickup.speedP2 = 0.05;
             }
-            if (pickup.attracted && dist < 0.6) {
-                sim.collect(pickup);
+            if (pickup.attractedP2 && dist > 0.001) {
+                pickup.speedP2 = Math.min((pickup.speedP2 || 0.05) + 0.02, 0.6);
+                const step = Math.min(pickup.speedP2, dist);
+                pickup.x += (dx / dist) * step;
+                pickup.y += (dy / dist) * step;
+            }
+            if (dist < 0.6) {
+                const origVal = pickup.value;
                 pickup.value = -1;
+                if (pickup.kind === 'bones' || pickup.kind === 'big_bones' || pickup.kind === 'coins') {
+                    // Shared XP and coins: apply on Host (which also broadcasts coop_pickup to Guest)
+                    pickup.value = origVal;
+                    sim.collect(pickup);
+                    pickup.value = -1;
+                    sim.checkLevelUp();
+                    if (sim.state !== 'playing' && client) {
+                        client.accumulator = 0;
+                        client.syncOverlay();
+                        this.syncLocalPauseState(client, true);
+                    }
+                } else if (pickup.kind === 'food') {
+                    p2.hp = Math.min(p2.maxHp, p2.hp + origVal);
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: 'food',
+                        value: origVal
+                    });
+                } else if (pickup.kind === 'casket') {
+                    const tier = pickup.tier || 'medium';
+                    this.remotePauseState = 'chest';
+                    if (client) {
+                        client.accumulator = 0;
+                        this.updatePauseOverlay(client);
+                    }
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: 'casket',
+                        tier: tier
+                    });
+                } else if (pickup.kind === 'powerUp') {
+                    const savedPlayer = sim.player;
+                    sim.player = p2;
+                    try {
+                        if (sim._origCollect) {
+                            sim._origCollect({ ...pickup, value: origVal });
+                        } else {
+                            sim.collect({ ...pickup, value: origVal });
+                        }
+                    } finally {
+                        sim.player = savedPlayer;
+                    }
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: 'powerUp',
+                        message: `${this.remoteName} activated a power-up!`
+                    });
+                }
             }
         }
+        sim.pickups = sim.pickups.filter(p => p.value >= 0);
     }
 
     applyWorldSync(msg) {
         const client = window.gameClient;
         if (!client || !client.sim) return;
         const sim = client.sim;
+
+        // 0. Synchronize simulation clock, kills, and remote pause state
+        if (Number.isFinite(Number(msg.tick)) && msg.tick >= 0) {
+            sim.tick = Math.round(Number(msg.tick));
+        }
+        if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
+            sim.kills = Math.round(Number(msg.kills));
+        }
+        if (msg.pauseState !== undefined) {
+            const allowedStates = new Set(['levelUp', 'chest', 'paused']);
+            const nextRemote = (typeof msg.pauseState === 'string' && allowedStates.has(msg.pauseState)) ? msg.pauseState : null;
+            if (nextRemote !== this.remotePauseState) {
+                this.remotePauseState = nextRemote;
+                client.accumulator = 0;
+                this.updatePauseOverlay(client);
+            }
+        }
 
         // 1. Synchronize player states
         if (sim.player2) {
@@ -1189,7 +1652,7 @@ export class MultiplayerManager {
 
             const hostPickupUids = new Set();
             for (let i = 0; i < msg.pickups.length; i++) {
-                const [uid, kind, px, py, val] = msg.pickups[i];
+                const [uid, kind, px, py, val, tier, powerUp] = msg.pickups[i];
                 hostPickupUids.add(uid);
                 let p = pickupMap.get(uid);
                 if (p) {
@@ -1198,6 +1661,8 @@ export class MultiplayerManager {
                     p.x = px;
                     p.y = py;
                     p.value = val;
+                    if (tier) p.tier = tier;
+                    if (powerUp) p.powerUp = powerUp;
                 } else {
                     sim.pickups.push({
                         uid: uid,
@@ -1207,6 +1672,8 @@ export class MultiplayerManager {
                         prevX: px,
                         prevY: py,
                         value: val,
+                        tier: tier || undefined,
+                        powerUp: powerUp || undefined,
                         attracted: false,
                         speed: 0,
                         spawnTick: sim.tick
