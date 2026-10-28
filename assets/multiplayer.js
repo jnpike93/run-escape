@@ -4,7 +4,7 @@
 // and automatic run termination on partner disconnect.
 
 const ALL_CHARACTERS = [
-    { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: true },
+    { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: false, secretCode: true },
     { id: 'warrior', name: 'Warrior', weapon: 'scimitar', defaultUnlocked: true },
     { id: 'wizard', name: 'Wizard', weapon: 'fire_spells', defaultUnlocked: true },
     { id: 'ranger', name: 'Ranger', weapon: 'throwing_knives', defaultUnlocked: true },
@@ -82,8 +82,8 @@ export class MultiplayerManager {
         this.peers = 1;
         this.peerConnected = false;
         
-        this.localCharacter = 'dipper';
-        this.remoteCharacter = 'warrior';
+        this.localCharacter = 'warrior';
+        this.remoteCharacter = 'wizard';
         this.localName = 'Player 1';
         this.remoteName = 'Player 2';
         this.localReady = false;
@@ -295,8 +295,8 @@ export class MultiplayerManager {
                 this.gameConfig = {
                     seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
                     mapId: sanitizeMapId(msg.config.mapId, 'lumbridge'),
-                    p1Char: sanitizeCharacter(msg.config.p1Char, 'dipper'),
-                    p2Char: sanitizeCharacter(msg.config.p2Char, 'warrior'),
+                    p1Char: sanitizeCharacter(msg.config.p1Char, 'warrior'),
+                    p2Char: sanitizeCharacter(msg.config.p2Char, 'wizard'),
                     p1Name: sanitizeName(msg.config.p1Name) || 'Player 1',
                     p2Name: sanitizeName(msg.config.p2Name) || 'Player 2',
                     unlockedItems: Array.isArray(msg.config.unlockedItems)
@@ -379,8 +379,10 @@ export class MultiplayerManager {
                 const raw = window.localStorage.getItem('rune-survivors-save');
                 if (raw) {
                     const parsed = JSON.parse(raw);
+                    const unlockedCodes = Array.isArray(parsed?.unlockedCodes) ? parsed.unlockedCodes : [];
                     if (parsed && Array.isArray(parsed.unlockedCharacters)) {
                         for (const cid of parsed.unlockedCharacters) {
+                            if (cid === 'dipper' && !unlockedCodes.includes('dipperthedog')) continue;
                             if (typeof cid === 'string' && ALLOWED_CHARACTERS.has(cid)) {
                                 unlocked.add(cid);
                             }
@@ -2479,7 +2481,8 @@ export class MultiplayerManager {
         }
 
         const unlockedChars = ALL_CHARACTERS.filter(c => unlockedSet.has(c.id));
-        const lockedChars = ALL_CHARACTERS.filter(c => !unlockedSet.has(c.id));
+        const lockedChars = ALL_CHARACTERS.filter(c => !unlockedSet.has(c.id) && !c.secretCode);
+        const visibleTotal = ALL_CHARACTERS.filter(c => !c.secretCode || unlockedSet.has(c.id)).length;
         const charOptionsHtml = [
             ...unlockedChars.map(c => `<option value="${c.id}" ${this.localCharacter === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`),
             ...lockedChars.map(c => `<option value="${c.id}" disabled>🔒 ${escapeHtml(c.name)} (Locked on Host)</option>`)
@@ -2502,7 +2505,7 @@ export class MultiplayerManager {
                     ⚔ Co-Op Difficulty: 2x Monster HP
                 </span>
                 <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 10px; border-radius: 3px;">
-                    ★ Host Save Classes: ${unlockedChars.length}/${ALL_CHARACTERS.length} Unlocked
+                    ★ Host Save Classes: ${unlockedChars.length}/${visibleTotal} Unlocked
                 </span>
             </div>
 
