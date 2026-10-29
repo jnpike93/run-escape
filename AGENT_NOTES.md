@@ -57,6 +57,7 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 
 ## 3. Chronological Agent Handoff Log
 
+<<<<<<< HEAD
 ### 2026-10-29 - Antigravity - Upstream 0.14.0 Merge (Morytania, GWD, Prifddinas, Inferno, Castle Wars, Pest Control, 10 Adventurers, Gear Sets) (v7.9)
 - **Commit / PR**: Upstream `0.14.0` (`index-BucZ8BnA.js`) merge (`?v=7.9`, CacheStorage `-v12`)
 - **Files Modified**: `index.html`, `CHANGELOG.md`, `caches/caches.json`, `caches/osrs-241_2026-09-30-slim-74e0d2b3/*`, `assets/index-BucZ8BnA.js`, `assets/index-BMrv4NGQ.css`, `assets/MapViewerApp-BeWD02jr.js`, `assets/RenderDataWorker-ago4Edys.js`, `assets/module-CSC3QDlL.js`, `assets/module-D8WM9OnE.js`, `assets/multiplayer.js`, `assets/multiplayer/mp-*.js`, `scripts/discover_symbols.js`, `scripts/apply_patches.js`, `scripts/patches/01..06-*.patch.js`, `AGENTS.md`, `AGENT_NOTES.md`
@@ -69,6 +70,25 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
   - Updated `assets/multiplayer/mp-sync-engine.js`, `mp-actor-renderer.js`, and `mp-constants.js` to sync `0.14.0` boss `shielded` state, `notice` events, new weapon `playerSeq` animations (`393`, `2062`), and the 10 new adventurers and 6 new maps.
 - **Notes / Invariants for Future Agents**:
   - In `0.14.0`, `blood_barrage` exists upstream right after `shadow_barrage`; `05-weapons-passives.patch.js` updates upstream's `blood_barrage` entry in-place (preserving `family: "ancient_burst"`) rather than inserting a second `blood_barrage` object.
+=======
+### 2026-10-29 - Claude Code - Debug stat panel (debug-mode.js v7.9)
+- **Commit / PR**: merged onto `main` after v7.8
+- **Files Modified**: `assets/debug-mode.js`, `index.html` (only the `debug-mode.js` tag, `?v=7.8` -> `?v=7.9`)
+- **Bundle / Version Impact**: None to the engine bundle or `multiplayer.js`, so the other 5 entry points keep `?v=7.8`.
+- **What Changed**:
+  - **Turning it on**: `debugmode` still turns debug mode on with the old god-mode preset (1M HP, max armour, invulnerable, Shift 3x sprint); `bugmode` turns it off.
+  - **Panel**: while debug mode is on, `\` (`KeyboardEvent.code === "Backslash"`) opens a panel of notched sliders, plus an Invulnerable checkbox and "God mode preset" / "All normal" buttons. Settings persist in `localStorage` under `runEscapeDebugPanel`.
+  - **Sliders and how they apply**:
+    - Max HP: override.
+    - Armour, regen, thorns, heal chance, pickup range, damage % (`might`), range/attack size (`area`), projectile speed, extra projectiles (`amount`), duration, luck, XP and coin gain: added on top of the game's own stats in a `sim.updateStats` wrapper.
+    - Move speed 1-10x and Shift sprint 1-10x: `sim.stepPlayer` wrapper.
+    - Attack speed 1-10x: `sim.cooldownTicks` wrapper, which bypasses the game's 60% / 5-tick cooldown cap, minimum 1 tick.
+    - Base damage: flat amount added to each hit in a `sim.damageEnemy` wrapper.
+  - **Co-op**: the guest's `coop_debug` message now carries `{on, invuln, hp}`, so the host applies the guest's chosen max HP and only tops it up when it's invulnerable.
+- **Notes / Invariants for Future Agents**:
+  - Offence sliders only affect the local simulation. In co-op the host fires guests' weapons, so a guest's damage, attack speed and range sliders don't change their attacks; HP, invulnerability and movement do sync.
+  - Still **MUST BE REMOVED IF WE GO LIVE**: delete `assets/debug-mode.js`, its tag and comment in `index.html`, and `coop_debug` in both `serve.py` allowlists.
+>>>>>>> origin/main
 
 ### 2026-10-29 - Antigravity - Serve Live Editable CHANGELOG.md (v7.8)
 - **Commit / PR**: Live `CHANGELOG.md` (`?v=7.8`)
