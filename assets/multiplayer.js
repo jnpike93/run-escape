@@ -2591,6 +2591,21 @@ export class MultiplayerManager {
     }
 
     getSpectatedPeer() {
+        let bestPeer = null;
+        for (const p of this.remotePeers.values()) {
+            if (p.entity && p.entity.hp > 0 && !p.entity.spectating) {
+                if (this.spectateSlot !== null && p.slot === this.spectateSlot) {
+                    return p;
+                }
+                if (!bestPeer || p.slot < bestPeer.slot) {
+                    bestPeer = p;
+                }
+            }
+        }
+        if (bestPeer) {
+            this.spectateSlot = bestPeer.slot;
+        }
+        return bestPeer;
         const peersList = this.getSortedRemotePeers();
         let firstLiving = null;
         for (let i = 0; i < peersList.length; i++) {
