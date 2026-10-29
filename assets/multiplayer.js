@@ -261,7 +261,7 @@ export class MultiplayerManager {
         if (!Array.isArray(activeSlots)) return;
         const validSet = new Set(activeSlots.map(s => sanitizeSlot(s, 0)).filter(s => s >= 1 && s <= 4));
         validSet.add(this.localSlot);
-        for (const s of Array.from(this.lobbyPlayers.keys())) {
+        for (const s of this.lobbyPlayers.keys()) {
             if (!validSet.has(s)) {
                 this.lobbyPlayers.delete(s);
             }
