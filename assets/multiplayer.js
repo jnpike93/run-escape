@@ -2574,16 +2574,21 @@ export class MultiplayerManager {
     }
 
     getSpectatedPeer() {
-        const livingPeers = Array.from(this.remotePeers.values())
-            .filter(p => p.entity && p.entity.hp > 0 && !p.entity.spectating)
-            .sort((a, b) => a.slot - b.slot);
-        if (livingPeers.length === 0) return null;
-        if (this.spectateSlot !== null) {
-            const match = livingPeers.find(p => p.slot === this.spectateSlot);
-            if (match) return match;
+        let bestPeer = null;
+        for (const p of this.remotePeers.values()) {
+            if (p.entity && p.entity.hp > 0 && !p.entity.spectating) {
+                if (this.spectateSlot !== null && p.slot === this.spectateSlot) {
+                    return p;
+                }
+                if (!bestPeer || p.slot < bestPeer.slot) {
+                    bestPeer = p;
+                }
+            }
         }
-        this.spectateSlot = livingPeers[0].slot;
-        return livingPeers[0];
+        if (bestPeer) {
+            this.spectateSlot = bestPeer.slot;
+        }
+        return bestPeer;
     }
 
     cycleSpectateTarget(dir = 1) {
