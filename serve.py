@@ -123,24 +123,11 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
         current_ip_count = ip_conns.get(client_ip, 0)
         if current_ip_count >= MAX_CONNS_PER_IP:
             safe_close(sock)
-            return
-
-        if room_id not in rooms:
-            if len(rooms) >= MAX_ROOMS:
-                safe_close(sock)
-                return
-            try:
-                sock.close()
-            except Exception:
-                pass
             return False, None, None, None, None, None
 
         if room_id not in rooms:
             if len(rooms) >= MAX_ROOMS:
-                try:
-                    sock.close()
-                except Exception:
-                    pass
+                safe_close(sock)
                 return False, None, None, None, None, None
             rooms[room_id] = []
 
@@ -154,7 +141,6 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
             except Exception:
                 pass
             safe_close(sock)
-            return
             return False, None, None, None, None, None
 
         peer_count = len(rooms[room_id])
@@ -320,8 +306,6 @@ def _run_ws_message_loop(sock, sock_lock, room_id, role, slot):
             except Exception:
                 pass
             break
-            if is_masked and mask and length > 0:
-                payload = bytes(p ^ m for p, m in zip(payload, itertools.cycle(mask)))
 
         if err or opcode is None:
             break
