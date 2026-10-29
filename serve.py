@@ -74,7 +74,9 @@ def is_allowed_origin(origin):
         "run-escape.cuteanimegirls.moe",
         "167.71.157.5"
     }
-    return host_only in allowed_hosts or host_only.endswith(".cuteanimegirls.moe")
+    return host_only in allowed_hosts or (
+        host_only.endswith(".cuteanimegirls.moe") and not host_only.startswith(".")
+    )
 
 def sanitize_room_id(raw_room):
     if not raw_room or not isinstance(raw_room, str):
