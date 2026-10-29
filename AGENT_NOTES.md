@@ -57,6 +57,24 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 
 ## 3. Chronological Agent Handoff Log
 
+### 2026-10-29 - Claude Code - Debug stat panel (debug-mode.js v7.6)
+- **Commit / PR**: working tree on `main`; not yet committed
+- **Files Modified**: `assets/debug-mode.js`, `index.html` (only the `debug-mode.js` tag, `?v=7.5` -> `?v=7.6`)
+- **Bundle / Version Impact**: None to the engine bundle or `multiplayer.js`, so the other 5 entry points keep `?v=7.5`.
+- **What Changed**:
+  - **Turning it on**: `debugmode` still turns debug mode on with the old god-mode preset (1M HP, max armour, invulnerable, Shift 3x sprint); `bugmode` turns it off.
+  - **Panel**: while debug mode is on, `\` (`KeyboardEvent.code === "Backslash"`) opens a panel of notched sliders, plus an Invulnerable checkbox and "God mode preset" / "All normal" buttons. Settings persist in `localStorage` under `runEscapeDebugPanel`.
+  - **Sliders and how they apply**:
+    - Max HP: override.
+    - Armour, regen, thorns, heal chance, pickup range, damage % (`might`), range/attack size (`area`), projectile speed, extra projectiles (`amount`), duration, luck, XP and coin gain: added on top of the game's own stats in a `sim.updateStats` wrapper.
+    - Move speed 1-10x and Shift sprint 1-10x: `sim.stepPlayer` wrapper.
+    - Attack speed 1-10x: `sim.cooldownTicks` wrapper, which bypasses the game's 60% / 5-tick cooldown cap, minimum 1 tick.
+    - Base damage: flat amount added to each hit in a `sim.damageEnemy` wrapper.
+  - **Co-op**: the guest's `coop_debug` message now carries `{on, invuln, hp}`, so the host applies the guest's chosen max HP and only tops it up when it's invulnerable.
+- **Notes / Invariants for Future Agents**:
+  - Offence sliders only affect the local simulation. In co-op the host fires guests' weapons, so a guest's damage, attack speed and range sliders don't change their attacks; HP, invulnerability and movement do sync.
+  - Still **MUST BE REMOVED IF WE GO LIVE**: delete `assets/debug-mode.js`, its tag and comment in `index.html`, and `coop_debug` in both `serve.py` allowlists.
+
 ### 2026-10-29 - Antigravity - Adjust Healing Buffs (1/3rd), Decouple Rapid Heal from Blood Barrage & Fix Seq 1979 + SpotAnim 377 (v7.5)
 - **Commit / PR**: Healing balance & Blood Barrage animation fix (`?v=7.5`)
 - **Files Modified**: `index.html`, `assets/index-XWbnxuVz.js`, `assets/multiplayer.js`, `assets/multiplayer/mp-*.js`, `assets/MapViewerApp-DKojfbH1.js`, `assets/RenderDataWorker-CRRhTJTb.js`, `assets/module-Cg9b2g3N.js`, `assets/module-C9loB8SI.js`, `scripts/patches/01-core-engine.patch.js`, `scripts/patches/04-characters.patch.js`, `scripts/patches/05-weapons-passives.patch.js`, `caches/caches.json`, `caches/osrs-241_2026-09-30-slim-4cd931ae/main_file_cache.{dat2,idx0,idx7}`, `AGENT_NOTES.md`
