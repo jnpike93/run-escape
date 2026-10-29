@@ -1,5 +1,27 @@
 import unittest
-from serve import is_allowed_origin
+from serve import is_allowed_origin, safe_close
+from unittest.mock import MagicMock
+
+class TestSafeClose(unittest.TestCase):
+    def test_safe_close_valid_socket(self):
+        mock_sock = MagicMock()
+        safe_close(mock_sock)
+        mock_sock.close.assert_called_once()
+
+    def test_safe_close_socket_raising_exception(self):
+        mock_sock = MagicMock()
+        mock_sock.close.side_effect = Exception("Socket error")
+        try:
+            safe_close(mock_sock)
+        except Exception as e:
+            self.fail(f"safe_close raised an exception: {e}")
+        mock_sock.close.assert_called_once()
+
+    def test_safe_close_none(self):
+        try:
+            safe_close(None)
+        except Exception as e:
+            self.fail(f"safe_close(None) raised an exception: {e}")
 
 class TestOriginValidation(unittest.TestCase):
     def test_valid_origins(self):
