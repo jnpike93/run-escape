@@ -12,7 +12,7 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './mp-constants.js?v=7.7';
+} from './mp-constants.js?v=7.8';
 
 export const mpLobbyUiMethods = {
     syncLocalToLobbyPlayers() {

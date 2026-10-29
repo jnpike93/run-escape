@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Co-Op Pickups & Shared Loot Methods
-import { sanitizeSlot } from './mp-constants.js?v=7.7';
+import { sanitizeSlot } from './mp-constants.js?v=7.8';
 
 export const mpPickupsMethods = {
     applyCoopPickup(msg) {

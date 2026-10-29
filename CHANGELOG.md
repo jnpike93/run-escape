@@ -1,0 +1,314 @@
+# Changelog
+
+What's changed in Run Escape, newest first. The game shows this on its title screen too (click
+the version in the corner), so it's written for players.
+
+## Custom Edition Updates (v7.7)
+
+### Balance & Combat Adjustments
+
+- **Rapid Heal**: Rebalanced to **+2.5 HP/min per level** (+12.5 HP/min at level 5). Taking any hit pauses Rapid Heal regeneration for **5 seconds**.
+- **Blood Burst -> Blood Barrage**: Evolving Blood Burst into Blood Barrage at level 8 no longer requires the Rapid Heal passive. Blood Barrage now plays the authentic **OSRS Ancient Magicks casting animation (Seq 1979)** for its full duration and renders the **Blood Barrage vortex visual (SpotAnim 377)** on impacted targets.
+- **Healing Rebalance**: Reduced healing from **Blood Burst** (0.33 HP per hit), **Blood Barrage** (0.67 HP per hit), **Sanfew serum** (+7 HP on pickup), and **Saradomin brew** (+5 HP per dose) to one-third of previous values.
+
+### New Content & Modes
+
+- **Co-Op Multiplayer & Damage Leaderboard**: Real-time WebRTC Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard.
+- **Fight Caves & Inferno Bosses**: Enter the **Fight Caves** map featuring **TzTok-Jad** at 6:00 and **TzKal-Zuk** at 12:00, complete with **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks.
+- **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge to complete the quest for bonus XP, coins, and a guaranteed chest.
+- **Secret Adventurers**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave) and **Elias the Chihuahua** (Ankle Bite).
+
+### Quality of Life
+
+- **Pause Menu & HUD**: Hovering weapons, passives, and equipment in the Pause menu displays item effects exclusively in the dedicated Pause menu info box without a duplicate floating tooltip. Added **UI Scale** (**Auto**, **1x**, **1.25x**, **1.5x**) and **Tile Coordinates** toggles in Settings.
+
+## 0.13.0 - 2026-10-29
+
+### Added
+
+- **Quests**, on the title screen: 22 of them, named for OSRS quests, that pay banked coins when
+  they're done. Kill goblins for Goblin Diplomacy, Count Draynor for Vampyre Slayer, Fareed,
+  Dessous and Damis for Desert Treasure I, Vorkath for Dragon Slayer II; open caskets for
+  Pirate's Treasure. They count over as many runs as they take, and each pays once (100 to 1,500
+  coins), when the run that finishes it ends. Kills and caskets count from this version on.
+- **Amulet of blood fury**, a Rare amulet from reward caskets: +4% damage, and a 20% chance that
+  a hit from any of your weapons heals you 2 hitpoints (one hit a second gets the chance). Upgrade
+  it in the Armoury through Amulet of blood fury 2, 3 and 4, each likelier to heal than the last.
+
+### Changed
+
+- **Bones gather into piles**: bones lying close together slide into one pile worth all of their
+  experience, so a crowd leaves a few piles instead of a carpet. A pile shows what it's worth as
+  it grows, from Bones and Big bones up through Dragon, Wyvern and Lava dragon bones to Superior
+  dragon bones. Coins gather into bigger stacks the same way.
+- **Blood Burst heals more**: 5% of its hits heal you, up from 3%, and by 2 instead of 1.
+- **Old-school scroll bars**: menus that scroll get a bevelled brown bar in a dark track, like
+  the old client's.
+
+## 0.12.0 - 2026-10-28
+
+### Added
+
+- **Fun maps**, open from the start and endless from the start: no final boss, a new round every
+  fifteen minutes, and bosses that turn up at random every few minutes instead of on a schedule.
+  Everyone on them is another player, in real gear, and they talk.
+    - **Grand Exchange**: spam bots, scammers in partyhats and gilded armour, lurers in team capes,
+      gold farmers, fake moderators and merchants. Bosses: the Doubler (his trust trade takes some
+      of your coins until he's dealt with), the Lure master and the Bot farmer.
+    - **East Varrock**: the Wilderness, just past the ditch. Free-to-play pkers in multi, in
+      nothing members get: clan noobs, rangers, mages, pures and tanks, and the ones coming up from
+      Varrock jump the ditch to get at you. Bosses: a Clan leader who calls the pile, a Rune 2h
+      pure and a Wildy mage.
+    - **Falador**: 6 June 2006, world 111. You play Durial321, in Ahrim's robes and long white
+      hair, with his whip, fire cape, obsidian shield and the green partyhat, while all of Falador
+      begs to be killed and Massacre plays quietly in the background. Ur fault. Bosses: a Player
+      moderator, Cursed You (in his trimmed Construction cape) and Mod Murdoch.
+    - **Last Man Standing**: the Desert Island, everyone in LMS loadouts and chest loot. Bosses:
+      an AGS specer, a Claws specer and a Dharok's sweat.
+- Rangers and mages on the fun maps shoot back, a little. Rangers are rare, and their arrows are
+  slow enough to step out of the way of.
+- Four adventurers from the fun maps: the **Scammer** (survive 10 minutes on the Grand Exchange),
+  the **F2P pker** (kill the Clan leader in East Varrock), **Durial321** (survive 6:06 in
+  Falador) and the **LMS sweat** (kill the AGS specer in Last Man Standing).
+
+### Changed
+
+- The **Monk** is weaker: weapons are 15% faster, down from 25%. That bonus reached the weapon
+  speed cap early and sped up every weapon the Monk picked up, not just Saradomin Strike.
+- **Endless runs pay fewer coins** (fun maps included): half of what a normal run would, and
+  less again each round as the crowds get bigger. Bigger crowds, more caskets and upgraded gear
+  to alch made one long run worth dozens of normal ones.
+- Endless rounds get harder a bit faster: enemies have 3.3x the hitpoints of the round before (up
+  from 3x) and hit 1.7x as hard (up from 1.6x).
+
+## 0.11.0 - 2026-10-28
+
+### Added
+
+- **Endless**: beat a map to play it endless, with the switch by the start button. Killing the
+  final boss starts the next round instead of winning: the map comes round again from five minutes
+  in, with more monsters that have three times the hitpoints, hit harder and leave better bones.
+  It goes on until you fall, and each map keeps your furthest run.
+- In endless runs, weapons and passives level on past their last level (Abyssal whip +3), and
+  each level past the last makes the weapon hit harder still. Movement and weapon speed,
+  projectiles, luck and effect duration stop where they are.
+- Endless caskets bring gear upgraded once for each round after the first (a Slayer helmet +2 has
+  twice its damage and armour). Food, potions, chinchompas, cannons and thralls get stronger with
+  the rounds too, and each round's final boss drops a master casket.
+- **Armoury**, on the title screen: upgrade the gear you've found in caskets for good, with your
+  banked coins. Each upgrade takes a piece a step along its line, and from then on it comes out
+  of every casket as what it's become: an Amulet of strength turns into an Amulet of power, then
+  an Amulet of torture, and last an Amulet of torture (or). Lines follow OSRS where they can (the
+  Fire cape to the Infernal cape, Recipe for Disaster's gloves, the boss boots) and end in
+  ornament kits, imbues, Twisted ancestral, Masori (f) and the Avernic treads, each with a new
+  look and a quarter more of its stats. The results screen says what's new in the Armoury after
+  a run.
+
+### Changed
+
+- Scenery standing on its own only blocks where it stands: a signpost its post, a tree its trunk,
+  a bush its middle. Scenery in rows and clumps blocks a little less than its tiles, so you no
+  longer catch on any of it from a step away. Water, walls and fences block as before, and nothing
+  can squeeze through anywhere it couldn't already.
+- The world fades to black past the edge of the map, so you can see where it ends instead of
+  walking into an invisible wall. A few blockers that weren't drawn at all are gone too.
+
+### Fixed
+
+- Bones left behind across the map no longer keep their experience for good once there are too
+  many lying around: the furthest pile comes to where the newest bones fall instead.
+
+## 0.10.1 - 2026-10-28
+
+### Added
+
+- **Auto-pause** in Settings and the pause menu: turn it off and a run keeps going when you click
+  away from the game.
+- A link to the Run Escape Discord on the title screen.
+
+### Changed
+
+- A new adventurer screen with room for everyone: adventurers down the left as tiles by how they
+  fight, maps down the right, and the adventurer you pick standing between them. Point at one (or
+  tap it) to see what it does, or what it takes to unlock.
+- **Settings** on the title screen hold the sound, camera spin, auto-pause and save export and
+  import.
+
+## 0.10.0 - 2026-10-27
+
+### Added
+
+- Five more maps after the Wilderness, each opened by beating the one before: the Kharidian
+  Desert, the Fremennik Province, Karamja, Kourend and Varlamore. Each has its own monsters, three
+  mid-run bosses and a final boss: the Kalphite Queen, Vorkath, TzTok-Jad, the Alchemical Hydra
+  and Sol Heredit.
+- Ten more adventurers, two for each new map: the Nomad, Menaphite, Seer, Berserker, Obby mauler,
+  Pirate, Pyromancer, Shayzien soldier, Gladiator and Javelineer.
+- **Unlocks**: from the Desert on, beating a map or killing one of its bosses brings a weapon, a
+  passive or a piece of gear into every run after. Each map lists its tasks and what they bring.
+- Class weapons from the new maps: Osmumten's fang, the Tzhaar-ket-om, the Dragon warhammer and
+  the Dual macuahuitl (Melee); the Dragon hunter crossbow and the Eclipse atlatl (Ranged); the
+  Kodai wand and the Blue moon spear (Magic).
+- The rest of the Ancient bursts: Smoke Burst poisons, Shadow Burst makes what it hits take 20%
+  more damage and Blood Burst now and then heals you. You carry only one burst.
+- Four evolutions: Astral runes, Toktz-xil-ul, Undead Grasp and the Colossal blade.
+- **Rerolls**: one a run, and one more for each rank of the new Hunter skill. Use one on a level
+  up's choices or a casket's item, with the button under them or R.
+- **Export save** and **Import save** on the title screen, to keep a copy of your progress or
+  take it to another browser.
+- Thrownaxes (Common): thrown at the nearest enemy, they bounce on to more of them as they go from
+  bronze to dragon.
+- Elemental runes (Common): runes circle you for a few seconds, knocking back what they hit. Air
+  to start, then water, earth and fire.
+- The Toxic blowpipe (Rare, Ranged): darts that leave venom in what they hit. It aims for enemies
+  without venom, so the venom spreads through a crowd.
+- The Sanguinesti staff (Rare, Magic): blood blasts, and one hit in six heals you.
+
+### Changed
+
+- The Harmonised nightmare staff was far ahead of every other weapon against a crowd. It now casts
+  every 0.8 seconds at first and every 0.7 at best (was 0.6 and 0.5), and its last level no longer
+  brings faster casting, a bigger splash and pierce all at once.
+- Antidote++ and Sanfew serum only turn up on maps where something poisons you.
+
+## 0.9.0 - 2026-10-26
+
+### Added
+
+- Adventurers join for beating a map or doing a task on it, instead of being bought with coins.
+  Locked ones say what they want, and the town crier's bell rings when a task is done.
+- Six more adventurers: the Monk, Barbarian, Ancient mage, Hunter, Rogue and Dragon slayer.
+- Two new Common weapons: 2h swords (bronze to dragon) and shortbows (normal to magic).
+
+### Changed
+
+- You have 25 hitpoints instead of 100, and up to 50 with the Hitpoints skill. Healing and boss
+  hits are scaled to match, and food drops less often.
+- The adventurer screen is three columns wide, so it fits on a smaller window.
+
+## 0.8.0 - 2026-10-26
+
+### Added
+
+- 48 more pieces of gear (Barrows armour, Armadyl, Ancestral, the Infernal cape, Pegasian and
+  Eternal boots, an Avernic defender, Lightbearer and more) and 10 more utility items, among them
+  Saradomin brews and antidotes that cure poison and boss drains.
+- Bosses enrage at half their hitpoints: they attack more often, move faster, glow red and bring
+  out attacks they held back. Count Draynor and the melee Barrows brothers leap at you, and the
+  Wise Old Man calls in dark wizards.
+- A button on the title screen stops the menu camera spinning. It starts off if your system asks
+  for reduced motion.
+
+### Changed
+
+- Bosses have about 25% more hitpoints and hit a little harder.
+- The hosted game downloads a 12 MB cache instead of the full 217 MB one.
+
+## 0.7.0 - 2026-10-26
+
+### Added
+
+- A minimap, with the client's frame and compass, and dots for enemies, elites, bosses, caskets
+  and power-ups.
+- The Barrows and the Wilderness have their own monsters instead of Lumbridge's: crypt rats,
+  bloodworms, ghouls and feral vampyres in the Barrows; revenants, bandits, chaos druids, the
+  Ankou and hill giants in the Wilderness.
+
+### Changed
+
+- The game is called Run Escape.
+- The interface is drawn bigger on bigger windows, up to twice its size.
+- The game can be hosted in a folder (like https://example.com/game/).
+
+## 0.6.0 - 2026-10-26
+
+### Added
+
+- **Power-ups** drop now and then from anything but bosses, about one every minute and a half:
+  the Dwarf multicannon, the Book of the Dead (a thrall fights beside you), the Bot nuke, a Magnet
+  and the Giant stopwatch.
+
+### Changed
+
+- The Dwarf multicannon is a power-up instead of a weapon, and the Dwarf engineer is out of the
+  game for now. Saves keep it unlocked for when it's back.
+- Thralls and the cannon are drawn bigger, and hitsplats smaller.
+
+### Fixed
+
+- Cannonballs hit only what they're fired at. They used to splash everything in the cannon's
+  range.
+- Hitsplat numbers sit in the middle of their splats, and are sharp.
+
+## 0.5.0 - 2026-10-26
+
+### Added
+
+- **Class weapons**: every adventurer fights with Melee, Ranged or Magic, and only they are
+  offered their class's weapons. Very rare ones turn up in about one run in twenty.
+- Melee: the Scythe of Vitur (Very rare), and four godswords (Rare) whose every third swing is
+  their special attack.
+- Ranged: the Twisted bow (Very rare), which hits harder the more hitpoints its target has, and
+  the Bow of Faerdhinen (Rare).
+- Magic: Tumeken's shadow (Very rare) and the Harmonised nightmare staff (Rare).
+
+## 0.4.0 - 2026-10-26
+
+### Added
+
+- **Maps** that open in turn: Lumbridge, then the Barrows, then the Wilderness. Beating a map's
+  final boss opens the next, and enemies are tougher on each.
+- The Barrows: all six brothers, each with his set effect, and Dharok last as the final boss.
+- The Wilderness: the Crazy archaeologist and the Chaos Fanatic, then the King Black Dragon as the
+  final boss.
+
+### Changed
+
+- Lumbridge keeps Count Draynor and the Wise Old Man. The Barrows brothers and the King Black
+  Dragon moved to their own maps.
+
+## 0.3.0 - 2026-10-26
+
+### Added
+
+- **Bosses** during a run, each fighting the way it does in OSRS: Dharok, Karil, Count Draynor,
+  Ahrim and the King Black Dragon. Big hits are wound up with a red circle where they'll land.
+  Bosses drop elite caskets, and master caskets now and then.
+- The Wise Old Man is the final boss, with Fire Wave, Ice Barrage, teleports and a grab for your
+  coins.
+- You can be frozen, poisoned and drained.
+
+### Changed
+
+- Count Draynor rises at 7:30 instead of at the end, bites to heal and calls in bats.
+- Hitsplats are the client's own, and show on you too.
+
+## 0.2.0 - 2026-10-26
+
+### Added
+
+- **Reward caskets** hold real items, in clue scroll tiers from easy to elite. Opening one pauses
+  the run while it bursts open; then equip, keep, use or high alch what's inside.
+- **Gear** in the OSRS equipment slots, worn for the run and drawn on your character: 45 pieces
+  from a Rune full helm to a Fire cape.
+- **Utility items** in a 4 slot inventory, used with 1-4: food, potions, a Bonecrusher,
+  chinchompas and an Antique lamp.
+- Loot beams on caskets, and an arrow pointing to ones out of view.
+
+### Fixed
+
+- The multicannon aimed away from what it shot.
+- Item icons were drawn inside out.
+- Health bars look like the client's, and sit over heads.
+
+## 0.1.0 - 2026-10-26
+
+### Added
+
+- The first playable version: survive fifteen minutes in Lumbridge, the swamp and Draynor against
+  hordes of chickens, goblins, zombies and ghosts, until Count Draynor rises.
+- Weapons that upgrade the OSRS way (scimitars, Fire Strike to Fire Wave, throwing knives),
+  passives, evolutions and rarities.
+- Levels on the OSRS experience table, with a choice of three upgrades each.
+- Coins banked between runs for permanent skills, and an adventurer to unlock.
+- Sound effects synthesized from the cache the way the client does it.
