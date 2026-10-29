@@ -6,18 +6,18 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=8.1` - Upstream `0.14.0`)
+### Current Active Asset Files (Version `?v=8.2` - Upstream `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.1`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.2`) |
 | **Main Engine Bundle** | [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) | `index.html`, `MapViewerApp-BeWD02jr.js`, `module-D8WM9OnE.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.1`, imports `assets/multiplayer/mp-*.js?v=8.1`) |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.2`, imports `assets/multiplayer/mp-*.js?v=8.2`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Symbol Discovery & Patcher** | [`scripts/apply_patches.js`](./scripts/apply_patches.js) | `scripts/discover_symbols.js` + `scripts/patches/01..06-*.patch.js` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.1`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.1`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.1`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.1`) |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.2`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.2`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.2`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.2`) |
 | **Map Viewer Bundle** | [`assets/MapViewerApp-BeWD02jr.js`](./assets/MapViewerApp-BeWD02jr.js) | `assets/index-BucZ8BnA.js` |
 | **Render Worker** | [`assets/RenderDataWorker-ago4Edys.js`](./assets/RenderDataWorker-ago4Edys.js) | `assets/index-BucZ8BnA.js` |
 | **Worker WASM Loader** | [`assets/module-CSC3QDlL.js`](./assets/module-CSC3QDlL.js) | `assets/RenderDataWorker-ago4Edys.js` (`module-yzz5kVyQ.wasm`) |
@@ -56,6 +56,15 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Unlock All Levels & Endless Mode with `l33th4x0r` Code (v8.2)
+- **Commit / PR**: `l33th4x0r` level & Endless mode unlock (`?v=8.2`)
+- **Files Modified**: `scripts/patches/01-core-engine.patch.js`, `scripts/patches/03-maps.patch.js`, `assets/index-BucZ8BnA.js`, `assets/MapViewerApp-BeWD02jr.js`, `assets/RenderDataWorker-ago4Edys.js`, `assets/module-CSC3QDlL.js`, `assets/module-D8WM9OnE.js`, `assets/multiplayer.js`, `index.html`, `sw.js`, `CHANGELOG.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=8.1` to `?v=8.2`.
+- **What Changed**:
+  - Updated `Zr(i, t)` (`MapUnlockCheck`) and `bh(i, t)` (Endless mode unlock check) in `scripts/patches/03-maps.patch.js` to return `true` when `i?.unlockedCodes?.includes("l33th4x0r")`.
+  - Updated `redeemCode("l33th4x0r")` toast and confirmation message in `scripts/patches/01-core-engine.patch.js` to indicate that all characters and levels are unlocked.
+  - Updated `CHANGELOG.md` and the embedded fallback changelog in `scripts/patches/01-core-engine.patch.js`.
 
 ### 2026-10-29 - Antigravity - Upstream 0.14.0 Merge (Morytania, GWD, Prifddinas, Inferno, Castle Wars, Pest Control, 10 Adventurers, Gear Sets) (v8.1)
 - **Commit / PR**: Upstream `0.14.0` (`index-BucZ8BnA.js`) merge (`?v=8.1`, CacheStorage `-v12`)

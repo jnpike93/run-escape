@@ -3,7 +3,7 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner), so it's written for players.
 
-## Custom Edition Updates (v8.1)
+## Custom Edition Updates (v8.2)
 
 ### Balance & Combat Adjustments
 
@@ -15,7 +15,7 @@ the version in the corner), so it's written for players.
 - **Co-Op Multiplayer & Damage Leaderboard**: Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard (now supporting all `0.14.0` maps, adventurers, and bosses).
 - **Fight Caves & Inferno Bosses**: Enter the **Fight Caves** map, complete with **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge to complete the quest for bonus XP, coins, and a guaranteed chest.
-- **Secret Adventurers**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave) and **Elias the Chihuahua** (Ankle Bite).
+- **Secret Adventurers & Codes**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave), **Elias the Chihuahua** (Ankle Bite), or all adventurers, levels, and Endless mode.
 
 ### Quality of Life
 
