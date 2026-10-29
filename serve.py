@@ -1,5 +1,4 @@
 import http.server
-import socketserver
 import urllib.parse
 import hashlib
 import base64
@@ -10,6 +9,7 @@ import json
 import re
 import os
 import sys
+import itertools
 
 def _get_default_port():
     port_env = os.environ.get("PORT")
@@ -74,7 +74,9 @@ def is_allowed_origin(origin):
         "run-escape.cuteanimegirls.moe",
         "167.71.157.5"
     }
-    return host_only in allowed_hosts or host_only.endswith(".cuteanimegirls.moe")
+    return host_only in allowed_hosts or (
+        host_only.endswith(".cuteanimegirls.moe") and not host_only.startswith(".")
+    )
 
 def sanitize_room_id(raw_room):
     if not raw_room or not isinstance(raw_room, str):
@@ -105,16 +107,11 @@ def read_exact(sock, n):
             return None
     return bytes(buf)
 
-def handle_ws_client(sock, room_id, client_ip):
-    sock.settimeout(SOCKET_TIMEOUT)
-    try:
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    except OSError:
-        pass
-    sock_lock = threading.Lock()
-    registered = False
-    role = "guest"
-
+def _register_ws_client(sock, sock_lock, room_id, client_ip):
+    """
+    Registers client connection in ip_conns and rooms datastructures under rooms_lock.
+    Returns (success, role, slot, host_slot, active_slots, peer_count).
+    """
     with rooms_lock:
         current_ip_count = ip_conns.get(client_ip, 0)
         if current_ip_count >= MAX_CONNS_PER_IP:
@@ -122,7 +119,7 @@ def handle_ws_client(sock, room_id, client_ip):
                 sock.close()
             except Exception:
                 pass
-            return
+            return False, None, None, None, None, None
 
         if room_id not in rooms:
             if len(rooms) >= MAX_ROOMS:
@@ -130,7 +127,7 @@ def handle_ws_client(sock, room_id, client_ip):
                     sock.close()
                 except Exception:
                     pass
-                return
+                return False, None, None, None, None, None
             rooms[room_id] = []
 
         if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
@@ -143,7 +140,7 @@ def handle_ws_client(sock, room_id, client_ip):
                 sock.close()
             except Exception:
                 pass
-            return
+            return False, None, None, None, None, None
 
         peer_count = len(rooms[room_id])
         used_slots = {p[3] for p in rooms[room_id] if len(p) > 3}
@@ -158,198 +155,262 @@ def handle_ws_client(sock, room_id, client_ip):
         active_slots = [p[3] for p in rooms[room_id]]
         host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
         ip_conns[client_ip] = current_ip_count + 1
-        registered = True
+        return True, role, slot, host_slot, active_slots, peer_count
 
+
+def _send_ws_welcome_and_notify_joined(sock, sock_lock, room_id, role, slot, host_slot, active_slots, peer_count):
+    """
+    Sends welcome message to the connecting socket and notifies existing peers in the room.
+    """
     try:
-        # Send welcome packet serialized via json.dumps
-        try:
-            welcome = encode_ws_frame(json.dumps({
-                "type": "welcome",
-                "role": role,
-                "slot": slot,
-                "hostSlot": host_slot,
-                "activeSlots": active_slots,
-                "peers": peer_count + 1,
-                "room": room_id
-            }))
-            with sock_lock:
-                sock.sendall(welcome)
-        except Exception:
-            return
+        welcome = encode_ws_frame(json.dumps({
+            "type": "welcome",
+            "role": role,
+            "slot": slot,
+            "hostSlot": host_slot,
+            "activeSlots": active_slots,
+            "peers": peer_count + 1,
+            "room": room_id
+        }))
+        with sock_lock:
+            sock.sendall(welcome)
+    except Exception:
+        return False
 
-        # Notify existing peers that a new player joined (outside rooms_lock)
-        if peer_count > 0:
-            joined_msg = encode_ws_frame(json.dumps({
-                "type": "peer_joined",
-                "role": role,
-                "slot": slot,
-                "hostSlot": host_slot,
-                "activeSlots": active_slots,
-                "peers": peer_count + 1
-            }))
-            with rooms_lock:
-                peers = list(rooms.get(room_id, []))
-            for peer_sock, peer_lock, _, _ in peers:
-                if peer_sock != sock:
-                    try:
-                        with peer_lock:
-                            peer_sock.sendall(joined_msg)
-                    except Exception:
-                        pass
-
-        while True:
-            head = read_exact(sock, 2)
-            if not head:
-                break
-            b0, b1 = head[0], head[1]
-            opcode = b0 & 0x0F
-            is_masked = bool(b1 & 0x80)
-            length = b1 & 0x7F
-
-            if length == 126:
-                ext = read_exact(sock, 2)
-                if not ext:
-                    break
-                length = struct.unpack("!H", ext)[0]
-            elif length == 127:
-                ext = read_exact(sock, 8)
-                if not ext:
-                    break
-                length = struct.unpack("!Q", ext)[0]
-
-            if length > MAX_FRAME_SIZE:
-                close_payload = struct.pack("!H", 1009) + b"Frame payload exceeds maximum size"
-                try:
-                    with sock_lock:
-                        sock.sendall(encode_ws_frame(close_payload, opcode=8))
-                except Exception:
-                    pass
-                break
-
-            mask = read_exact(sock, 4) if is_masked else None
-            payload = read_exact(sock, length)
-            if payload is None:
-                break
-
-            if is_masked and mask and length > 0:
-                mask_rep = (mask * (length // 4 + 1))[:length]
-                payload = (int.from_bytes(payload, "big") ^ int.from_bytes(mask_rep, "big")).to_bytes(length, "big")
-
-            if opcode == 8:  # close
-                break
-            elif opcode == 9:  # ping
-                pong = encode_ws_frame(payload[:125], opcode=10)
-                try:
-                    with sock_lock:
-                        sock.sendall(pong)
-                except Exception:
-                    break
-            elif opcode == 1:  # text JSON frame only
-                try:
-                    decoded_text = payload.decode("utf-8")
-                    parsed_msg = json.loads(decoded_text)
-                except Exception:
-                    continue
-
-                if not isinstance(parsed_msg, dict):
-                    continue
-
-                msg_type = parsed_msg.get("type")
-                if not isinstance(msg_type, str):
-                    continue
-
-                if msg_type == "ping":
-                    try:
-                        with sock_lock:
-                            sock.sendall(encode_ws_frame('{"type":"pong"}'))
-                    except Exception:
-                        break
-                    continue
-
-                with rooms_lock:
-                    room_entries = list(rooms.get(room_id, []))
-                    current_role = role
-                    current_slot = slot
-                    for p_sock, _, p_role, p_slot in room_entries:
-                        if p_sock == sock:
-                            current_role = p_role
-                            current_slot = p_slot
-                            break
-
-                allowed_types = HOST_ALLOWED_MSG_TYPES if current_role == "host" else GUEST_ALLOWED_MSG_TYPES
-                if msg_type not in allowed_types:
-                    continue
-
-                parsed_msg["senderSlot"] = current_slot
-                relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
-                relay = encode_ws_frame(relay_payload, opcode=1)
-                for peer_sock, peer_lock, _, _ in room_entries:
-                    if peer_sock != sock:
-                        try:
-                            with peer_lock:
-                                peer_sock.sendall(relay)
-                        except Exception:
-                            pass
-    finally:
-        notify_peers = []
-        departing_role = role
-        departing_slot = slot
-        promoted_host = False
-        new_host_slot = None
-        active_slots_after = []
-
-        if registered:
-            with rooms_lock:
-                if client_ip in ip_conns:
-                    ip_conns[client_ip] = max(0, ip_conns[client_ip] - 1)
-                    if ip_conns[client_ip] == 0:
-                        del ip_conns[client_ip]
-
-                if room_id in rooms:
-                    remaining = []
-                    for p_sock, p_lock, p_role, p_slot in rooms[room_id]:
-                        if p_sock == sock:
-                            departing_role = p_role
-                            departing_slot = p_slot
-                        else:
-                            remaining.append((p_sock, p_lock, p_role, p_slot))
-
-                    if remaining and not any(p[2] == "host" for p in remaining):
-                        first_sock, first_lock, _, first_slot = remaining[0]
-                        remaining[0] = (first_sock, first_lock, "host", first_slot)
-                        promoted_host = True
-                        new_host_slot = first_slot
-                    elif remaining:
-                        new_host_slot = next((p[3] for p in remaining if p[2] == "host"), remaining[0][3])
-
-                    if remaining:
-                        rooms[room_id] = remaining
-                        notify_peers = list(remaining)
-                        active_slots_after = [p[3] for p in remaining]
-                    else:
-                        del rooms[room_id]
-
-        if notify_peers:
-            left_msg = encode_ws_frame(json.dumps({
-                "type": "peer_left",
-                "role": departing_role,
-                "slot": departing_slot,
-                "promotedToHost": promoted_host,
-                "newHostSlot": new_host_slot,
-                "activeSlots": active_slots_after,
-                "peers": len(notify_peers)
-            }))
-            for peer_sock, peer_lock, _, _ in notify_peers:
+    if peer_count > 0:
+        joined_msg = encode_ws_frame(json.dumps({
+            "type": "peer_joined",
+            "role": role,
+            "slot": slot,
+            "hostSlot": host_slot,
+            "activeSlots": active_slots,
+            "peers": peer_count + 1
+        }))
+        with rooms_lock:
+            peers = list(rooms.get(room_id, []))
+        for peer_sock, peer_lock, _, _ in peers:
+            if peer_sock != sock:
                 try:
                     with peer_lock:
-                        peer_sock.sendall(left_msg)
+                        peer_sock.sendall(joined_msg)
                 except Exception:
                     pass
+    return True
 
+
+def _read_ws_frame(sock):
+    """
+    Reads a single WebSocket frame from the socket.
+    Returns (opcode, payload, error_flag).
+    If connection closed or invalid header, returns (None, None, "EOF").
+    If payload size exceeds MAX_FRAME_SIZE, returns (opcode, None, "TOO_LARGE").
+    """
+    head = read_exact(sock, 2)
+    if not head:
+        return None, None, "EOF"
+    b0, b1 = head[0], head[1]
+    opcode = b0 & 0x0F
+    is_masked = bool(b1 & 0x80)
+    length = b1 & 0x7F
+
+    if length == 126:
+        ext = read_exact(sock, 2)
+        if not ext:
+            return None, None, "EOF"
+        length = struct.unpack("!H", ext)[0]
+    elif length == 127:
+        ext = read_exact(sock, 8)
+        if not ext:
+            return None, None, "EOF"
+        length = struct.unpack("!Q", ext)[0]
+
+    if length > MAX_FRAME_SIZE:
+        return opcode, None, "TOO_LARGE"
+
+    mask = read_exact(sock, 4) if is_masked else None
+    payload = read_exact(sock, length)
+    if payload is None:
+        return None, None, "EOF"
+
+    if is_masked and mask and length > 0:
+        mask_rep = (mask * (length // 4 + 1))[:length]
+        payload = (int.from_bytes(payload, "big") ^ int.from_bytes(mask_rep, "big")).to_bytes(length, "big")
+
+    return opcode, payload, None
+
+
+def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
+    """
+    Processes opcode 1 (text JSON frame), handles ping messages and relays allowed types to room peers.
+    """
+    try:
+        decoded_text = payload.decode("utf-8")
+        parsed_msg = json.loads(decoded_text)
+    except Exception:
+        return True
+
+    if not isinstance(parsed_msg, dict):
+        return True
+
+    msg_type = parsed_msg.get("type")
+    if not isinstance(msg_type, str):
+        return True
+
+    if msg_type == "ping":
         try:
-            sock.close()
+            with sock_lock:
+                sock.sendall(encode_ws_frame('{"type":"pong"}'))
         except Exception:
-            pass
+            return False
+        return True
+
+    with rooms_lock:
+        room_entries = list(rooms.get(room_id, []))
+        current_role = role
+        current_slot = slot
+        for p_sock, _, p_role, p_slot in room_entries:
+            if p_sock == sock:
+                current_role = p_role
+                current_slot = p_slot
+                break
+
+    allowed_types = HOST_ALLOWED_MSG_TYPES if current_role == "host" else GUEST_ALLOWED_MSG_TYPES
+    if msg_type not in allowed_types:
+        return True
+
+    parsed_msg["senderSlot"] = current_slot
+    relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
+    relay = encode_ws_frame(relay_payload, opcode=1)
+    for peer_sock, peer_lock, _, _ in room_entries:
+        if peer_sock != sock:
+            try:
+                with peer_lock:
+                    peer_sock.sendall(relay)
+            except Exception:
+                pass
+    return True
+
+
+def _run_ws_message_loop(sock, sock_lock, room_id, role, slot):
+    """
+    Main loop reading frames and dispatching based on WebSocket opcode.
+    """
+    while True:
+        opcode, payload, err = _read_ws_frame(sock)
+        if err == "TOO_LARGE":
+            close_payload = struct.pack("!H", 1009) + b"Frame payload exceeds maximum size"
+            try:
+                with sock_lock:
+                    sock.sendall(encode_ws_frame(close_payload, opcode=8))
+            except Exception:
+                pass
+            break
+            if is_masked and mask and length > 0:
+                payload = bytes(p ^ m for p, m in zip(payload, itertools.cycle(mask)))
+
+        if err or opcode is None:
+            break
+
+        if opcode == 8:  # close
+            break
+        elif opcode == 9:  # ping
+            pong = encode_ws_frame(payload[:125], opcode=10)
+            try:
+                with sock_lock:
+                    sock.sendall(pong)
+            except Exception:
+                break
+        elif opcode == 1:  # text JSON frame only
+            if not _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
+                break
+
+
+def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
+    """
+    Unregisters client from rooms/ip_conns and notifies remaining peers of departure/promotion.
+    """
+    notify_peers = []
+    departing_role = role
+    departing_slot = slot
+    promoted_host = False
+    new_host_slot = None
+    active_slots_after = []
+
+    if registered:
+        with rooms_lock:
+            if client_ip in ip_conns:
+                ip_conns[client_ip] = max(0, ip_conns[client_ip] - 1)
+                if ip_conns[client_ip] == 0:
+                    del ip_conns[client_ip]
+
+            if room_id in rooms:
+                remaining = []
+                for p_sock, p_lock, p_role, p_slot in rooms[room_id]:
+                    if p_sock == sock:
+                        departing_role = p_role
+                        departing_slot = p_slot
+                    else:
+                        remaining.append((p_sock, p_lock, p_role, p_slot))
+
+                if remaining and not any(p[2] == "host" for p in remaining):
+                    first_sock, first_lock, _, first_slot = remaining[0]
+                    remaining[0] = (first_sock, first_lock, "host", first_slot)
+                    promoted_host = True
+                    new_host_slot = first_slot
+                elif remaining:
+                    new_host_slot = next((p[3] for p in remaining if p[2] == "host"), remaining[0][3])
+
+                if remaining:
+                    rooms[room_id] = remaining
+                    notify_peers = list(remaining)
+                    active_slots_after = [p[3] for p in remaining]
+                else:
+                    del rooms[room_id]
+
+    if notify_peers:
+        left_msg = encode_ws_frame(json.dumps({
+            "type": "peer_left",
+            "role": departing_role,
+            "slot": departing_slot,
+            "promotedToHost": promoted_host,
+            "newHostSlot": new_host_slot,
+            "activeSlots": active_slots_after,
+            "peers": len(notify_peers)
+        }))
+        for peer_sock, peer_lock, _, _ in notify_peers:
+            try:
+                with peer_lock:
+                    peer_sock.sendall(left_msg)
+            except Exception:
+                pass
+
+    try:
+        sock.close()
+    except Exception:
+        pass
+
+
+def handle_ws_client(sock, room_id, client_ip):
+    sock.settimeout(SOCKET_TIMEOUT)
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
+    sock_lock = threading.Lock()
+
+    registered, role, slot, host_slot, active_slots, peer_count = _register_ws_client(
+        sock, sock_lock, room_id, client_ip
+    )
+    if not registered:
+        return
+
+    try:
+        if _send_ws_welcome_and_notify_joined(
+            sock, sock_lock, room_id, role, slot, host_slot, active_slots, peer_count
+        ):
+            _run_ws_message_loop(sock, sock_lock, room_id, role, slot)
+    finally:
+        _unregister_ws_client(sock, room_id, client_ip, registered, role, slot)
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -405,13 +466,29 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "File not found")
             return None
 
-        parts = [p for p in unquoted_path.strip("/").split("/") if p]
+        # Translate path to filesystem path and resolve canonical path
+        try:
+            target_path = self.translate_path(self.path)
+            real_target = os.path.realpath(target_path)
+            real_dir = os.path.realpath(DIRECTORY)
+            if os.path.commonpath([real_dir, real_target]) != real_dir:
+                self.send_error(404, "File not found")
+                return None
+        except Exception:
+            self.send_error(404, "File not found")
+            return None
+
+        # Determine relative path from DIRECTORY for allowlist validation
+        rel_path = os.path.relpath(real_target, real_dir)
+        normalized = "/" + rel_path.replace(os.sep, "/").lstrip("/") if rel_path != "." else "/"
+
+        # Check for hidden files/directories or parent references in normalized relative path
+        parts = [p for p in normalized.strip("/").split("/") if p]
         if any(part.startswith(".") or part in (".", "..") for part in parts):
             self.send_error(404, "File not found")
             return None
 
         # Enforce strict public static asset allowlist
-        normalized = "/" + "/".join(parts) if parts else "/"
         allowed_exact = {"/", "/index.html", "/favicon.ico"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
