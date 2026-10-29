@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.5';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.5';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.8';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.8';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -1788,7 +1788,11 @@ export const mpSyncEngineMethods = {
                 if (sim.player.spectating) {
                     sim.player.hp = 0;
                 } else {
-                    sim.player.hp = Math.max(0, Number(localPlayerSnapshot.hp));
+                    const nextHp = Math.max(0, Number(localPlayerSnapshot.hp));
+                    if (nextHp < sim.player.hp) {
+                        sim.player.regenPausedUntil = sim.tick + 150;
+                    }
+                    sim.player.hp = nextHp;
                 }
                 if (Number.isFinite(Number(localPlayerSnapshot.maxHp))) {
                     sim.player.maxHp = Math.max(1, Math.round(Number(localPlayerSnapshot.maxHp)));

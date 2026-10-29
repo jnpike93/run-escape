@@ -487,7 +487,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return None
 
         # Enforce strict public static asset allowlist
-        allowed_exact = {"/", "/index.html", "/favicon.ico"}
+        allowed_exact = {"/", "/index.html", "/favicon.ico", "/CHANGELOG.md", "/changelog.md"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
             and not normalized.endswith(".map")
@@ -565,6 +565,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return "text/css"
         if path.endswith(".json"):
             return "application/json"
+        if path.lower().endswith(".md"):
+            return "text/markdown; charset=utf-8"
         if path.endswith(".ttf"):
             return "font/ttf"
         return super().guess_type(path)
