@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot } from './mp-constants.js?v=7.9';
+import { sanitizeSlot } from './mp-constants.js?v=8.0';
 
 export const mpActorRendererMethods = {
     sendLoadoutSync(client, healed = false) {
