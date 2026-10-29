@@ -132,6 +132,7 @@ export class MultiplayerManager {
         this.lobbyPlayers = new Map();
         // Map<slot (1..4), RemotePeerData> for active in-game peers (excluding localSlot)
         this.remotePeers = new Map();
+        this._sortedRemotePeers = null;
 
         this.gameStarted = false;
         this.gameConfig = null; // { seed, mapId, partySize, players: [{slot, name, character, isHost}], unlockedItems }
@@ -166,6 +167,17 @@ export class MultiplayerManager {
             id += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return id;
+    }
+
+    getSortedRemotePeers() {
+        if (!this._sortedRemotePeers) {
+            this._sortedRemotePeers = Array.from(this.remotePeers.values()).sort((a, b) => a.slot - b.slot);
+        }
+        return this._sortedRemotePeers;
+    }
+
+    invalidateSortedRemotePeers() {
+        this._sortedRemotePeers = null;
     }
 
     getInviteLink() {
@@ -366,6 +378,7 @@ export class MultiplayerManager {
                     } else {
                         // In 3-4 player co-op, if one Guest drops, remove their entity and let the remaining party continue!
                         this.remotePeers.delete(leftSlot);
+                        this.invalidateSortedRemotePeers();
                         const sim = window.gameClient?.sim;
                         if (sim && Array.isArray(sim.remotePlayers)) {
                             sim.remotePlayers = sim.remotePlayers.filter(rp => rp.slot !== leftSlot);
@@ -943,6 +956,7 @@ export class MultiplayerManager {
         this.damageStats = new Map();
         this.lastLeaderboard = null;
         this.remotePeers.clear();
+        this.invalidateSortedRemotePeers();
         this.removePauseOverlay();
 
         const initStat = (slot, name, characterId) => {
@@ -1147,6 +1161,7 @@ export class MultiplayerManager {
                 lastEquipKey: ''
             };
             this.remotePeers.set(slot, peerObj);
+            this.invalidateSortedRemotePeers();
             sim.remotePlayers.push(entity);
         }
 
@@ -2557,6 +2572,7 @@ export class MultiplayerManager {
                         this.localPauseState = null;
                         this.spectateSlot = null;
                         this.remotePeers.clear();
+                        this.invalidateSortedRemotePeers();
                         this.removePauseOverlay();
                         const hud = document.getElementById('coop-party-hud');
                         if (hud) hud.remove();
@@ -2574,22 +2590,31 @@ export class MultiplayerManager {
     }
 
     getSpectatedPeer() {
-        const livingPeers = Array.from(this.remotePeers.values())
-            .filter(p => p.entity && p.entity.hp > 0 && !p.entity.spectating)
-            .sort((a, b) => a.slot - b.slot);
-        if (livingPeers.length === 0) return null;
-        if (this.spectateSlot !== null) {
-            const match = livingPeers.find(p => p.slot === this.spectateSlot);
-            if (match) return match;
+        const peersList = this.getSortedRemotePeers();
+        let firstLiving = null;
+        for (let i = 0; i < peersList.length; i++) {
+            const p = peersList[i];
+            if (p.entity && p.entity.hp > 0 && !p.entity.spectating) {
+                if (!firstLiving) firstLiving = p;
+                if (this.spectateSlot !== null && p.slot === this.spectateSlot) {
+                    return p;
+                }
+            }
         }
-        this.spectateSlot = livingPeers[0].slot;
-        return livingPeers[0];
+        if (!firstLiving) return null;
+        this.spectateSlot = firstLiving.slot;
+        return firstLiving;
     }
 
     cycleSpectateTarget(dir = 1) {
-        const livingPeers = Array.from(this.remotePeers.values())
-            .filter(p => p.entity && p.entity.hp > 0 && !p.entity.spectating)
-            .sort((a, b) => a.slot - b.slot);
+        const peersList = this.getSortedRemotePeers();
+        const livingPeers = [];
+        for (let i = 0; i < peersList.length; i++) {
+            const p = peersList[i];
+            if (p.entity && p.entity.hp > 0 && !p.entity.spectating) {
+                livingPeers.push(p);
+            }
+        }
         if (livingPeers.length === 0) return null;
         const currentIdx = livingPeers.findIndex(p => p.slot === this.spectateSlot);
         const nextIdx = currentIdx === -1 ? 0 : (currentIdx + dir + livingPeers.length) % livingPeers.length;
@@ -3093,12 +3118,28 @@ export class MultiplayerManager {
 
     // Multi-Partner HUD widget on the bottom-right showing 1 to 3 teammates' HP, Weapons, Passives, Gear, and Inventory
     updatePartyHUD() {
-        const peersList = Array.from(this.remotePeers.values()).sort((a, b) => a.slot - b.slot);
-        let hud = document.getElementById('coop-party-hud');
-        if (peersList.length === 0) {
+        if (this.remotePeers.size === 0) {
+            const hud = document.getElementById('coop-party-hud');
             if (hud) hud.remove();
             return;
         }
+
+        const peersList = this.getSortedRemotePeers();
+        const client = window.gameClient;
+        const isLocalSpectating = Boolean(client?.sim?.player && (client.sim.player.spectating || client.sim.player.hp <= 0));
+        const activeSpectatePeer = isLocalSpectating ? this.getSpectatedPeer() : null;
+
+        let fastKey = 'v:' + (this.loadoutVersion || 0) + '|sp:' + (isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1);
+        for (let i = 0; i < peersList.length; i++) {
+            const peer = peersList[i];
+            const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
+            const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
+            fastKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + hp + ':' + maxHp + ':' + (peer.entity?.spectating ? 1 : 0);
+        }
+        if (this.lastPartyHudFastKey === fastKey) return;
+        this.lastPartyHudFastKey = fastKey;
+
+        let hud = document.getElementById('coop-party-hud');
         if (!hud) {
             hud = document.createElement('div');
             hud.id = 'coop-party-hud';
@@ -3118,19 +3159,6 @@ export class MultiplayerManager {
             `;
             document.body.appendChild(hud);
         }
-
-        const client = window.gameClient;
-        const isLocalSpectating = Boolean(client?.sim?.player && (client.sim.player.spectating || client.sim.player.hp <= 0));
-        const activeSpectatePeer = isLocalSpectating ? this.getSpectatedPeer() : null;
-        const fastKeyParts = [`v:${this.loadoutVersion || 0}`, `sp:${isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1}`];
-        for (const peer of peersList) {
-            const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
-            const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
-            fastKeyParts.push(`${peer.slot}:${peer.name}:${peer.characterId}:${hp}:${maxHp}:${peer.entity?.spectating ? 1 : 0}`);
-        }
-        const fastKey = fastKeyParts.join('|');
-        if (this.lastPartyHudFastKey === fastKey) return;
-        this.lastPartyHudFastKey = fastKey;
 
         const isCompact = peersList.length > 1;
         const slotSize = isCompact ? 22 : 28;
@@ -3310,6 +3338,7 @@ export class MultiplayerManager {
         this.localPauseState = null;
         this.spectateSlot = null;
         this.remotePeers.clear();
+        this.invalidateSortedRemotePeers();
         this.removePauseOverlay();
         window._hideOsrsPrayerBar?.();
         this.showToast(reason);
