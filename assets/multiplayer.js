@@ -46,7 +46,7 @@ const ALL_REGIONS = [
     { id: 'karamja', name: 'Karamja', bosses: 'Elvarg, Nezikchened, Ket-Zek & TzTok-Jad', difficulty: '2.25x Base HP / 1.75x Dmg' },
     { id: 'kourend', name: 'Kourend', bosses: 'Lizardman Shaman, Sarachnis, Skotizo & Alchemical Hydra', difficulty: '2.5x Base HP / 1.9x Dmg' },
     { id: 'varlamore', name: 'Varlamore', bosses: 'Manticore, Colossi & Sol Heredit', difficulty: '2.75x Base HP / 2.05x Dmg' },
-    { id: 'fight_caves', name: 'Fight Caves (TzTok-Jad)', bosses: 'TzTok-Jad (NPC 3127 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' },
+    { id: 'fight_caves', name: 'Fight Caves (Jad & Zuk)', bosses: 'TzTok-Jad (6:00) & TzKal-Zuk (12:00 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' },
     { id: 'grand_exchange', name: 'Grand Exchange (Fun)', bosses: 'The Doubler, Lure Master, Bot Farmer & Melodox', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'east_varrock', name: 'East Varrock Ditch (Fun)', bosses: 'Clan Leader, Rune 2h Pure & Wildy Mage', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'falador', name: 'Falador Massacre (Fun)', bosses: 'Player Moderator, Cursed You & Mod Murdoch', difficulty: 'Endless Fun Map (All Durial321)' },
@@ -4700,7 +4700,7 @@ window.addEventListener('keydown', (ev) => {
         return;
     }
 
-    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && e.def?.id === 'tztok_jad');
+    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
     if (!isFightCavesOrJad) return;
     if (ev.code === 'KeyQ') {
         ev.preventDefault();
@@ -4735,7 +4735,7 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
         window._hideOsrsPrayerBar();
         return;
     }
-    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && e.def?.id === 'tztok_jad');
+    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
     if (!isFightCavesOrJad) {
         window._hideOsrsPrayerBar();
         return;
@@ -4756,17 +4756,18 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
         drawOverheadPrayerEmblem(ctx, playerScreenPos.x, playerScreenPos.y - Math.round(22 * scale), scale, window._osrsPrayer);
     }
 
-    // 2. If TzTok-Jad (NPC 3127) is winding up an attack, draw a clear attack-style telegraph banner above Jad
+    // 2. If TzTok-Jad (NPC 3127) or TzKal-Zuk (NPC 7706) is winding up an attack, draw a clear attack-style telegraph banner above the boss
     for (const enemy of sim.enemies) {
-        if (enemy.dead || enemy.def?.id !== 'tztok_jad') continue;
+        if (enemy.dead || (enemy.def?.id !== 'tztok_jad' && enemy.def?.id !== 'tzkal_zuk')) continue;
         const windup = enemy.bossState?.windup;
         if (!windup || !windup.attack) continue;
         const atkName = windup.attack.name;
         if (atkName === 'Call healers') continue;
 
-        const reqPrayer = atkName === 'Magic' ? 'magic' : (atkName === 'Stomp' ? 'melee' : 'ranged');
+        const reqPrayer = atkName === 'Magic' ? 'magic' : ((atkName === 'Stomp' || atkName === 'Slam') ? 'melee' : 'ranged');
         const keyHint = reqPrayer === 'magic' ? 'Q' : (reqPrayer === 'ranged' ? 'E' : 'R');
         const styleLabel = reqPrayer.toUpperCase();
+        const bossLabel = enemy.def?.id === 'tzkal_zuk' ? 'ZUK' : 'JAD';
         const isProtected = window._osrsPrayer === reqPrayer;
         const progress = Math.min(1, Math.max(0, (sim.tick + alpha - windup.startTick) / Math.max(1, windup.landTick - windup.startTick)));
 
@@ -4781,8 +4782,8 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
         ctx.font = `${fontPx}px "OSRS Bold", monospace`;
         ctx.textAlign = 'center';
         const calloutText = isProtected
-            ? `JAD ${styleLabel} - PROTECTED (${keyHint})`
-            : `⚠ JAD ${styleLabel}! PRAY [${keyHint}] OR DIE!`;
+            ? `${bossLabel} ${styleLabel} - PROTECTED (${keyHint})`
+            : `⚠ ${bossLabel} ${styleLabel}! PRAY [${keyHint}] OR DIE!`;
         const textW = Math.max(160, ctx.measureText(calloutText).width + 20);
         const boxX = screen.x - textW / 2;
         const boxY = screen.y - 34 * scale;
