@@ -2699,8 +2699,17 @@ export class MultiplayerManager {
             return;
         }
         const localState = this.getLocalPauseState(client);
-        const pausedPeers = Array.from(this.remotePeers.values()).filter(p => p.pauseState !== null);
-        if (localState !== null || pausedPeers.length === 0) {
+        if (localState !== null) {
+            this.removePauseOverlay();
+            return;
+        }
+        const pausedPeers = [];
+        for (const p of this.remotePeers.values()) {
+            if (p.pauseState !== null) {
+                pausedPeers.push(p);
+            }
+        }
+        if (pausedPeers.length === 0) {
             this.removePauseOverlay();
             return;
         }
