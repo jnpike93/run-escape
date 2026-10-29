@@ -10,6 +10,7 @@ import json
 import re
 import os
 import sys
+import itertools
 
 def _get_default_port():
     port_env = os.environ.get("PORT")
@@ -303,6 +304,8 @@ def _run_ws_message_loop(sock, sock_lock, room_id, role, slot):
             except Exception:
                 pass
             break
+            if is_masked and mask and length > 0:
+                payload = bytes(p ^ m for p, m in zip(payload, itertools.cycle(mask)))
 
         if err or opcode is None:
             break
