@@ -3294,7 +3294,17 @@ export class MultiplayerManager {
     }
 
     endGameOnDisconnect(reason, leaderboard = null) {
-        if (!this.gameStarted) return;
+        if (!this.gameStarted) {
+            if (leaderboard) {
+                this.buildLeaderboard(leaderboard);
+                const client = window.gameClient;
+                if (client?.store) {
+                    const snap = client.store.getSnapshot?.() || {};
+                    client.store.set({ ...snap });
+                }
+            }
+            return;
+        }
         this.buildLeaderboard(leaderboard);
         this.gameStarted = false;
         this.localPauseState = null;
@@ -3321,6 +3331,69 @@ export class MultiplayerManager {
                 client.updateHud(true);
             } catch (err) {
                 console.error('[Multiplayer] Error ending run on disconnect:', err);
+            }
+        }
+    }
+
+    isCoopSessionActive() {
+        return Boolean(
+            (this.ws && this.ws.readyState === WebSocket.OPEN && this.roomId) ||
+            (Array.isArray(this.lastLeaderboard) && this.lastLeaderboard.length > 0)
+        );
+    }
+
+    returnToLobby() {
+        this.lastLeaderboard = null;
+        this.gameStarted = false;
+        this._gameOverSent = false;
+        this._victorySent = false;
+        this.localPauseState = null;
+        this.spectateSlot = null;
+        this.remotePeers.clear();
+        this.removePauseOverlay();
+        window._hideOsrsPrayerBar?.();
+        const hud = document.getElementById('coop-party-hud');
+        if (hud) hud.remove();
+
+        const client = window.gameClient;
+        if (client) {
+            try {
+                client.leaveRun();
+            } catch (err) {
+                console.warn('[Multiplayer] Error leaving run for lobby:', err);
+            }
+        }
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && this.roomId) {
+            this.localReady = true;
+            this.syncLocalToLobbyPlayers();
+            this.sendLobbyUpdate();
+            this.renderLobbyModal();
+        } else {
+            this.openLobbyModal(this.roomId || null);
+        }
+    }
+
+    leaveCoopToTitle() {
+        this.lastLeaderboard = null;
+        this.gameStarted = false;
+        this._gameOverSent = false;
+        this._victorySent = false;
+        this.localPauseState = null;
+        this.spectateSlot = null;
+        this.remotePeers.clear();
+        this.removePauseOverlay();
+        window._hideOsrsPrayerBar?.();
+        const hud = document.getElementById('coop-party-hud');
+        if (hud) hud.remove();
+        this.closeLobbyModal();
+
+        const client = window.gameClient;
+        if (client) {
+            try {
+                client.leaveRun();
+            } catch (err) {
+                console.warn('[Multiplayer] Error leaving run to title:', err);
             }
         }
     }
@@ -4052,7 +4125,15 @@ export class MultiplayerManager {
     }
 
     openLobbyModal(roomId = null) {
-        const cleanRoom = sanitizeRoomId(roomId) || MultiplayerManager.generateRoomId();
+        const requestedRoom = sanitizeRoomId(roomId);
+        if (!requestedRoom && this.ws && this.ws.readyState === WebSocket.OPEN && this.roomId) {
+            this.localReady = true;
+            this.syncLocalToLobbyPlayers();
+            this.sendLobbyUpdate();
+            this.renderLobbyModal();
+            return;
+        }
+        const cleanRoom = requestedRoom || this.roomId || MultiplayerManager.generateRoomId();
         this.connect(cleanRoom);
         this.renderLobbyModal();
     }
