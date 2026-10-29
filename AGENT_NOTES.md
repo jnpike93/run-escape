@@ -6,10 +6,10 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=7.1` - Upstream `0.13.0`)
+### Current Active Asset Files (Version `?v=7.2` - Upstream `0.13.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.1`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.2`) |
 | **Main Engine Bundle** | [`assets/index-XWbnxuVz.js`](./assets/index-XWbnxuVz.js) | `index.html`, `MapViewerApp-DKojfbH1.js`, `module-C9loB8SI.js` |
 | **Co-Op & Custom Hooks** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` |
 | **Main Stylesheet** | [`assets/index-Cu_WH1lb.css`](./assets/index-Cu_WH1lb.css) | `index.html` |
@@ -53,9 +53,9 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ## 3. Chronological Agent Handoff Log
 
 ### 2026-10-29 - Antigravity - Upstream 0.13.0 Merge (Quests, Amulet of Blood Fury, Pile Merging) + Custom Features (v7.0)
-- **Commit / PR**: Upstream `0.13.0` (`index-XWbnxuVz.js`) merge (`?v=7.1`)
+- **Commit / PR**: Upstream `0.13.0` (`index-XWbnxuVz.js`) merge (`?v=7.2`)
 - **Files Modified**: `index.html`, `assets/index-XWbnxuVz.js`, `assets/index-Cu_WH1lb.css`, `assets/MapViewerApp-DKojfbH1.js`, `assets/module-C9loB8SI.js`, `assets/module-Cg9b2g3N.js`, `assets/RenderDataWorker-CRRhTJTb.js`, `assets/multiplayer.js`, `caches/caches.json`, `caches/osrs-241_2026-09-30-slim-4cd931ae/*`, `AGENTS.md`, `AGENT_NOTES.md`, `c:/Git/.agents/skills/merge-update/SKILL.md`
-- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=6.7` to `?v=7.1` and `CacheStorage` key from `-v8` to `-v9`. Main bundle changed from `index-Ybwr2vLz.js` to `index-XWbnxuVz.js`; CSS from `index-Ck-75d-q.css` to `index-Cu_WH1lb.css`; MapViewer from `MapViewerApp-ws1SF5sq.js` to `MapViewerApp-DKojfbH1.js`; main WASM loader from `module-DiacdDog.js` to `module-C9loB8SI.js`.
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=6.7` to `?v=7.2` and `CacheStorage` key from `-v8` to `-v9`. Main bundle changed from `index-Ybwr2vLz.js` to `index-XWbnxuVz.js`; CSS from `index-Ck-75d-q.css` to `index-Cu_WH1lb.css`; MapViewer from `MapViewerApp-ws1SF5sq.js` to `MapViewerApp-DKojfbH1.js`; main WASM loader from `module-DiacdDog.js` to `module-C9loB8SI.js`.
 - **What Changed**:
   - Merged upstream `0.13.0` features: **22 OSRS Quests** screen & post-run quest completion rewards, **Amulet of blood fury** (`id: "amulet_of_blood_fury"`, `objId: 24780`, `healChance`), **bone & coin pile merging** (`gatherPiles` / `slideIntoPile` with dynamic bone model tiers up to Superior dragon bones), and old-school bevelled scrollbars.
   - Merged all 36 custom OSRS cache archives (Corgi `16370`, Chihuahua `16543`, Fight Caves map `9551` & rock/wall models `9258..9297`, TzKal-Zuk `7706` model `33011`, framemap `1691`, and animations `7294..7298`) into `caches/osrs-241_2026-09-30-slim-4cd931ae`.
