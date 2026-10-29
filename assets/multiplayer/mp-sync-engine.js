@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.4';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.4';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.5';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.5';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -1395,7 +1395,7 @@ export const mpSyncEngineMethods = {
                             const isAttacking = Boolean(
                                 attackAnim &&
                                 attackAnim.seqId === p2.attackSeq &&
-                                (!p2.moving || (s.tick - p2.attackStart) < 12) &&
+                                (!p2.moving || p2.attackSeq === 1979 || (s.tick - p2.attackStart) < 12) &&
                                 (s.tick - p2.attackStart) >= 0 &&
                                 (s.tick - p2.attackStart) < (attackAnim.totalTicks || 15)
                             );

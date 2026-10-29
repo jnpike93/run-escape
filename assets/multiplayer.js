@@ -21,15 +21,15 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './multiplayer/mp-constants.js?v=7.4';
-import { MpEventBus } from './multiplayer/mp-event-bus.js?v=7.4';
-import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=7.4';
-import { mpTransportMethods } from './multiplayer/mp-transport.js?v=7.4';
-import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=7.4';
-import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=7.4';
-import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=7.4';
-import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=7.4';
-import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=7.4';
+} from './multiplayer/mp-constants.js?v=7.5';
+import { MpEventBus } from './multiplayer/mp-event-bus.js?v=7.5';
+import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=7.5';
+import { mpTransportMethods } from './multiplayer/mp-transport.js?v=7.5';
+import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=7.5';
+import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=7.5';
+import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=7.5';
+import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=7.5';
+import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=7.5';
 
 export class MultiplayerManager {
     constructor() {
