@@ -25,7 +25,11 @@ const ALL_CHARACTERS = [
     { id: 'pyromancer', name: 'Pyromancer', weapon: 'fire_spells', defaultUnlocked: false },
     { id: 'shayzien_soldier', name: 'Shayzien Soldier', weapon: 'scimitar', defaultUnlocked: false },
     { id: 'gladiator', name: 'Gladiator', weapon: 'dual_macuahuitl', defaultUnlocked: false },
-    { id: 'javelineer', name: 'Javelineer', weapon: 'eclipse_atlatl', defaultUnlocked: false }
+    { id: 'javelineer', name: 'Javelineer', weapon: 'eclipse_atlatl', defaultUnlocked: false },
+    { id: 'scammer', name: 'Scammer', weapon: 'throwing_knives', defaultUnlocked: false },
+    { id: 'f2p_pker', name: 'F2P PKer', weapon: 'two_handed_sword', defaultUnlocked: false },
+    { id: 'durial321', name: 'Durial321', weapon: 'abyssal_whip', defaultUnlocked: false },
+    { id: 'lms_sweat', name: 'LMS Sweat', weapon: 'ice_burst', defaultUnlocked: false }
 ];
 
 const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
@@ -42,7 +46,11 @@ const ALL_REGIONS = [
     { id: 'karamja', name: 'Karamja', bosses: 'Elvarg, Nezikchened, Ket-Zek & TzTok-Jad', difficulty: '2.25x Base HP / 1.75x Dmg' },
     { id: 'kourend', name: 'Kourend', bosses: 'Lizardman Shaman, Sarachnis, Skotizo & Alchemical Hydra', difficulty: '2.5x Base HP / 1.9x Dmg' },
     { id: 'varlamore', name: 'Varlamore', bosses: 'Manticore, Colossi & Sol Heredit', difficulty: '2.75x Base HP / 2.05x Dmg' },
-    { id: 'fight_caves', name: 'Fight Caves (TzTok-Jad)', bosses: 'TzTok-Jad (NPC 3127 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' }
+    { id: 'fight_caves', name: 'Fight Caves (TzTok-Jad)', bosses: 'TzTok-Jad (NPC 3127 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' },
+    { id: 'grand_exchange', name: 'Grand Exchange (Fun)', bosses: 'The Doubler, Lure Master, Bot Farmer & Melodox', difficulty: 'Endless Fun Map (1.0x Base)' },
+    { id: 'east_varrock', name: 'East Varrock Ditch (Fun)', bosses: 'Clan Leader, Rune 2h Pure & Wildy Mage', difficulty: 'Endless Fun Map (1.0x Base)' },
+    { id: 'falador', name: 'Falador Massacre (Fun)', bosses: 'Player Moderator, Cursed You & Mod Murdoch', difficulty: 'Endless Fun Map (All Durial321)' },
+    { id: 'last_man_standing', name: 'Last Man Standing (Fun)', bosses: 'AGS Specer, Claws Specer & Dharok Risker', difficulty: 'Endless Fun Map (1.0x Base)' }
 ];
 const ALLOWED_REGIONS = new Set(ALL_REGIONS.map(r => r.id));
 
@@ -887,10 +895,10 @@ export class MultiplayerManager {
             name: this.localName,
             character: this.localCharacter
         };
-        const localChar = localEntry.character || 'warrior';
+        const localChar = config.mapId === 'falador' ? 'durial321' : (localEntry.character || 'warrior');
         this.localName = localEntry.name || this.localName;
 
-        const allPartyChars = players.map(p => p.character);
+        const allPartyChars = [...players.map(p => p.character), ...(config.mapId === 'falador' ? ['durial321'] : [])];
         await this.ensureAllCharacterModels(client, allPartyChars);
 
         console.log(`[Multiplayer] Launching ${players.length}-Player Co-Op Run: Local Slot ${this.localSlot} (${this.localName} - ${localChar})`);
@@ -1032,7 +1040,7 @@ export class MultiplayerManager {
             const offset = SPAWN_OFFSETS[slot] || { dx: 1.0, dy: 0 };
             const sx = spawnX + offset.dx;
             const sy = spawnY + offset.dy;
-            const charId = sanitizeCharacter(pInfo.character, 'warrior');
+            const charId = sim.map?.fun?.character || sanitizeCharacter(pInfo.character, 'warrior');
 
             const entity = {
                 slot,
@@ -1471,52 +1479,41 @@ export class MultiplayerManager {
                     const living = getLivingPlayerTargets();
                     const savedPlayer = sim.player;
                     try {
-                        for (const t of sim.enemyProjectiles) {
-                            if (t.dead) continue;
-                            t.prevX = t.x;
-                            t.prevY = t.y;
-                            // Select closest living player to this enemy projectile
+                        for (const e of sim.enemyProjectiles) {
+                            e.prevX = e.x;
+                            e.prevY = e.y;
+                            e.life--;
                             let targetEntity = living[0]?.entity || savedPlayer;
-                            let bestD = Math.hypot(targetEntity.x - t.x, targetEntity.y - t.y);
+                            let bestD = Math.hypot(targetEntity.x - e.x, targetEntity.y - e.y);
                             for (let k = 1; k < living.length; k++) {
-                                const d = Math.hypot(living[k].entity.x - t.x, living[k].entity.y - t.y);
+                                const d = Math.hypot(living[k].entity.x - e.x, living[k].entity.y - e.y);
                                 if (d < bestD) {
                                     bestD = d;
                                     targetEntity = living[k].entity;
                                 }
                             }
-                            if (t.homing) {
-                                const e = targetEntity.x - t.x;
-                                const n = targetEntity.y - t.y;
-                                const s = Math.hypot(e, n) || 1;
-                                const r = Math.hypot(t.vx, t.vy);
-                                t.vx = t.vx * (1 - t.homing) + e / s * r * t.homing;
-                                t.vy = t.vy * (1 - t.homing) + n / s * r * t.homing;
+                            const n = targetEntity.x - e.x;
+                            const s = targetEntity.y - e.y;
+                            if (e.homing > 0) {
+                                const r = Math.atan2(e.vy, e.vx);
+                                let l = Math.atan2(s, n) - r;
+                                l = Math.atan2(Math.sin(l), Math.cos(l));
+                                const h = r + Math.max(-e.homing, Math.min(e.homing, l));
+                                e.vx = Math.cos(h) * e.speed;
+                                e.vy = Math.sin(h) * e.speed;
+                                e.yaw = Math.round(Math.atan2(-e.vx, -e.vy) * 1024 / Math.PI) & 2047;
                             }
-                            t.x += t.vx;
-                            t.y += t.vy;
-                            t.life--;
-                            if (!t.ignoresSolids && sim.grid.isSolid(Math.floor(t.x), Math.floor(t.y))) {
-                                t.dead = true;
-                                continue;
-                            }
-                            const e = targetEntity.x - t.x;
-                            const n = targetEntity.y - t.y;
-                            const s = targetEntity.radius + t.radius;
-                            if (e * e + n * n <= s * s) {
+                            e.x += e.vx;
+                            e.y += e.vy;
+                            const a = e.radius + targetEntity.radius;
+                            if (e.life > 0 && Math.hypot(targetEntity.x - e.x, targetEntity.y - e.y) <= a) {
+                                e.life = 0;
+                                if (e.crowd && targetEntity.invulnerable > 0) continue;
                                 sim.player = targetEntity;
-                                if (t.freezeTicks && targetEntity.invulnerable <= 0) {
-                                    targetEntity.frozen = Math.max(targetEntity.frozen || 0, t.freezeTicks);
-                                }
-                                sim.damagePlayer(t.damage);
-                                t.dead = true;
-                                continue;
-                            }
-                            if (t.life <= 0) {
-                                t.dead = true;
+                                const r = sim.enemies.find(l => l.uid === e.enemyUid);
+                                if (sim.bossHit(e.enemyId, r, e.attack, e.damage), sim.runOver) return;
                             }
                         }
-                        sim.enemyProjectiles = sim.enemyProjectiles.filter(t => !t.dead);
                     } finally {
                         sim.player = savedPlayer;
                     }
@@ -1776,7 +1773,9 @@ export class MultiplayerManager {
                                 e.animStart,
                                 e.flash || 0,
                                 e.scale || 1,
-                                e.elite ? 1 : (e.boss ? 2 : 0)
+                                e.elite ? 1 : (e.boss ? 2 : 0),
+                                e.variant || 0,
+                                e.attackSeq ?? e.def.attackSeq ?? -1
                             ]);
                         }
                     }
@@ -3266,7 +3265,7 @@ export class MultiplayerManager {
             for (let i = 0; i < msg.enemies.length; i++) {
                 const item = msg.enemies[i];
                 const [
-                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag
+                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq
                 ] = item;
                 hostUids.add(uid);
 
@@ -3299,6 +3298,8 @@ export class MultiplayerManager {
                     enemy.animStart = animStart;
                     enemy.flash = flash;
                     enemy.scale = scale;
+                    if (Number.isFinite(variant)) enemy.variant = variant;
+                    if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
                 } else {
                     const def = client.getEnemyDef ? client.getEnemyDef(defId) : null;
                     if (def) {
@@ -3328,6 +3329,8 @@ export class MultiplayerManager {
                                 enemy.animStart = animStart;
                                 enemy.flash = flash;
                                 enemy.scale = scale;
+                                if (Number.isFinite(variant)) enemy.variant = variant;
+                                if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
                             }
                         } catch (err) {
                             console.warn('[Multiplayer] Failed spawning synced enemy:', defId, err);
