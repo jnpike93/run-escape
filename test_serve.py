@@ -34,5 +34,29 @@ class TestOriginValidation(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertFalse(is_allowed_origin(url))
 
+import itertools
+
+def unmask_payload(payload, mask):
+    if not mask:
+        return payload
+    return bytes(p ^ m for p, m in zip(payload, itertools.cycle(mask)))
+
+class TestWebSocketMasking(unittest.TestCase):
+    def test_unmasking(self):
+        # Sample RFC 6455 test vector or standard payload
+        # Mask: 0x37 0xfa 0x21 0x3d ("5..."), Payload: unmasked "Hello" -> b'Hello'
+        key = b"\x37\xfa\x21\x3d"
+        # RFC 6455 example 5.7: "Hello" masked with key 0x37fa213d is 0x7f 0x9f 0x4d 0x51 0x58
+        masked_hello = b"\x7f\x9f\x4d\x51\x58"
+        self.assertEqual(unmask_payload(masked_hello, key), b"Hello")
+
+    def test_unmasking_various_lengths(self):
+        mask = b"\x01\x02\x03\x04"
+        for length in [1, 2, 3, 4, 5, 125, 126, 65536]:
+            original = b"A" * length
+            masked = bytes(p ^ m for p, m in zip(original, itertools.cycle(mask)))
+            unmasked = unmask_payload(masked, mask)
+            self.assertEqual(unmasked, original)
+
 if __name__ == "__main__":
     unittest.main()

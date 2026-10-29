@@ -10,6 +10,7 @@ import json
 import re
 import os
 import sys
+import itertools
 
 def _get_default_port():
     port_env = os.environ.get("PORT")
@@ -232,8 +233,7 @@ def handle_ws_client(sock, room_id, client_ip):
                 break
 
             if is_masked and mask and length > 0:
-                mask_rep = (mask * (length // 4 + 1))[:length]
-                payload = (int.from_bytes(payload, "big") ^ int.from_bytes(mask_rep, "big")).to_bytes(length, "big")
+                payload = bytes(p ^ m for p, m in zip(payload, itertools.cycle(mask)))
 
             if opcode == 8:  # close
                 break
