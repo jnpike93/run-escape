@@ -1,5 +1,52 @@
 import unittest
-from serve import is_allowed_origin
+import socket
+from unittest.mock import Mock
+from serve import is_allowed_origin, read_exact
+
+class TestReadExact(unittest.TestCase):
+    def test_read_exact_full_chunk(self):
+        sock = Mock()
+        sock.recv.return_value = b"hello"
+        res = read_exact(sock, 5)
+        self.assertEqual(res, b"hello")
+        sock.recv.assert_called_once_with(5)
+
+    def test_read_exact_multiple_partial_chunks(self):
+        sock = Mock()
+        sock.recv.side_effect = [b"hel", b"lo"]
+        res = read_exact(sock, 5)
+        self.assertEqual(res, b"hello")
+        self.assertEqual(sock.recv.call_count, 2)
+        sock.recv.assert_any_call(5)
+        sock.recv.assert_any_call(2)
+
+    def test_read_exact_zero_bytes(self):
+        sock = Mock()
+        res = read_exact(sock, 0)
+        self.assertEqual(res, b"")
+        sock.recv.assert_not_called()
+
+    def test_read_exact_eof(self):
+        sock = Mock()
+        sock.recv.side_effect = [b"hel", b""]
+        res = read_exact(sock, 5)
+        self.assertIsNone(res)
+
+    def test_read_exact_socket_exceptions(self):
+        exceptions = [
+            ConnectionAbortedError(),
+            ConnectionResetError(),
+            BrokenPipeError(),
+            socket.timeout(),
+            TimeoutError(),
+            OSError("Socket error"),
+        ]
+        for exc in exceptions:
+            with self.subTest(exc=type(exc).__name__):
+                sock = Mock()
+                sock.recv.side_effect = exc
+                res = read_exact(sock, 10)
+                self.assertIsNone(res)
 
 class TestOriginValidation(unittest.TestCase):
     def test_valid_origins(self):
