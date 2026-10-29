@@ -2051,6 +2051,7 @@ export class MultiplayerManager {
                                 ev.type === 'bossShout' ||
                                 ev.type === 'bossAttack' ||
                                 ev.type === 'blast' ||
+                                ev.type === 'aura' ||
                                 ev.type === 'cannonSetup' ||
                                 ev.type === 'cannonFire' ||
                                 ev.type === 'powerUp' ||
@@ -2308,7 +2309,7 @@ export class MultiplayerManager {
                             const isAttacking = Boolean(
                                 attackAnim &&
                                 attackAnim.seqId === p2.attackSeq &&
-                                !p2.moving &&
+                                (!p2.moving || (s.tick - p2.attackStart) < 12) &&
                                 (s.tick - p2.attackStart) >= 0 &&
                                 (s.tick - p2.attackStart) < (attackAnim.totalTicks || 15)
                             );
