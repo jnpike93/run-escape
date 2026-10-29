@@ -582,7 +582,7 @@ export class MultiplayerManager {
                 break;
 
             case 'game_over':
-                this.endGameOnDisconnect(typeof msg.reason === 'string' ? msg.reason.slice(0, 80) : 'Game Over');
+                this.endGameOnDisconnect(typeof msg.reason === 'string' ? msg.reason.slice(0, 80) : 'Game Over', msg.leaderboard);
                 break;
         }
     }
@@ -689,11 +689,15 @@ export class MultiplayerManager {
     }
 
     setPlayerName(name) {
-        const cleaned = sanitizeName(name);
+        this.localNameDraft = String(name ?? '').slice(0, 14).replace(/[^a-zA-Z0-9 ()_-]/g, '');
+        const cleaned = sanitizeName(this.localNameDraft);
         this.localNameCustomized = Boolean(cleaned);
         this.localName = cleaned || `Player ${this.localSlot}`;
         this.syncLocalToLobbyPlayers();
-        this.sendLobbyUpdate();
+        clearTimeout(this._nameUpdateTimer);
+        this._nameUpdateTimer = setTimeout(() => {
+            this.sendLobbyUpdate();
+        }, 150);
     }
 
     selectCharacter(charId) {
@@ -935,8 +939,38 @@ export class MultiplayerManager {
         this.loadoutVersion = 0;
         this._gameOverSent = false;
         this._victorySent = false;
+        this._seenEffectUids = new Set();
+        this.damageStats = new Map();
+        this.lastLeaderboard = null;
         this.remotePeers.clear();
         this.removePauseOverlay();
+
+        const initStat = (slot, name, characterId) => {
+            const charObj = ALL_CHARACTERS.find(c => c.id === characterId);
+            this.damageStats.set(slot, {
+                slot,
+                name: sanitizeName(name) || `Player ${slot}`,
+                characterId,
+                charName: charObj ? charObj.name : String(characterId || 'Warrior'),
+                damage: 0,
+                kills: 0
+            });
+        };
+        initStat(this.localSlot, this.localName, localChar);
+        for (const pInfo of partyPlayers) {
+            if (!pInfo) continue;
+            const s = sanitizeSlot(pInfo.slot, 2);
+            const cId = sim.map?.fun?.character || sanitizeCharacter(pInfo.character, 'warrior');
+            initStat(s, pInfo.name, cId);
+        }
+
+        if (sim.endRun) {
+            const origEndRun = sim.endRun.bind(sim);
+            sim.endRun = (state) => {
+                this.buildLeaderboard();
+                return origEndRun(state);
+            };
+        }
 
         // Hook sim.playerDied so that dying while any teammate is still alive enters Spectator Mode instead of ending the lobby
         const localPlayerRef = sim.player;
@@ -1260,22 +1294,96 @@ export class MultiplayerManager {
                 }
             };
 
-            // Track which player (slot) is currently dealing damage so monster AI prioritizes the last attacker first
+            // Track which player (slot) is currently dealing damage so monster AI prioritizes the last attacker first and damage/kill stats are recorded per player
             this._activeAttackerSlot = null;
+            if (sim.placeTurret) {
+                const origPlaceTurret = sim.placeTurret.bind(sim);
+                sim.placeTurret = (cfg) => {
+                    const prevLen = sim.turrets.length;
+                    const res = origPlaceTurret(cfg);
+                    if (sim.turrets.length > prevLen) {
+                        const t = sim.turrets[sim.turrets.length - 1];
+                        t.ownerSlot = this._activeAttackerSlot || sim.player?.slot || this.localSlot;
+                    }
+                    return res;
+                };
+            }
+            if (sim.stepTurrets) {
+                const origStepTurrets = sim.stepTurrets.bind(sim);
+                sim.stepTurrets = () => {
+                    const prevSlot = this._activeAttackerSlot;
+                    const beforeProjLen = sim.projectiles.length;
+                    try {
+                        origStepTurrets();
+                        if (sim.projectiles.length > beforeProjLen) {
+                            const fallbackOwner = sim.turrets[0]?.ownerSlot || this.localSlot;
+                            for (let i = beforeProjLen; i < sim.projectiles.length; i++) {
+                                const p = sim.projectiles[i];
+                                if (!p.ownerSlot) {
+                                    let bestSlot = fallbackOwner;
+                                    let bestDist = Infinity;
+                                    for (const t of sim.turrets) {
+                                        const d = Math.hypot(t.x - p.x, t.y - p.y);
+                                        if (d < bestDist) {
+                                            bestDist = d;
+                                            bestSlot = t.ownerSlot || this.localSlot;
+                                        }
+                                    }
+                                    p.ownerSlot = bestSlot;
+                                }
+                            }
+                        }
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
+            if (sim.stepThralls) {
+                const origStepThralls = sim.stepThralls.bind(sim);
+                sim.stepThralls = () => {
+                    const prevSlot = this._activeAttackerSlot;
+                    const beforeProjLen = sim.projectiles.length;
+                    try {
+                        origStepThralls();
+                        if (sim.projectiles.length > beforeProjLen) {
+                            for (let i = beforeProjLen; i < sim.projectiles.length; i++) {
+                                const p = sim.projectiles[i];
+                                if (!p.ownerSlot) {
+                                    let bestSlot = this.localSlot;
+                                    let bestDist = Infinity;
+                                    for (const th of sim.thralls) {
+                                        const d = Math.hypot(th.x - p.x, th.y - p.y);
+                                        if (d < bestDist) {
+                                            bestDist = d;
+                                            bestSlot = th.ownerSlot || th.owner?.slot || this.localSlot;
+                                        }
+                                    }
+                                    p.ownerSlot = bestSlot;
+                                }
+                            }
+                        }
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
             if (sim.damageEnemy) {
                 const origDamageEnemy = sim.damageEnemy.bind(sim);
                 sim.damageEnemy = (enemy, amount, knockback, srcX, srcY, mightScale, isDot) => {
+                    let attackerSlot = this._activeAttackerSlot || (enemy && enemy.lastAttackerSlot) || this.localSlot;
                     if (enemy && !enemy.dead && !isDot) {
                         if (this._activeAttackerSlot) {
-                            enemy.lastAttackerSlot = this._activeAttackerSlot;
+                            attackerSlot = this._activeAttackerSlot;
+                            enemy.lastAttackerSlot = attackerSlot;
                             enemy.lastAttackedTick = sim.tick;
+                            enemy.lastDotAttackerSlot = attackerSlot;
                         } else if (Number.isFinite(srcX) && Number.isFinite(srcY)) {
                             let bestSlot = this.localSlot;
-                            let bestDist = (sim.player && sim.player.hp > 0)
+                            let bestDist = (sim.player && sim.player.hp > 0 && !sim.player.spectating)
                                 ? Math.hypot(sim.player.x - srcX, sim.player.y - srcY)
                                 : Infinity;
                             for (const peer of this.remotePeers.values()) {
-                                if (peer.entity && peer.entity.hp > 0) {
+                                if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
                                     const d = Math.hypot(peer.entity.x - srcX, peer.entity.y - srcY);
                                     if (d < bestDist) {
                                         bestDist = d;
@@ -1283,11 +1391,27 @@ export class MultiplayerManager {
                                     }
                                 }
                             }
+                            attackerSlot = bestSlot;
                             enemy.lastAttackerSlot = bestSlot;
                             enemy.lastAttackedTick = sim.tick;
+                            enemy.lastDotAttackerSlot = bestSlot;
+                        }
+                    } else if (isDot && enemy && enemy.lastDotAttackerSlot) {
+                        attackerSlot = enemy.lastDotAttackerSlot;
+                    }
+                    const prevHp = enemy && !enemy.dead ? Math.max(0, enemy.hp) : 0;
+                    const wasDead = Boolean(!enemy || enemy.dead);
+                    const res = origDamageEnemy(enemy, amount, knockback, srcX, srcY, mightScale, isDot);
+                    if (enemy && !wasDead) {
+                        const afterHp = enemy.dead ? 0 : Math.max(0, enemy.hp);
+                        const dealt = Math.max(0, prevHp - afterHp);
+                        const stat = this.damageStats?.get(attackerSlot) || this.damageStats?.get(this.localSlot);
+                        if (stat) {
+                            stat.damage += dealt;
+                            if (enemy.dead) stat.kills += 1;
                         }
                     }
-                    return origDamageEnemy(enemy, amount, knockback, srcX, srcY, mightScale, isDot);
+                    return res;
                 };
             }
 
@@ -1565,6 +1689,28 @@ export class MultiplayerManager {
             sim.dropCasket = () => {};
             sim.dropCasketOfTier = () => {};
             sim.rollPowerUp = () => {};
+            if (sim.damageEnemy) {
+                const origGuestDamageEnemy = sim.damageEnemy.bind(sim);
+                sim.damageEnemy = (enemy, amount, knockback, srcX, srcY, mightScale, isDot) => {
+                    const evLen = sim.events.length;
+                    const res = origGuestDamageEnemy(enemy, amount, knockback, srcX, srcY, mightScale, isDot);
+                    // Suppress local duplicate damage hitsplats on Guest; Host streams authoritative damage events in sync_world.visEvents
+                    if (sim.events.length > evLen) {
+                        sim.events.length = evLen;
+                    }
+                    return res;
+                };
+            }
+            sim.stepEnemyProjectiles = () => {
+                for (let i = 0; i < sim.enemyProjectiles.length; i++) {
+                    const ep = sim.enemyProjectiles[i];
+                    ep.prevX = ep.x;
+                    ep.prevY = ep.y;
+                    ep.x += ep.vx || 0;
+                    ep.y += ep.vy || 0;
+                    ep.life--;
+                }
+            };
             sim.enemies = [];
             console.log('[Multiplayer] Guest initialized in 2-4P client sync mode.');
         }
@@ -1717,11 +1863,13 @@ export class MultiplayerManager {
                 if (isHost) {
                     if (sim.state === 'victory' && !this._victorySent) {
                         this._victorySent = true;
+                        const lb = this.buildLeaderboard();
                         this.send({
                             type: 'coop_pickup',
                             kind: 'victory',
                             kills: sim.kills,
-                            tick: sim.tick
+                            tick: sim.tick,
+                            leaderboard: lb
                         });
                         return;
                     }
@@ -1751,8 +1899,9 @@ export class MultiplayerManager {
 
                     if (!this._gameOverSent && !hostAlive && !anyPeerAlive) {
                         this._gameOverSent = true;
-                        this.send({ type: 'game_over', reason: 'All party members have fallen in battle!' });
-                        this.endGameOnDisconnect('All party members have fallen - Game Over');
+                        const lb = this.buildLeaderboard();
+                        this.send({ type: 'game_over', reason: 'All party members have fallen in battle!', leaderboard: lb });
+                        this.endGameOnDisconnect('All party members have fallen - Game Over', lb);
                         return;
                     }
 
@@ -1760,6 +1909,7 @@ export class MultiplayerManager {
                     for (let i = 0; i < sim.enemies.length; i++) {
                         const e = sim.enemies[i];
                         if (!e.dead || (sim.tick - e.deathTick <= 6)) {
+                            const wu = e.bossState?.windup;
                             enemyData.push([
                                 e.uid,
                                 e.def.id,
@@ -1775,7 +1925,8 @@ export class MultiplayerManager {
                                 e.scale || 1,
                                 e.elite ? 1 : (e.boss ? 2 : 0),
                                 e.variant || 0,
-                                e.attackSeq ?? e.def.attackSeq ?? -1
+                                e.attackSeq ?? e.def.attackSeq ?? -1,
+                                wu && wu.attack ? [wu.attack.name, wu.startTick, wu.landTick, Math.round((wu.targetX ?? 0) * 100) / 100, Math.round((wu.targetY ?? 0) * 100) / 100, wu.dir ?? 0] : null
                             ]);
                         }
                     }
@@ -1796,6 +1947,110 @@ export class MultiplayerManager {
                         }
                     }
 
+                    const turretData = [];
+                    if (Array.isArray(sim.turrets)) {
+                        for (let i = 0; i < sim.turrets.length; i++) {
+                            const t = sim.turrets[i];
+                            if (sim.tick < t.endTick) {
+                                turretData.push([
+                                    t.uid,
+                                    Math.round(t.x * 100) / 100,
+                                    Math.round(t.y * 100) / 100,
+                                    t.yaw & 2047,
+                                    t.startTick,
+                                    t.endTick,
+                                    Math.round((t.range || 8) * 100) / 100,
+                                    t.amount || 1,
+                                    t.interval || 18
+                                ]);
+                            }
+                        }
+                    }
+
+                    const thrallData = [];
+                    if (Array.isArray(sim.thralls)) {
+                        for (let i = 0; i < sim.thralls.length; i++) {
+                            const th = sim.thralls[i];
+                            if (sim.tick < th.endTick && th.def) {
+                                thrallData.push([
+                                    th.uid,
+                                    th.def.id,
+                                    th.ownerSlot || th.owner?.slot || this.localSlot,
+                                    Math.round(th.x * 100) / 100,
+                                    Math.round(th.y * 100) / 100,
+                                    th.yaw & 2047,
+                                    th.moving ? 1 : 0,
+                                    th.attackStart ?? -1,
+                                    th.startTick,
+                                    th.endTick
+                                ]);
+                            }
+                        }
+                    }
+
+                    const enemyProjData = [];
+                    if (Array.isArray(sim.enemyProjectiles)) {
+                        for (let i = 0; i < sim.enemyProjectiles.length; i++) {
+                            const ep = sim.enemyProjectiles[i];
+                            if (ep.life > 0 && ep.attack?.spotAnim !== undefined) {
+                                enemyProjData.push([
+                                    ep.uid,
+                                    ep.attack.spotAnim,
+                                    Math.round(ep.x * 100) / 100,
+                                    Math.round(ep.y * 100) / 100,
+                                    Math.round((ep.vx || 0) * 1000) / 1000,
+                                    Math.round((ep.vy || 0) * 1000) / 1000,
+                                    ep.yaw & 2047,
+                                    ep.startTick,
+                                    ep.life
+                                ]);
+                            }
+                        }
+                    }
+
+                    const effectData = [];
+                    if (Array.isArray(sim.effects)) {
+                        for (let i = 0; i < sim.effects.length; i++) {
+                            const ef = sim.effects[i];
+                            if (ef.startTick >= sim.tick - 1 && sim.tick < ef.endTick) {
+                                effectData.push([
+                                    ef.uid,
+                                    ef.spotAnim,
+                                    Math.round(ef.x * 100) / 100,
+                                    Math.round(ef.y * 100) / 100,
+                                    ef.height || 0,
+                                    Math.max(5, ef.endTick - ef.startTick),
+                                    ef.enemyUid || 0
+                                ]);
+                            }
+                        }
+                    }
+
+                    const visEvents = [];
+                    if (Array.isArray(sim.events)) {
+                        for (let i = 0; i < sim.events.length; i++) {
+                            const ev = sim.events[i];
+                            if (!ev) continue;
+                            if (
+                                ev.type === 'damage' ||
+                                ev.type === 'playerHit' ||
+                                ev.type === 'playerPoisoned' ||
+                                ev.type === 'bossSwing' ||
+                                ev.type === 'bossShout' ||
+                                ev.type === 'bossAttack' ||
+                                ev.type === 'blast' ||
+                                ev.type === 'cannonSetup' ||
+                                ev.type === 'powerUp' ||
+                                ev.type === 'bossSpawned' ||
+                                ev.type === 'bossRose' ||
+                                ev.type === 'bossEnraged'
+                            ) {
+                                visEvents.push(ev);
+                            }
+                        }
+                    }
+
+                    const localStat = this.damageStats?.get(this.localSlot);
                     const playersSnapshot = [{
                         slot: this.localSlot,
                         x: Math.round(sim.player.x * 100) / 100,
@@ -1812,12 +2067,15 @@ export class MultiplayerManager {
                         hp: sim.player.hp,
                         maxHp: sim.player.maxHp,
                         activePrayer: sim.player.activePrayer || window._osrsPrayer || null,
-                        pauseState: this.getLocalPauseState(client)
+                        pauseState: this.getLocalPauseState(client),
+                        dmg: Math.round(localStat?.damage || 0),
+                        kills: Math.round(localStat?.kills || 0)
                     }];
 
                     for (const peer of this.remotePeers.values()) {
                         const re = peer.entity;
                         if (!re) continue;
+                        const pStat = this.damageStats?.get(peer.slot);
                         playersSnapshot.push({
                             slot: peer.slot,
                             x: Math.round(re.x * 100) / 100,
@@ -1834,7 +2092,9 @@ export class MultiplayerManager {
                             hp: re.hp,
                             maxHp: re.maxHp,
                             activePrayer: re.activePrayer || null,
-                            pauseState: peer.pauseState
+                            pauseState: peer.pauseState,
+                            dmg: Math.round(pStat?.damage || 0),
+                            kills: Math.round(pStat?.kills || 0)
                         });
                     }
 
@@ -1847,7 +2107,12 @@ export class MultiplayerManager {
                         pauseState: this.getLocalPauseState(client),
                         players: playersSnapshot,
                         enemies: enemyData,
-                        pickups: pickupData
+                        pickups: pickupData,
+                        turrets: turretData.length > 0 ? turretData : undefined,
+                        thralls: thrallData.length > 0 ? thrallData : undefined,
+                        enemyProjs: enemyProjData.length > 0 ? enemyProjData : undefined,
+                        effects: effectData.length > 0 ? effectData : undefined,
+                        visEvents: visEvents.length > 0 ? visEvents : undefined
                     });
                 } else {
                     const localAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
@@ -2751,6 +3016,7 @@ export class MultiplayerManager {
                     sim.bossesKilled?.push(e.def.id);
                 }
             }
+            this.buildLeaderboard(msg.leaderboard);
             this.removePauseOverlay();
             const hud = document.getElementById('coop-party-hud');
             if (hud) hud.remove();
@@ -2761,6 +3027,37 @@ export class MultiplayerManager {
             client.syncOverlay();
             client.updateHud(true);
         }
+    }
+
+    buildLeaderboard(overrideStats = null) {
+        if (Array.isArray(overrideStats) && overrideStats.length > 0 && this.damageStats) {
+            for (const st of overrideStats) {
+                if (!st || typeof st !== 'object') continue;
+                const s = sanitizeSlot(st.slot, 0);
+                const entry = this.damageStats.get(s);
+                if (entry) {
+                    if (Number.isFinite(Number(st.damage))) entry.damage = Math.max(entry.damage, Math.round(Number(st.damage)));
+                    if (Number.isFinite(Number(st.kills))) entry.kills = Math.max(entry.kills, Math.round(Number(st.kills)));
+                }
+            }
+        }
+        if (!this.damageStats || this.damageStats.size === 0) return [];
+        const list = Array.from(this.damageStats.values()).map(e => ({
+            slot: e.slot,
+            name: e.name,
+            characterId: e.characterId,
+            charName: e.charName,
+            damage: Math.max(0, Math.round(e.damage || 0)),
+            kills: Math.max(0, Math.round(e.kills || 0)),
+            isLocal: e.slot === this.localSlot
+        }));
+        list.sort((a, b) => (b.damage - a.damage) || (b.kills - a.kills) || (a.slot - b.slot));
+        const totalDmg = list.reduce((sum, r) => sum + r.damage, 0);
+        for (const r of list) {
+            r.pct = totalDmg > 0 ? Math.round((r.damage / totalDmg) * 1000) / 10 : 0;
+        }
+        this.lastLeaderboard = list;
+        return list;
     }
 
     getIconUrl(objId) {
@@ -2983,8 +3280,9 @@ export class MultiplayerManager {
         });
     }
 
-    endGameOnDisconnect(reason) {
+    endGameOnDisconnect(reason, leaderboard = null) {
         if (!this.gameStarted) return;
+        this.buildLeaderboard(leaderboard);
         this.gameStarted = false;
         this.localPauseState = null;
         this.spectateSlot = null;
@@ -3083,7 +3381,9 @@ export class MultiplayerManager {
                     }
                 } else if (pickup.kind === 'powerUp') {
                     const savedPlayer = sim.player;
+                    const savedSlot = this._activeAttackerSlot;
                     sim.player = p2;
+                    this._activeAttackerSlot = peer.slot;
                     try {
                         if (sim._origCollect) {
                             sim._origCollect({ ...pickup, value: origVal });
@@ -3091,6 +3391,7 @@ export class MultiplayerManager {
                             sim.collect({ ...pickup, value: origVal });
                         }
                     } finally {
+                        this._activeAttackerSlot = savedSlot;
                         sim.player = savedPlayer;
                     }
                     this.send({
@@ -3142,6 +3443,11 @@ export class MultiplayerManager {
             for (const pState of msg.players) {
                 if (!pState || typeof pState !== 'object') continue;
                 const slot = sanitizeSlot(pState.slot, 0);
+                const dStat = this.damageStats?.get(slot);
+                if (dStat) {
+                    if (Number.isFinite(Number(pState.dmg))) dStat.damage = Math.max(0, Math.round(Number(pState.dmg)));
+                    if (Number.isFinite(Number(pState.kills))) dStat.kills = Math.max(0, Math.round(Number(pState.kills)));
+                }
                 if (slot === this.localSlot) {
                     localPlayerSnapshot = pState;
                     continue;
@@ -3265,9 +3571,29 @@ export class MultiplayerManager {
             for (let i = 0; i < msg.enemies.length; i++) {
                 const item = msg.enemies[i];
                 const [
-                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq
+                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq, windupData
                 ] = item;
                 hostUids.add(uid);
+
+                const applyBossWindup = (targetEnemy, wuArr) => {
+                    if (!targetEnemy || !targetEnemy.bossState || !targetEnemy.def?.boss?.attacks) return;
+                    if (Array.isArray(wuArr) && wuArr.length >= 3) {
+                        const [atkName, startTick, landTick, targetX, targetY, dir] = wuArr;
+                        const atk = targetEnemy.def.boss.attacks.find(a => a.name === atkName) || targetEnemy.def.boss.attacks[0];
+                        if (atk) {
+                            targetEnemy.bossState.windup = {
+                                attack: atk,
+                                startTick: Number(startTick) || sim.tick,
+                                landTick: Number(landTick) || (sim.tick + 30),
+                                targetX: Number(targetX) || targetEnemy.x,
+                                targetY: Number(targetY) || targetEnemy.y,
+                                dir: Number(dir) || 0
+                            };
+                        }
+                    } else {
+                        targetEnemy.bossState.windup = undefined;
+                    }
+                };
 
                 let enemy = existingMap.get(uid);
                 if (enemy) {
@@ -3300,6 +3626,7 @@ export class MultiplayerManager {
                     enemy.scale = scale;
                     if (Number.isFinite(variant)) enemy.variant = variant;
                     if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
+                    applyBossWindup(enemy, windupData);
                 } else {
                     const def = client.getEnemyDef ? client.getEnemyDef(defId) : null;
                     if (def) {
@@ -3331,6 +3658,7 @@ export class MultiplayerManager {
                                 enemy.scale = scale;
                                 if (Number.isFinite(variant)) enemy.variant = variant;
                                 if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
+                                applyBossWindup(enemy, windupData);
                             }
                         } catch (err) {
                             console.warn('[Multiplayer] Failed spawning synced enemy:', defId, err);
@@ -3401,6 +3729,169 @@ export class MultiplayerManager {
             }
 
             sim.pickups = sim.pickups.filter(p => hostPickupUids.has(p.uid));
+        }
+
+        // 4. Synchronize Dwarf Multicannons (sim.turrets)
+        if (Array.isArray(msg.turrets)) {
+            const turretMap = new Map();
+            for (let i = 0; i < sim.turrets.length; i++) {
+                turretMap.set(sim.turrets[i].uid, sim.turrets[i]);
+            }
+            const hostTurretUids = new Set();
+            for (let i = 0; i < msg.turrets.length; i++) {
+                const [uid, tx, ty, yaw, startTick, endTick, range, amount, interval] = msg.turrets[i];
+                hostTurretUids.add(uid);
+                let t = turretMap.get(uid);
+                if (t) {
+                    t.x = tx;
+                    t.y = ty;
+                    t.endTick = endTick;
+                    t.range = range || 8;
+                    t.amount = amount || 1;
+                    t.interval = interval || 18;
+                } else {
+                    sim.turrets.push({
+                        uid,
+                        x: tx,
+                        y: ty,
+                        yaw: yaw & 2047,
+                        startTick: startTick || sim.tick,
+                        endTick: endTick || (sim.tick + 900),
+                        nextShot: sim.tick + 2,
+                        damage: 0,
+                        range: range || 8,
+                        amount: amount || 1,
+                        interval: interval || 18
+                    });
+                }
+            }
+            sim.turrets = sim.turrets.filter(t => hostTurretUids.has(t.uid) && sim.tick < t.endTick);
+        } else if (sim.turrets && sim.turrets.length > 0) {
+            sim.turrets = [];
+        }
+
+        // 5. Synchronize Arceuus Thralls (sim.thralls)
+        if (Array.isArray(msg.thralls)) {
+            const thrallDefs = client.getThrallDefs ? client.getThrallDefs() : [];
+            const thrallMap = new Map();
+            for (let i = 0; i < sim.thralls.length; i++) {
+                thrallMap.set(sim.thralls[i].uid, sim.thralls[i]);
+            }
+            const hostThrallUids = new Set();
+            for (let i = 0; i < msg.thralls.length; i++) {
+                const [uid, defId, ownerSlot, tx, ty, yaw, moving, attackStart, startTick, endTick] = msg.thralls[i];
+                hostThrallUids.add(uid);
+                const ownerEntity = ownerSlot === this.localSlot
+                    ? sim.player
+                    : (this.remotePeers.get(ownerSlot)?.entity || sim.player);
+                let th = thrallMap.get(uid);
+                if (th) {
+                    th.owner = ownerEntity;
+                    th.ownerSlot = ownerSlot;
+                    th.endTick = endTick;
+                    if (Math.hypot(tx - th.x, ty - th.y) > 2.5) {
+                        th.x = tx;
+                        th.y = ty;
+                        th.prevX = tx;
+                        th.prevY = ty;
+                    }
+                    if (Number.isFinite(attackStart) && attackStart > th.attackStart) {
+                        th.attackStart = attackStart;
+                    }
+                } else {
+                    const def = thrallDefs.find(d => d.id === defId) || thrallDefs[0];
+                    if (def) {
+                        sim.thralls.push({
+                            uid,
+                            def,
+                            owner: ownerEntity,
+                            ownerSlot,
+                            x: tx,
+                            y: ty,
+                            prevX: tx,
+                            prevY: ty,
+                            yaw: yaw & 2047,
+                            moving: Boolean(moving),
+                            attackStart: attackStart ?? -1,
+                            cooldown: 10,
+                            damage: 0,
+                            startTick: startTick || sim.tick,
+                            endTick: endTick || (sim.tick + 900)
+                        });
+                    }
+                }
+            }
+            sim.thralls = sim.thralls.filter(th => hostThrallUids.has(th.uid) && sim.tick < th.endTick);
+        } else if (sim.thralls && sim.thralls.length > 0) {
+            sim.thralls = [];
+        }
+
+        // 6. Synchronize Enemy Projectiles (sim.enemyProjectiles)
+        if (Array.isArray(msg.enemyProjs)) {
+            const epMap = new Map();
+            for (let i = 0; i < sim.enemyProjectiles.length; i++) {
+                epMap.set(sim.enemyProjectiles[i].uid, sim.enemyProjectiles[i]);
+            }
+            const hostEpUids = new Set();
+            for (let i = 0; i < msg.enemyProjs.length; i++) {
+                const [uid, spotAnim, ex, ey, vx, vy, yaw, startTick, life] = msg.enemyProjs[i];
+                hostEpUids.add(uid);
+                let ep = epMap.get(uid);
+                if (ep) {
+                    if (Math.hypot(ex - ep.x, ey - ep.y) > 2.5) {
+                        ep.x = ex;
+                        ep.y = ey;
+                        ep.prevX = ex;
+                        ep.prevY = ey;
+                    } else {
+                        ep.x = ep.x + (ex - ep.x) * 0.5;
+                        ep.y = ep.y + (ey - ep.y) * 0.5;
+                    }
+                    ep.vx = vx;
+                    ep.vy = vy;
+                    ep.yaw = yaw & 2047;
+                    ep.life = life;
+                } else {
+                    sim.enemyProjectiles.push({
+                        uid,
+                        attack: { spotAnim },
+                        x: ex,
+                        y: ey,
+                        prevX: ex,
+                        prevY: ey,
+                        vx,
+                        vy,
+                        yaw: yaw & 2047,
+                        startTick: startTick || sim.tick,
+                        life: life || 30,
+                        radius: 0.4,
+                        homing: 0
+                    });
+                }
+            }
+            sim.enemyProjectiles = sim.enemyProjectiles.filter(ep => hostEpUids.has(ep.uid) && ep.life > 0);
+        } else if (sim.enemyProjectiles && sim.enemyProjectiles.length > 0) {
+            sim.enemyProjectiles = [];
+        }
+
+        // 7. Synchronize Visual SpotAnim Effects (sim.effects)
+        if (Array.isArray(msg.effects) && sim.addEffect) {
+            if (!this._seenEffectUids) this._seenEffectUids = new Set();
+            for (let i = 0; i < msg.effects.length; i++) {
+                const [uid, spotAnim, fx, fy, height, durationTicks, enemyUid] = msg.effects[i];
+                if (this._seenEffectUids.has(uid)) continue;
+                this._seenEffectUids.add(uid);
+                sim.addEffect(spotAnim, fx, fy, height || 0, durationTicks || 30, enemyUid || 0);
+            }
+            if (this._seenEffectUids.size > 400) {
+                const keep = Array.from(this._seenEffectUids).slice(-200);
+                this._seenEffectUids = new Set(keep);
+            }
+        }
+
+        // 8. Replay Authoritative Combat/Hitsplat/Boss Events on Guest
+        if (Array.isArray(msg.visEvents) && msg.visEvents.length > 0 && client.handleEvents) {
+            client.handleEvents(sim, msg.visEvents);
         }
     }
 
@@ -3604,11 +4095,19 @@ export class MultiplayerManager {
         const box = this.modalEl.firstElementChild;
         if (!box) return;
 
+        const prevNameEl = box.querySelector('#coop-local-name');
+        const wasNameFocused = Boolean(prevNameEl && document.activeElement === prevNameEl);
+        const prevNameVal = wasNameFocused
+            ? prevNameEl.value
+            : (this.localNameDraft !== undefined ? this.localNameDraft : this.localName);
+        const prevSelStart = wasNameFocused ? prevNameEl.selectionStart : null;
+        const prevSelEnd = wasNameFocused ? prevNameEl.selectionEnd : null;
+
         this.syncLocalToLobbyPlayers();
         const isHost = this.role === 'host' || this.role === null;
         const safeRoomId = escapeHtml(this.roomId || 'CONNECTING...');
         const safeInviteLink = escapeHtml(this.getInviteLink());
-        const safeLocalName = escapeHtml(this.localName);
+        const safeLocalName = escapeHtml(prevNameVal);
 
         const hostUnlocked = this.getUnlockedCharacters();
         const unlockedSet = new Set(hostUnlocked);
@@ -3825,6 +4324,15 @@ export class MultiplayerManager {
         const localNameInput = box.querySelector('#coop-local-name');
         if (localNameInput) {
             localNameInput.oninput = (e) => this.setPlayerName(e.target.value);
+            if (wasNameFocused) {
+                localNameInput.value = prevNameVal;
+                localNameInput.focus();
+                try {
+                    if (prevSelStart !== null && prevSelEnd !== null) {
+                        localNameInput.setSelectionRange(prevSelStart, prevSelEnd);
+                    }
+                } catch (err) {}
+            }
         }
 
         const localCharSelect = box.querySelector('#coop-local-char');
