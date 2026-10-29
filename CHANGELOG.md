@@ -8,13 +8,12 @@ the version in the corner), so it's written for players.
 ### Balance & Combat Adjustments
 
 - **Rapid Heal**: Rebalanced to **+2.5 HP/min per level** (+12.5 HP/min at level 5). Taking any hit pauses Rapid Heal regeneration for **5 seconds**.
-- **Blood Burst -> Blood Barrage**: Evolving Blood Burst into Blood Barrage at level 8 no longer requires the Rapid Heal passive. Blood Barrage now plays the authentic **OSRS Ancient Magicks casting animation (Seq 1979)** for its full duration and renders the **Blood Barrage vortex visual (SpotAnim 377)** on impacted targets.
-- **Healing Rebalance**: Reduced healing from **Blood Burst** (0.33 HP per hit), **Blood Barrage** (0.67 HP per hit), **Sanfew serum** (+7 HP on pickup), and **Saradomin brew** (+5 HP per dose) to one-third of previous values.
+- **Blood Burst -> Blood Barrage**: Evolve Blood Burst into Blood Barrage!
 
 ### New Content & Modes
 
-- **Co-Op Multiplayer & Damage Leaderboard**: Real-time WebRTC Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard.
-- **Fight Caves & Inferno Bosses**: Enter the **Fight Caves** map featuring **TzTok-Jad** at 6:00 and **TzKal-Zuk** at 12:00, complete with **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks.
+- **Co-Op Multiplayer & Damage Leaderboard**: Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard.
+- **Fight Caves & Inferno Bosses**: Enter the **Fight Caves** map, complete with **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge to complete the quest for bonus XP, coins, and a guaranteed chest.
 - **Secret Adventurers**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave) and **Elias the Chihuahua** (Ankle Bite).
 
