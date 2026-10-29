@@ -1,5 +1,4 @@
 import http.server
-import socketserver
 import urllib.parse
 import hashlib
 import base64
