@@ -52,6 +52,40 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 
 ## 3. Chronological Agent Handoff Log
 
+### 2026-10-29 - Claude Code - Cook's Assistant, Jad co-op fixes, jad-fix port, prayer sprites, debug mode (v7.3)
+- **Commit / PR**: branch `quest-test` merged into `main`
+- **Files Modified**: `index.html`, `assets/index-XWbnxuVz.js`, `assets/multiplayer.js`, `assets/MapViewerApp-DKojfbH1.js`, `assets/RenderDataWorker-CRRhTJTb.js`, `assets/module-Cg9b2g3N.js`, `assets/module-C9loB8SI.js`, `serve.py`, `caches/osrs-241_2026-09-30-slim-4cd931ae/main_file_cache.{dat2,idx0,idx5,idx7}`; new `assets/cooks-assistant.js`, `assets/tile-coords.js`, `assets/debug-mode.js`, `assets/quest-complete.ogg`, `assets/prayer/*.png` (force-added past the `*.png` ignore rule)
+- **Bundle / Version Impact**: `?v=7.2` -> `?v=7.3` in all 6 entry points. CacheStorage key `-v9` -> `-v10` in the main bundle and `-v5` -> `-v10` in `RenderDataWorker-CRRhTJTb.js`, because the 4cd931ae cache contents changed under the same name.
+- **What Changed**:
+  - **jad-fix port (e3e53f8)**: Jad recovery 2.2 s (1.2 s enraged), Zuk 2.0 s (1.1 s). No new wind-up while the boss's own projectile is in flight. Jad's Call healers is enrage-only and fires on enrage.
+  - **Jad/Zuk co-op fixes**:
+    - `bossHit` uses a teammate's own synced prayer and no longer falls back to the host's `window._osrsPrayer`.
+    - The guest's wind-up sync carries the blast `targets` (7th array field); `drawBossWindups` guards `r.targets||[]`. Before, it threw every frame on guests for Rockfall and killed the pray banner.
+    - The banner is pinned under the boss health bar when the boss is off-screen.
+    - Menus (level-up, casket, pause) hide the prayer bar without clearing the prayer.
+    - Prayers clear only after the boss has been absent for 3 s (guest sync flicker), or on death or run end.
+    - Sounds: a teammate's `playerHit` plays quietly at their position; blocked hits skip the grunt; Jad/Zuk attack sounds play at wind-up start instead of on landing.
+  - **Cook's Assistant** (`assets/cooks-assistant.js`, Lumbridge):
+    - Cook NPC 4626 at 3210,3216; Space to start or hand in; overhead line on start.
+    - Milk 3253,3274; egg 3185,3278; flour 3166,3302; minimap markers.
+    - Co-op shared via the `coop_quest` message.
+    - Rewards: OSRS quest-complete scroll (pauses the run) with jingle, then 500 coins, an Antique lamp, +3 levels and an Elite casket.
+  - **Gates opened in the cache** (index 5): cow pen (region 12851) and farm coop (region 12595). Added index 0 group 12217 and index 7 groups 199, 13897, 10980, 12750, 2504, 2437, 2406, 2531.
+  - **Settings**: a "Tile coordinates" toggle (`display.showCoords`, `toggleCoords`) drives `assets/tile-coords.js`.
+  - **Prayer sprites**: real OSRS sprites (cache sprites 127-129 and headicons group 440) replace the drawn prayer icons in `multiplayer.js`.
+  - **Debug mode** (`assets/debug-mode.js`): secret code `debugmode` gives 1M HP, max armor and Shift for 3x speed; `bugmode` turns it off. A guest in debug mode sends `coop_debug` so the host keeps it topped up. **MUST BE REMOVED IF WE GO LIVE** (shipped on request).
+  - **`serve.py`**: `coop_quest` and `coop_debug` added to both allowlists; HTTP Range/206 support for audio.
+- **Notes / Invariants for Future Agents**:
+  - New inline bundle anchors:
+    - `window.__runEscapeItems=tC` (item table) and `window.__runEscapeIcons=A0` (icon cache)
+    - `toggleCoords()` and the `showCoords` display key
+    - `_rec` recovery logic in `stepBoss`
+    - the summon-on-enrage block in `enrage()`
+    - the co-op slot check in `bossHit`'s `activePrayer`
+    - the `playerHit` sound case
+    - the Jad/Zuk `bossAttack` push at wind-up
+  - Removing debug mode means deleting `assets/debug-mode.js`, its `<script>` tag and comment in `index.html`, and `coop_debug` from both allowlists in `serve.py`.
+
 ### 2026-10-29 - Antigravity - Upstream 0.13.0 Merge (Quests, Amulet of Blood Fury, Pile Merging) + Custom Features (v7.0)
 - **Commit / PR**: Upstream `0.13.0` (`index-XWbnxuVz.js`) merge (`?v=7.2`)
 - **Files Modified**: `index.html`, `assets/index-XWbnxuVz.js`, `assets/index-Cu_WH1lb.css`, `assets/MapViewerApp-DKojfbH1.js`, `assets/module-C9loB8SI.js`, `assets/module-Cg9b2g3N.js`, `assets/RenderDataWorker-CRRhTJTb.js`, `assets/multiplayer.js`, `caches/caches.json`, `caches/osrs-241_2026-09-30-slim-4cd931ae/*`, `AGENTS.md`, `AGENT_NOTES.md`, `c:/Git/.agents/skills/merge-update/SKILL.md`

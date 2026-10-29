@@ -43,11 +43,11 @@ rooms_lock = threading.Lock()
 
 HOST_ALLOWED_MSG_TYPES = {
     "lobby_update", "game_start", "sync_world", "game_over",
-    "coop_pause", "coop_pickup", "coop_loadout"
+    "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 GUEST_ALLOWED_MSG_TYPES = {
     "lobby_update", "input", "game_over",
-    "coop_pause", "coop_pickup", "coop_loadout"
+    "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 
 CSP_POLICY = (
@@ -499,7 +499,44 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "File not found")
             return None
 
+        self._range_remaining = None
+        range_header = self.headers.get("Range")
+        if range_header:
+            return self._send_range(range_header)
         return super().send_head()
+
+    def _send_range(self, range_header):
+        # Byte-range support (HTTP 206) so resumed cache downloads work like they do behind nginx.
+        path = self.translate_path(self.path)
+        if not os.path.isfile(path):
+            return super().send_head()
+        m = re.fullmatch(r"\s*bytes=(\d*)-(\d*)\s*", range_header)
+        if not m or (m.group(1) == "" and m.group(2) == ""):
+            return super().send_head()
+        size = os.path.getsize(path)
+        if m.group(1) == "":
+            length = min(int(m.group(2)), size)
+            start = size - length
+            end = size - 1
+        else:
+            start = int(m.group(1))
+            end = int(m.group(2)) if m.group(2) else size - 1
+            end = min(end, size - 1)
+        if start >= size or start > end:
+            self.send_response(416, "Range Not Satisfiable")
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return None
+        f = open(path, "rb")
+        f.seek(start)
+        self._range_remaining = end - start + 1
+        self.send_response(206, "Partial Content")
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(self._range_remaining))
+        self.end_headers()
+        return f
 
     def list_directory(self, path):
         self.send_error(404, "Directory listing disabled")
@@ -513,6 +550,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Security-Policy", CSP_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Accept-Ranges", "bytes")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
@@ -533,7 +571,16 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
     def copyfile(self, source, outputfile):
         try:
-            super().copyfile(source, outputfile)
+            remaining = getattr(self, "_range_remaining", None)
+            if remaining is None:
+                super().copyfile(source, outputfile)
+                return
+            while remaining > 0:
+                chunk = source.read(min(65536, remaining))
+                if not chunk:
+                    break
+                outputfile.write(chunk)
+                remaining -= len(chunk)
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             pass
 

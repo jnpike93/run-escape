@@ -1955,7 +1955,14 @@ export class MultiplayerManager {
                                 e.elite ? 1 : (e.boss ? 2 : 0),
                                 e.variant || 0,
                                 e.attackSeq ?? e.def.attackSeq ?? -1,
-                                wu && wu.attack ? [wu.attack.name, wu.startTick, wu.landTick, Math.round((wu.targetX ?? 0) * 100) / 100, Math.round((wu.targetY ?? 0) * 100) / 100, wu.dir ?? 0] : null
+                                wu && wu.attack ? [
+                                    wu.attack.name, wu.startTick, wu.landTick,
+                                    Math.round((wu.targets?.[0]?.x ?? wu.targetX ?? 0) * 100) / 100,
+                                    Math.round((wu.targets?.[0]?.y ?? wu.targetY ?? 0) * 100) / 100,
+                                    wu.dir ?? 0,
+                                    // Blast attacks (Jad's Rockfall) need their target circles on guests too
+                                    Array.isArray(wu.targets) ? wu.targets.slice(0, 8).map(t => [Math.round(t.x * 100) / 100, Math.round(t.y * 100) / 100]) : []
+                                ] : null
                             ]);
                         }
                     }
@@ -3707,11 +3714,16 @@ export class MultiplayerManager {
                 const applyBossWindup = (targetEnemy, wuArr) => {
                     if (!targetEnemy || !targetEnemy.bossState || !targetEnemy.def?.boss?.attacks) return;
                     if (Array.isArray(wuArr) && wuArr.length >= 3) {
-                        const [atkName, startTick, landTick, targetX, targetY, dir] = wuArr;
+                        const [atkName, startTick, landTick, targetX, targetY, dir, targetList] = wuArr;
                         const atk = targetEnemy.def.boss.attacks.find(a => a.name === atkName) || targetEnemy.def.boss.attacks[0];
                         if (atk) {
+                            let targets = Array.isArray(targetList)
+                                ? targetList.filter(t => Array.isArray(t) && Number.isFinite(t[0]) && Number.isFinite(t[1])).map(t => ({ x: t[0], y: t[1] }))
+                                : [];
+                            if (targets.length === 0 && atk.kind === 'blast') targets = [{ x: Number(targetX) || targetEnemy.x, y: Number(targetY) || targetEnemy.y }];
                             targetEnemy.bossState.windup = {
                                 attack: atk,
+                                targets,
                                 startTick: Number(startTick) || sim.tick,
                                 landTick: Number(landTick) || (sim.tick + 30),
                                 targetX: Number(targetX) || targetEnemy.x,
@@ -4503,68 +4515,29 @@ window.multiplayer = multiplayer;
 // ============================================================================
 window._osrsPrayer = null; // 'magic' | 'ranged' | 'melee' | null
 
+// Real OSRS prayer sprites from the game cache (rev 241): prayer book icons are sprites 127-129,
+// overhead icons are sprite group 440 (frames 0 melee, 1 missiles, 2 magic).
+const OSRS_PRAYER_ICONS = {
+    magic: { book: './assets/prayer/protect-magic.png', overhead: './assets/prayer/overhead-magic.png' },
+    ranged: { book: './assets/prayer/protect-missiles.png', overhead: './assets/prayer/overhead-missiles.png' },
+    melee: { book: './assets/prayer/protect-melee.png', overhead: './assets/prayer/overhead-melee.png' }
+};
+const _overheadPrayerImages = {};
+for (const [type, icons] of Object.entries(OSRS_PRAYER_ICONS)) {
+    const img = new Image();
+    img.src = icons.overhead;
+    _overheadPrayerImages[type] = img;
+}
+
 function drawOverheadPrayerEmblem(ctx, x, y, scale, prayerType) {
     if (!prayerType) return;
-    const r = Math.max(12, Math.round(14 * scale));
+    const img = _overheadPrayerImages[prayerType];
+    if (!img || !img.complete || !img.naturalWidth) return;
+    // The sprite is 25x25; draw it at a whole-number multiple so the pixel art stays crisp.
+    const size = img.naturalWidth * Math.max(1, Math.round(scale * 1.1));
     ctx.save();
-    // Classic OSRS beige/gold overhead prayer circle background
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(218, 192, 134, 0.92)';
-    ctx.fill();
-    ctx.lineWidth = Math.max(1.5, 2 * scale);
-    ctx.strokeStyle = '#3b2d18';
-    ctx.stroke();
-
-    if (prayerType === 'magic') {
-        // Protect from Magic: Blue arcane starburst
-        ctx.fillStyle = '#1e6bff';
-        ctx.strokeStyle = '#a8d4ff';
-        ctx.lineWidth = Math.max(1.2, 1.5 * scale);
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-            const ang = (i * Math.PI) / 4 - Math.PI / 2;
-            const rad = i % 2 === 0 ? r * 0.72 : r * 0.32;
-            const px = x + Math.cos(ang) * rad;
-            const py = y + Math.sin(ang) * rad;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-    } else if (prayerType === 'ranged') {
-        // Protect from Missiles: Green ranged arrow + bow arc
-        ctx.strokeStyle = '#17b02a';
-        ctx.fillStyle = '#28e040';
-        ctx.lineWidth = Math.max(2, 2.2 * scale);
-        ctx.beginPath();
-        ctx.moveTo(x - r * 0.55, y + r * 0.55);
-        ctx.lineTo(x + r * 0.55, y - r * 0.55);
-        ctx.stroke();
-        // Arrowhead
-        ctx.beginPath();
-        ctx.moveTo(x + r * 0.62, y - r * 0.62);
-        ctx.lineTo(x + r * 0.12, y - r * 0.52);
-        ctx.lineTo(x + r * 0.52, y - r * 0.12);
-        ctx.closePath();
-        ctx.fill();
-    } else if (prayerType === 'melee') {
-        // Protect from Melee: Silver/Red OSRS broadsword
-        ctx.strokeStyle = '#e8eef5';
-        ctx.lineWidth = Math.max(2.2, 2.5 * scale);
-        ctx.beginPath();
-        ctx.moveTo(x - r * 0.48, y + r * 0.48);
-        ctx.lineTo(x + r * 0.55, y - r * 0.55);
-        ctx.stroke();
-        // Crossguard
-        ctx.strokeStyle = '#b8860b';
-        ctx.lineWidth = Math.max(2, 2.2 * scale);
-        ctx.beginPath();
-        ctx.moveTo(x - r * 0.52, y + r * 0.08);
-        ctx.lineTo(x - r * 0.08, y + r * 0.52);
-        ctx.stroke();
-    }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
     ctx.restore();
 }
 
@@ -4601,9 +4574,9 @@ function ensureOsrsPrayerBarUI() {
         box-shadow: 0 4px 16px rgba(0,0,0,0.85);
     `;
     const prayers = [
-        { id: 'magic', key: 'Q', label: 'Protect Magic', color: '#3b8bff', icon: '✦' },
-        { id: 'ranged', key: 'E', label: 'Protect Missiles', color: '#28e040', icon: '➶' },
-        { id: 'melee', key: 'R', label: 'Protect Melee', color: '#ff5252', icon: '⚔' }
+        { id: 'magic', key: 'Q', label: 'Protect Magic' },
+        { id: 'ranged', key: 'E', label: 'Protect Missiles' },
+        { id: 'melee', key: 'R', label: 'Protect Melee' }
     ];
     bar.innerHTML = `
         <div style="font-size: 11px; color: #ff981f; margin-right: 4px; text-shadow: 1px 1px #000;">
@@ -4613,10 +4586,11 @@ function ensureOsrsPrayerBarUI() {
             <button data-prayer="${p.id}" style="
                 display: flex; align-items: center; gap: 6px;
                 background: #1a140e; border: 2px solid #4a3c2c;
-                color: #d4c4a8; padding: 5px 10px; cursor: pointer;
+                color: #d4c4a8; padding: 3px 10px 3px 6px; cursor: pointer;
                 font-family: 'OSRS Bold', monospace; font-size: 12px;
                 border-radius: 3px; text-shadow: 1px 1px #000;">
-                <span style="color: ${p.color}; font-size: 15px;">${p.icon}</span>
+                <img src="${OSRS_PRAYER_ICONS[p.id].book}" width="30" height="30" alt="" draggable="false"
+                    style="image-rendering: pixelated; display: block; pointer-events: none;">
                 <span>[${p.key}] ${p.label}</span>
             </button>
         `).join('')}
@@ -4720,16 +4694,28 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
     const client = window.gameClient || window._client;
     const snap = client?.store?.getSnapshot?.();
     const activeOverlay = snap?.overlay;
-    const playerDeadOrSpectating = !sim || !sim.player || sim.player.hp <= 0 || sim.player.spectating || sim.player.deathTick !== -1 || sim.state === 'dead' || sim.state === 'victory' || sim.runOver || (snap?.screen && snap.screen !== 'run') || (activeOverlay && activeOverlay !== 'none');
+    const playerDeadOrSpectating = !sim || !sim.player || sim.player.hp <= 0 || sim.player.spectating || sim.player.deathTick !== -1 || sim.state === 'dead' || sim.state === 'victory' || sim.runOver || (snap?.screen && snap.screen !== 'run');
     if (playerDeadOrSpectating) {
         window._hideOsrsPrayerBar();
         return;
     }
-    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
-    if (!isFightCavesOrJad) {
-        window._hideOsrsPrayerBar();
+    // A level-up, casket or pause screen only hides the bar. Prayers stay on (as in OSRS), so closing
+    // a menu mid-fight doesn't leave the player unprotected for Jad's next attack.
+    if (activeOverlay && activeOverlay !== 'none') {
+        const openBar = document.getElementById('osrs-prayer-bar');
+        if (openBar && openBar.style.display !== 'none') openBar.style.display = 'none';
         return;
     }
+    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
+    if (!isFightCavesOrJad) {
+        // On guests the boss can drop out of the synced enemy list for a moment. Hide the bar right away,
+        // but only switch prayers off once the boss has really been gone for a few seconds.
+        const hiddenBar = document.getElementById('osrs-prayer-bar');
+        if (hiddenBar && hiddenBar.style.display !== 'none') hiddenBar.style.display = 'none';
+        if (window._osrsPrayer && performance.now() - (window._osrsBossLastSeen || 0) > 3000) window._hideOsrsPrayerBar();
+        return;
+    }
+    window._osrsBossLastSeen = performance.now();
     const bar = ensureOsrsPrayerBarUI();
     if (bar.style.display !== 'flex') {
         bar.style.display = 'flex';
@@ -4765,7 +4751,14 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
         const ey = enemy.prevY + (enemy.y - enemy.prevY) * alpha;
         const groundY = client?.view ? client.view.ground(sim, ex, ey) : 0;
         const screen = viewport.project(ex, groundY - 2.3, ey, { x: 0, y: 0, visible: false });
-        if (!screen.visible) continue;
+        // Jad's ranged and magic attacks reach further than the camera shows. If he's off-screen,
+        // pin the warning to the top of the screen (under the boss health bar) instead of hiding it.
+        const cw = ctx.canvas.width, ch = ctx.canvas.height;
+        const onScreen = screen.visible && screen.x >= 0 && screen.x <= cw && screen.y >= 40 * scale && screen.y <= ch;
+        if (!onScreen) {
+            screen.x = cw / 2;
+            screen.y = Math.round(175 * scale);
+        }
 
         ctx.save();
         const fontPx = Math.max(13, Math.round(15 * scale));
