@@ -34,6 +34,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build && node scripts/sync_dist.cjs",
+    "sync-upstream": "node scripts/auto_sync_upstream.cjs",
     "test": "vitest run",
     "preview": "vite preview",
     "lint": "prettier --write \"./**/*.{js,ts,jsx,tsx,css,md}\"",

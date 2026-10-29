@@ -15,6 +15,7 @@
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.4`, imports `assets/multiplayer/mp-*.js?v=8.4`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](./scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
+| **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](./scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
 | **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.4`) |
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.4`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.4`, remove before live production) |
@@ -57,6 +58,18 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Hourly Upstream Auto-Sync Cron on `cuteanimegirls.moe` & GitHub Actions (`scripts/auto_sync_upstream.cjs`)
+- **Commit / PR**: Automated upstream cron sync (`?v=8.4`)
+- **Files Modified**: `scripts/auto_sync_upstream.cjs`, `.github/workflows/deploy.yaml`, `.github/workflows/sync-upstream.yaml`, `package.json`, `CHANGELOG.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: `?v=8.4` (no bundle change on idle check; auto-increments `?v=X.Y` and rebuilds `assets/` whenever `upstream/main` advances)
+- **What Changed**:
+  - Recorded `upstream/main` (`b29f532`) as a git merge-base parent of `main` so `git rev-list HEAD..upstream/main` and 3-way merges track only new upstream commits.
+  - Created [`scripts/auto_sync_upstream.cjs`](./scripts/auto_sync_upstream.cjs) (`npm run sync-upstream`), which acquires a PID lockfile, fetches `origin/main` and `upstream/main`, merges new upstream commits (including automatic root-graft fallback if `upstream` ever force-pushes), bumps `?v=X.Y`, updates `CHANGELOG.md` and `AGENT_NOTES.md`, runs `npx vite build && node scripts/sync_dist.cjs`, verifies `tsc`, `vitest`, `test_serve.py`, and `multiplayer.js`, commits, and reloads PM2 (`ecosystem.config.cjs`).
+  - Updated [`.github/workflows/deploy.yaml`](./.github/workflows/deploy.yaml) to configure the `upstream` remote, install npm dependencies, run `auto_sync_upstream.cjs`, and install `/etc/cron.d/run-escape-upstream-sync` on `cuteanimegirls.moe` (running hourly at `0 * * * *` and logging to `/var/log/run-escape-sync.log`).
+  - Added [`.github/workflows/sync-upstream.yaml`](./.github/workflows/sync-upstream.yaml) to run `scripts/auto_sync_upstream.cjs` hourly on GitHub Actions and push clean upstream merges directly to `origin/main`.
+- **Notes / Invariants for Future Agents**:
+  - If `auto_sync_upstream.cjs` encounters source conflicts in `src/` or any verification failure, it automatically aborts and resets to the previous `HEAD` so the live server on `cuteanimegirls.moe` is never left in a broken state.
 
 ### 2026-10-29 - Antigravity - Fix PM2 Deployment CommonJS Config under ESM Package (`ecosystem.config.cjs`)
 - **Commit / PR**: PM2 `ecosystem.config.cjs` CommonJS fix (`?v=8.4`)

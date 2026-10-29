@@ -8,6 +8,7 @@ the version in the corner), so it's written for players.
 ### Architecture & Build Pipeline
 
 - **Source-Based TypeScript + Vite Migration**: Migrated the repository to the full unminified TypeScript + React + Vite source base (`src/`, `vite.config.ts`, `package.json`, `scripts/sync_dist.cjs`) with `upstream` tracking `https://github.com/Dynrothe/Run-Escape.git`. Running `npm run build` compiles `src/` and synchronizes the production bundles into `assets/` and `index.html`.
+- **Automated Upstream Cron Sync (`scripts/auto_sync_upstream.cjs`)**: Added hourly automated `upstream/main` merge, Vite bundle rebuild, cache-busting bump, test suite verification, and PM2 service reload via `/etc/cron.d/run-escape-upstream-sync` on `cuteanimegirls.moe` and `.github/workflows/sync-upstream.yaml`.
 - **PM2 CommonJS Config Compatibility (`ecosystem.config.cjs`)**: Renamed `ecosystem.config.js` to `ecosystem.config.cjs` and updated `.github/workflows/deploy.yaml` and `nginx.conf` so PM2 loads the CommonJS ecosystem configuration cleanly alongside `"type": "module"` in `package.json`.
 
 ### Balance & Combat Adjustments
