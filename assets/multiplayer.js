@@ -1,4 +1,6 @@
 // Run Escape - Multiplayer Co-Op Module (RFC 6455 WebSockets)
+// AGENT DIRECTIVE: Before modifying this file, read ../AGENTS.md and ../AGENT_NOTES.md.
+// After completing changes, run `node --check assets/multiplayer.js`, bump `?v=X.Y` across all 6 entry points in ../AGENTS.md, and prepend a handoff entry to ../AGENT_NOTES.md.
 // Supports 2 to 4 players with Host-authoritative simulation, class model baking,
 // jitter-free velocity extrapolation + soft correction, dynamic party HP scaling,
 // mutual player awareness (custom lobby names, overhead HP bars, nametags, multi-partner HUD, off-screen arrows),
@@ -2606,20 +2608,6 @@ export class MultiplayerManager {
             this.spectateSlot = bestPeer.slot;
         }
         return bestPeer;
-        const peersList = this.getSortedRemotePeers();
-        let firstLiving = null;
-        for (let i = 0; i < peersList.length; i++) {
-            const p = peersList[i];
-            if (p.entity && p.entity.hp > 0 && !p.entity.spectating) {
-                if (!firstLiving) firstLiving = p;
-                if (this.spectateSlot !== null && p.slot === this.spectateSlot) {
-                    return p;
-                }
-            }
-        }
-        if (!firstLiving) return null;
-        this.spectateSlot = firstLiving.slot;
-        return firstLiving;
     }
 
     cycleSpectateTarget(dir = 1) {
@@ -3469,6 +3457,7 @@ export class MultiplayerManager {
             if (!pickup.attracted && !pickup[attractKey] && magnetic && dist < magnet) {
                 pickup[attractKey] = true;
                 pickup[speedKey] = 0.05;
+                pickup.pileUid = 0;
             }
             if (pickup[attractKey] && dist > 0.001) {
                 pickup[speedKey] = Math.min((pickup[speedKey] || 0.05) + 0.02, 0.6);
@@ -3863,7 +3852,8 @@ export class MultiplayerManager {
                         powerUp: powerUp || undefined,
                         attracted: false,
                         speed: 0,
-                        spawnTick: sim.tick
+                        spawnTick: sim.tick,
+                        pileUid: 0
                     });
                 }
             }

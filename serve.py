@@ -1,3 +1,5 @@
+# AGENT DIRECTIVE: Before modifying this file, read AGENTS.md, AGENT_NOTES.md, and .jules/sentinel.md.
+# After completing changes, run `python -m unittest test_serve.py` and prepend a handoff entry to AGENT_NOTES.md.
 import http.server
 import urllib.parse
 import hashlib
@@ -383,11 +385,7 @@ def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
             except Exception:
                 pass
 
-        safe_close(sock)
-    try:
-        sock.close()
-    except Exception:
-        pass
+    safe_close(sock)
 
 
 def handle_ws_client(sock, room_id, client_ip):

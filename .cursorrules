@@ -1,0 +1,7 @@
+# Cursor & AI Agent Rules for Run Escape
+
+1. MANDATORY PRE-READ: Always read `AGENTS.md`, `AGENT_NOTES.md`, and `.jules/sentinel.md` before editing any files or resolving merges.
+2. MANDATORY HANDOFF LOG: Before finishing any task, commit, or PR, prepend a new entry to `AGENT_NOTES.md` under `## 3. Chronological Agent Handoff Log` detailing modified files, bundle/symbol changes, and notes for future agents.
+3. CACHE-BUSTING LOCKSTEP: Whenever client JS, WASM, or CSS files change, update the `?v=X.Y` query parameter in all 6 locations specified in `AGENTS.md`.
+4. VERIFICATION: Run `python -m unittest test_serve.py` and `node --check assets/multiplayer.js` prior to completion.
+

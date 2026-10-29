@@ -350,9 +350,6 @@ class TestWebSocketHelpers(unittest.TestCase):
         self.assertEqual(sanitize_room_id("   "), "default")
         self.assertEqual(sanitize_room_id("a" * 50), "a" * 32)
 
-    def test_encode_ws_frame(self):
-        frame = encode_ws_frame("hello", opcode=1)
-class TestEncodeWsFrame(unittest.TestCase):
     def test_short_payload_string(self):
         msg = "hello"
         frame = encode_ws_frame(msg, opcode=1)

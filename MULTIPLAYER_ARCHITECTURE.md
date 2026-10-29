@@ -1,5 +1,7 @@
 # Run Escape - Co-Op Multiplayer Architecture & Performance Guide
 
+> **[!IMPORTANT] Mandatory Agent Protocol**: All AI coding agents reading or modifying this codebase MUST read [`AGENTS.md`](./AGENTS.md) and [`AGENT_NOTES.md`](./AGENT_NOTES.md) prior to making changes, and MUST prepend a handoff summary to [`AGENT_NOTES.md`](./AGENT_NOTES.md) upon completion.
+
 ## 1. Architectural Overview
 
 Run Escape was originally architected as a single-player WebGL2 and WebAssembly survival game ([`assets/index-XvFTU0hX.js`](./assets/index-XvFTU0hX.js)). Co-Op Multiplayer extends the engine into a 2-player networked game using a **Host-Authoritative WebSocket Relay Architecture** composed of two primary components:
