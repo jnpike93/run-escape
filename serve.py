@@ -405,13 +405,29 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "File not found")
             return None
 
-        parts = [p for p in unquoted_path.strip("/").split("/") if p]
+        # Translate path to filesystem path and resolve canonical path
+        try:
+            target_path = self.translate_path(self.path)
+            real_target = os.path.realpath(target_path)
+            real_dir = os.path.realpath(DIRECTORY)
+            if os.path.commonpath([real_dir, real_target]) != real_dir:
+                self.send_error(404, "File not found")
+                return None
+        except Exception:
+            self.send_error(404, "File not found")
+            return None
+
+        # Determine relative path from DIRECTORY for allowlist validation
+        rel_path = os.path.relpath(real_target, real_dir)
+        normalized = "/" + rel_path.replace(os.sep, "/").lstrip("/") if rel_path != "." else "/"
+
+        # Check for hidden files/directories or parent references in normalized relative path
+        parts = [p for p in normalized.strip("/").split("/") if p]
         if any(part.startswith(".") or part in (".", "..") for part in parts):
             self.send_error(404, "File not found")
             return None
 
         # Enforce strict public static asset allowlist
-        normalized = "/" + "/".join(parts) if parts else "/"
         allowed_exact = {"/", "/index.html", "/favicon.ico"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
