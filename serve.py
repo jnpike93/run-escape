@@ -78,6 +78,13 @@ def is_allowed_origin(origin):
         host_only.endswith(".cuteanimegirls.moe") and not host_only.startswith(".")
     )
 
+def safe_close(sock):
+    if sock is not None:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
 def sanitize_room_id(raw_room):
     if not raw_room or not isinstance(raw_room, str):
         return "default"
@@ -115,6 +122,13 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
     with rooms_lock:
         current_ip_count = ip_conns.get(client_ip, 0)
         if current_ip_count >= MAX_CONNS_PER_IP:
+            safe_close(sock)
+            return
+
+        if room_id not in rooms:
+            if len(rooms) >= MAX_ROOMS:
+                safe_close(sock)
+                return
             try:
                 sock.close()
             except Exception:
@@ -137,9 +151,10 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
                     "message": "Room is full (maximum 4 players)."
                 }))
                 sock.sendall(err_frame)
-                sock.close()
             except Exception:
                 pass
+            safe_close(sock)
+            return
             return False, None, None, None, None, None
 
         peer_count = len(rooms[room_id])
@@ -384,6 +399,7 @@ def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
             except Exception:
                 pass
 
+        safe_close(sock)
     try:
         sock.close()
     except Exception:
