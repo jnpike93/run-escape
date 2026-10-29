@@ -6,22 +6,23 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=8.3` - Upstream `0.14.0`)
+### Current Active Asset Files (Version `?v=8.4` - Source-Built `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.3`) |
-| **Main Engine Bundle** | [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) | `index.html`, `MapViewerApp-BeWD02jr.js`, `module-D8WM9OnE.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.3`, imports `assets/multiplayer/mp-*.js?v=8.3`) |
+| **TypeScript Source Tree** | [`src/`](./src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.4`) |
+| **Main Engine Bundle** | [`assets/index-TPKpDRK1.js`](./assets/index-TPKpDRK1.js) | `index.html`, `MapViewerApp-CfAkm72z.js`, `module-BdnIUByq.js` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.4`, imports `assets/multiplayer/mp-*.js?v=8.4`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
-| **Symbol Discovery & Patcher** | [`scripts/apply_patches.js`](./scripts/apply_patches.js) | `scripts/discover_symbols.js` + `scripts/patches/01..06-*.patch.js` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.3`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.3`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.3`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.3`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-BeWD02jr.js`](./assets/MapViewerApp-BeWD02jr.js) | `assets/index-BucZ8BnA.js` |
-| **Render Worker** | [`assets/RenderDataWorker-ago4Edys.js`](./assets/RenderDataWorker-ago4Edys.js) | `assets/index-BucZ8BnA.js` |
-| **Worker WASM Loader** | [`assets/module-CSC3QDlL.js`](./assets/module-CSC3QDlL.js) | `assets/RenderDataWorker-ago4Edys.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-D8WM9OnE.js`](./assets/module-D8WM9OnE.js) | `assets/index-BucZ8BnA.js` (`module-yzz5kVyQ.wasm`) |
+| **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](./scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.4`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.4`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.4`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.4`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-CfAkm72z.js`](./assets/MapViewerApp-CfAkm72z.js) | `assets/index-TPKpDRK1.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](./assets/RenderDataWorker-DJjFWldW.js) | `assets/index-TPKpDRK1.js` |
+| **Worker WASM Loader** | [`assets/module--MAiymg_.js`](./assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-BdnIUByq.js`](./assets/module-BdnIUByq.js) | `assets/index-TPKpDRK1.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](./caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v12`) |
 
 ### Inline Hooks in `assets/index-XWbnxuVz.js`
@@ -56,6 +57,16 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Full Migration to Unminified TypeScript + Vite Source Base (`Dynrothe/Run-Escape`) (v8.4)
+- **Commit / PR**: Source-based TypeScript + Vite migration (`?v=8.4`)
+- **Files Modified**: `src/**`, `public/**`, `docs/**`, `scripts/cache/**`, `scripts/dev/**`, `scripts/game/**`, `scripts/download-caches.cjs`, `scripts/sync_dist.cjs`, `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `.gitignore`, `README.md`, `CHANGELOG.md`, `AGENTS.md`, `AGENT_NOTES.md`, `index.html`, `assets/multiplayer.js`, `assets/index-TPKpDRK1.js`, `assets/MapViewerApp-CfAkm72z.js`, `assets/RenderDataWorker-DJjFWldW.js`, `assets/module--MAiymg_.js`, `assets/module-BdnIUByq.js`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=8.3` to `?v=8.4`. Built from TypeScript source (`src/`) via `npm run build` (`vite build && node scripts/sync_dist.cjs`) into `assets/index-TPKpDRK1.js`, `assets/MapViewerApp-CfAkm72z.js`, `assets/RenderDataWorker-DJjFWldW.js`, `assets/module--MAiymg_.js`, and `assets/module-BdnIUByq.js`.
+- **What Changed**:
+  - Imported the complete unminified TypeScript + React + Vite source code from `https://github.com/Dynrothe/Run-Escape` (and added `upstream` git remote).
+  - Ported all custom content, balance adjustments, OSRS cache hooks, secret characters (`dipper`, `elias`), Fight Caves (`fight_caves`, `tztok_jad`, `tzkal_zuk`, Protection Prayers), `blood_burst` -> `blood_barrage` evolution, `rapid_heal` 5-second hit pause, Level Best Times Leaderboard (`_LeaderboardScreen`, `mapBest`), UI Scale, Tile Coordinates toggle, `l33th4x0r` level/character unlock, and Co-Op Multiplayer hooks directly into `src/`.
+  - Added `sourceEntryIndexHtmlPlugin()` in `vite.config.ts` and `scripts/sync_dist.cjs` so `npm run build` compiles `src/` into `dist/` and syncs the production bundles directly into `assets/` and `index.html` with `?v=X.Y` cache-busting query strings while preserving `assets/multiplayer.js`, `assets/multiplayer/*`, `assets/cooks-assistant.js`, `assets/tile-coords.js`, and `assets/debug-mode.js`.
+  - Verified `npx tsc --noEmit` (0 errors), `npm test` (13 test suites, 271/271 tests passing), and `python -m unittest test_serve.py` (39/39 tests passing).
 
 ### 2026-10-29 - Antigravity - Level Best Times Leaderboard & Per-Map Stats Tracking (v8.3)
 - **Commit / PR**: Level Best Times Leaderboard (`?v=8.3`)

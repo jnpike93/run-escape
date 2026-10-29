@@ -3,7 +3,11 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner), so it's written for players.
 
-## Custom Edition Updates (v8.3)
+## Custom Edition Updates (v8.4)
+
+### Architecture & Build Pipeline
+
+- **Source-Based TypeScript + Vite Migration**: Migrated the repository to the full unminified TypeScript + React + Vite source base (`src/`, `vite.config.ts`, `package.json`, `scripts/sync_dist.cjs`) with `upstream` tracking `https://github.com/Dynrothe/Run-Escape.git`. Running `npm run build` compiles `src/` and synchronizes the production bundles into `assets/` and `index.html`.
 
 ### Balance & Combat Adjustments
 

@@ -8,19 +8,13 @@ Every automated agent or contributor assistant (Antigravity, Jules, Claude Code,
    - [`.jules/sentinel.md`](./.jules/sentinel.md) for historical security findings and invariants in [`serve.py`](./serve.py).
    - [`MULTIPLAYER_ARCHITECTURE.md`](./MULTIPLAYER_ARCHITECTURE.md) when modifying WebSocket relay or Co-Op simulation logic.
 2. **Post-Task Handoff Note & Live Changelog Update**: Before finishing any task, commit, or pull request:
-   - Update [`CHANGELOG.md`](./CHANGELOG.md) (and the embedded fallback summary in [`scripts/patches/01-core-engine.patch.js`](./scripts/patches/01-core-engine.patch.js) when rebuilding the bundle) to reflect all upstream or custom changes.
+   - Update [`CHANGELOG.md`](./CHANGELOG.md) to reflect all upstream or custom changes (`src/game/ui/changelog.ts` imports `CHANGELOG.md?raw` at build time and `ChangelogPanel.tsx` fetches it live at runtime).
    - Prepend a new entry under `## Chronological Agent Handoff Log` in [`AGENT_NOTES.md`](./AGENT_NOTES.md) using the template defined in that file.
-3. **Cache-Busting Synchronization**: Whenever [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js), [`assets/multiplayer.js`](./assets/multiplayer.js), or worker/module bundles are modified, increment the `?v=X.Y` query string across ALL 6 entry points in lockstep:
-   - [`index.html`](./index.html) (`index-*.js`, `multiplayer.js`, `tile-coords.js`, `cooks-assistant.js`, `debug-mode.js`, `index-*.css`)
-   - [`assets/multiplayer.js`](./assets/multiplayer.js) (`./multiplayer/mp-*.js?v=X.Y`)
-   - [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) (`RenderDataWorker-*.js?v=X.Y`, `MapViewerApp-*.js?v=X.Y`, and `module-D8WM9OnE.js?v=X.Y`)
-   - [`assets/MapViewerApp-BeWD02jr.js`](./assets/MapViewerApp-BeWD02jr.js) (`index-*.js?v=X.Y`)
-   - [`assets/RenderDataWorker-ago4Edys.js`](./assets/RenderDataWorker-ago4Edys.js) (`module-CSC3QDlL.js?v=X.Y`)
-   - [`assets/module-CSC3QDlL.js`](./assets/module-CSC3QDlL.js) (`RenderDataWorker-ago4Edys.js?v=X.Y`)
-   - [`assets/module-D8WM9OnE.js`](./assets/module-D8WM9OnE.js) (`index-BucZ8BnA.js?v=X.Y`)
+3. **Source-First Build & Cache-Busting Synchronization**:
+   - Edit the unminified TypeScript source under [`src/`](./src/) rather than editing compiled bundles in `assets/` directly.
+   - Increment the `?v=X.Y` query string in [`index.html`](./index.html) (or pass `--version=X.Y` to [`scripts/sync_dist.cjs`](./scripts/sync_dist.cjs)) and run `npm run build` (`vite build && node scripts/sync_dist.cjs`), which compiles `src/` into `dist/` and automatically synchronizes `assets/index-*.js`, `assets/MapViewerApp-*.js`, `assets/RenderDataWorker-*.js`, `assets/module-*.js`, [`index.html`](./index.html), and [`assets/multiplayer.js`](./assets/multiplayer.js) with the active `?v=X.Y` cache-busting query string.
 
 ## 2. Guidelines for Fast Merges
-- **Minimize Inline Bundle Edits**: Keep custom gameplay, HUD, and Co-Op logic inside [`assets/multiplayer.js`](./assets/multiplayer.js) via runtime method wrapping (`sim.step`, `sim.spawnEnemy`, `sim.stepEnemies`, `sim.collect`) rather than editing minified bundle code directly whenever possible.
-- **Preserve Bundle Hook Anchors**: If an inline edit in [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) is required, document the surrounding invariant anchor string in [`AGENT_NOTES.md`](./AGENT_NOTES.md) so future agents can locate the equivalent position after an upstream bundle rebuild.
-- **Parallel Subagent Chunking**: Whenever a task spans multiple files or domains, split it into small, parallel subagents with disjoint file ownership. Never emit a >20 KB patch script in a single `write_file` tool call; instead, write a compact (<10 KB) Node/Python transformation script that updates existing patch scripts programmatically.
-- **Verification**: Always run `python -m unittest test_serve.py` and `node --check assets/multiplayer.js` before finalizing any merge or commit.
+- **Source-Based Upstream Merges (`upstream/main`)**: Pull upstream source changes from `https://github.com/Dynrothe/Run-Escape.git` (`git fetch upstream && git merge upstream/main`), resolve any TypeScript conflicts in `src/`, and run `npm test && npm run build`.
+- **Parallel Subagent Chunking**: Whenever a task spans multiple files or domains, split it into small, parallel subagents with disjoint file ownership. Never emit a >20 KB file in a single `write_file` tool call; instead, write a compact (<10 KB) Node/Python transformation script or edit targeted regions with `edit_file`.
+- **Verification**: Always run `npm test`, `python -m unittest test_serve.py`, and `node --check assets/multiplayer.js` before finalizing any merge or commit.
