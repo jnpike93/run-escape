@@ -57,7 +57,7 @@ jobs:
             fi
 
             echo "=== 2. Starting / Restarting Run Escape with PM2 (Loopback Bind) ==="
-            pm2 describe run-escape > /dev/null 2>&1 && pm2 restart ecosystem.config.js --update-env || pm2 start ecosystem.config.js
+            pm2 describe run-escape > /dev/null 2>&1 && pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
             pm2 save
 
             echo "=== 3. Configuring Nginx and Preserving TLS ==="

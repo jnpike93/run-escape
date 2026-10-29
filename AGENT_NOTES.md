@@ -58,6 +58,17 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 
 ## 3. Chronological Agent Handoff Log
 
+### 2026-10-29 - Antigravity - Fix PM2 Deployment CommonJS Config under ESM Package (`ecosystem.config.cjs`)
+- **Commit / PR**: PM2 `ecosystem.config.cjs` CommonJS fix (`?v=8.4`)
+- **Files Modified**: `ecosystem.config.cjs` (renamed from `ecosystem.config.js`), `.github/workflows/deploy.yaml`, `nginx.conf`, `CHANGELOG.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: `?v=8.4` (deployment configuration fix; no client bundle changes required)
+- **What Changed**:
+  - Renamed `ecosystem.config.js` to `ecosystem.config.cjs` so Node/PM2 loads the CommonJS `module.exports` configuration when `"type": "module"` is set in `package.json`.
+  - Updated `.github/workflows/deploy.yaml` to invoke `pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs`.
+  - Updated `nginx.conf` location deny rule to block `ecosystem.config.(js|cjs)` and `*.cjs` files.
+- **Notes / Invariants for Future Agents**:
+  - Because `package.json` sets `"type": "module"` for Vite/Vitest ESM compatibility, any Node CommonJS scripts or PM2 config files in the repository must use the `.cjs` extension (`ecosystem.config.cjs`, `scripts/sync_dist.cjs`, `scripts/download-caches.cjs`).
+
 ### 2026-10-29 - Antigravity - Full Migration to Unminified TypeScript + Vite Source Base (`Dynrothe/Run-Escape`) (v8.4)
 - **Commit / PR**: Source-based TypeScript + Vite migration (`?v=8.4`)
 - **Files Modified**: `src/**`, `public/**`, `docs/**`, `scripts/cache/**`, `scripts/dev/**`, `scripts/game/**`, `scripts/download-caches.cjs`, `scripts/sync_dist.cjs`, `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `.gitignore`, `README.md`, `CHANGELOG.md`, `AGENTS.md`, `AGENT_NOTES.md`, `index.html`, `assets/multiplayer.js`, `assets/index-TPKpDRK1.js`, `assets/MapViewerApp-CfAkm72z.js`, `assets/RenderDataWorker-DJjFWldW.js`, `assets/module--MAiymg_.js`, `assets/module-BdnIUByq.js`
