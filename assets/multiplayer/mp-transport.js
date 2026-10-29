@@ -9,7 +9,7 @@ import {
     sanitizeRoomId,
     sanitizeCharacter,
     sanitizeSlot
-} from './mp-constants.js?v=7.5';
+} from './mp-constants.js?v=7.6';
 
 export const mpTransportMethods = {
     getSortedRemotePeers() {

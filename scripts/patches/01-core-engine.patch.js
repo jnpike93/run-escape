@@ -3,13 +3,13 @@
  */
 
 const RULES = [
-  {"label":"MapViewerApp deps array","target":"jfbH1.js\",\"./MapViewerApp-CQvNz_OV.css\"]","replacement":"jfbH1.js?v=7.5\",\"./MapViewerApp-CQvNz_OV.css?v=7.5\"]"},
+  {"label":"MapViewerApp deps array","target":"jfbH1.js\",\"./MapViewerApp-CQvNz_OV.css\"]","replacement":"jfbH1.js?v=7.6\",\"./MapViewerApp-CQvNz_OV.css?v=7.6\"]"},
   {"label":"fetchDat2 cache open -v8","target":"w Map,h=await caches.open(e),d=Or(t","replacement":"w Map,h=(await caches.delete(e+\"-v2\").catch(()=>{}),await caches.delete(e+\"-v5\").catch(()=>{}),await caches.delete(e+\"-v6\").catch(()=>{}),await caches.delete(e+\"-v7\").catch(()=>{}),await caches.delete(e+\"-v8\").catch(()=>{}),await caches.delete(e+\"-v9\").catch(()=>{}),await caches.delete(e+\"-v10\").catch(()=>{}),await caches.open(e+\"-v11\")),d=Or(t"},
   {"label":"Or fetch no-cache","target":"signal:a});if(x.","replacement":"signal:a,cache:\"no-cache\"});if(x."},
-  {"label":"module-DiacdDog import","target":"oB8SI.js\").then(a=>a.m)","replacement":"oB8SI.js?v=7.5\").then(a=>a.m)"},
-  {"label":"RenderDataWorker URL","target":"hTJTb.js\",import","replacement":"hTJTb.js?v=7.5\",import"},
-  {"label":"MapViewerApp dynamic import","target":"jfbH1.js\")","replacement":"jfbH1.js?v=7.5\")"},
-  {"label":"caches.json no-cache","target":"fetch(aI+\"caches.json\")","replacement":"fetch(aI+\"caches.json?v=7.5\",{cache:\"no-cache\"})"},
+  {"label":"module-DiacdDog import","target":"oB8SI.js\").then(a=>a.m)","replacement":"oB8SI.js?v=7.6\").then(a=>a.m)"},
+  {"label":"RenderDataWorker URL","target":"hTJTb.js\",import","replacement":"hTJTb.js?v=7.6\",import"},
+  {"label":"MapViewerApp dynamic import","target":"jfbH1.js\")","replacement":"jfbH1.js?v=7.6\")"},
+  {"label":"caches.json no-cache","target":"fetch(aI+\"caches.json\")","replacement":"fetch(aI+\"caches.json?v=7.6\",{cache:\"no-cache\"})"},
   {"label":"window.__runEscapeItems=tC export","target":"id,i]));function Pn(i){","replacement":"id,i]));window.__runEscapeItems=tC;function Pn(i){"},
   {"label":"window.__runEscapeIcons=A0 export","target":"=new Th;function GK(i){","replacement":"=new Th;window.__runEscapeIcons=A0;function GK(i){"},
   {"label":"vw.create client hooks","target":"wait h);return await u,await g,new xw(t,e,w,p,d,n,s,a,r)}setMinimapCanvas(t){","replacement":"wait h);const _client=new xw(t,e,w,p,d,n,s,a,r);_client.getEnemyDef=Jn;_client.getAppearance=E0;_client.getSimAppearance=U$;_client.iconCache=A0;_client.getCharacters=()=>Ja;_client.getMaps=()=>aC;_client.getThrallDefs=()=>Zh;_client.getWeapons=()=>ir;_client.getPassives=()=>hw;_client.waveBuilder=Os;return await u,await g,_client}setMinimapCanvas(t){"},

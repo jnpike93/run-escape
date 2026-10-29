@@ -21,15 +21,15 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './multiplayer/mp-constants.js?v=7.5';
-import { MpEventBus } from './multiplayer/mp-event-bus.js?v=7.5';
-import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=7.5';
-import { mpTransportMethods } from './multiplayer/mp-transport.js?v=7.5';
-import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=7.5';
-import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=7.5';
-import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=7.5';
-import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=7.5';
-import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=7.5';
+} from './multiplayer/mp-constants.js?v=7.6';
+import { MpEventBus } from './multiplayer/mp-event-bus.js?v=7.6';
+import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=7.6';
+import { mpTransportMethods } from './multiplayer/mp-transport.js?v=7.6';
+import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=7.6';
+import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=7.6';
+import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=7.6';
+import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=7.6';
+import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=7.6';
 
 export class MultiplayerManager {
     constructor() {
@@ -106,6 +106,11 @@ Object.assign(
 export const multiplayer = new MultiplayerManager();
 window.multiplayer = multiplayer;
 initOsrsPrayers(multiplayer);
+
+// Disable browser right-click context menu in the game window
+window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+});
 
 // Automatically open lobby if ?room= is in URL
 window.addEventListener('DOMContentLoaded', () => {
