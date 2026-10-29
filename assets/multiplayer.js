@@ -967,8 +967,19 @@ export class MultiplayerManager {
         if (sim.endRun) {
             const origEndRun = sim.endRun.bind(sim);
             sim.endRun = (state) => {
-                this.buildLeaderboard();
-                return origEndRun(state);
+                const lb = this.buildLeaderboard();
+                const res = origEndRun(state);
+                if (isHost && state === 'victory' && !this._victorySent && this.remotePeers.size > 0) {
+                    this._victorySent = true;
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: 'victory',
+                        kills: sim.kills,
+                        tick: sim.tick,
+                        leaderboard: lb
+                    });
+                }
+                return res;
             };
         }
 
@@ -1296,17 +1307,18 @@ export class MultiplayerManager {
 
             // Track which player (slot) is currently dealing damage so monster AI prioritizes the last attacker first and damage/kill stats are recorded per player
             this._activeAttackerSlot = null;
-            if (sim.placeTurret) {
-                const origPlaceTurret = sim.placeTurret.bind(sim);
-                sim.placeTurret = (cfg) => {
+            if (sim.placeCannon) {
+                const origPlaceCannon = sim.placeCannon.bind(sim);
+                sim.placeCannon = (cfg) => {
                     const prevLen = sim.turrets.length;
-                    const res = origPlaceTurret(cfg);
+                    const res = origPlaceCannon(cfg);
                     if (sim.turrets.length > prevLen) {
                         const t = sim.turrets[sim.turrets.length - 1];
                         t.ownerSlot = this._activeAttackerSlot || sim.player?.slot || this.localSlot;
                     }
                     return res;
                 };
+                sim.placeTurret = sim.placeCannon;
             }
             if (sim.stepTurrets) {
                 const origStepTurrets = sim.stepTurrets.bind(sim);
@@ -2040,6 +2052,7 @@ export class MultiplayerManager {
                                 ev.type === 'bossAttack' ||
                                 ev.type === 'blast' ||
                                 ev.type === 'cannonSetup' ||
+                                ev.type === 'cannonFire' ||
                                 ev.type === 'powerUp' ||
                                 ev.type === 'bossSpawned' ||
                                 ev.type === 'bossRose' ||
