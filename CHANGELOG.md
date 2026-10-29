@@ -3,7 +3,7 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner), so it's written for players.
 
-## Custom Edition Updates (v8.0)
+## Custom Edition Updates (v8.1)
 
 ### Balance & Combat Adjustments
 

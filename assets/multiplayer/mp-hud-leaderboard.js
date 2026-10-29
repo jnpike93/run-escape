@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer HUD, Spectator, Pause Overlay & Leaderboard Methods
-import { ALL_CHARACTERS, sanitizeSlot, escapeHtml } from './mp-constants.js?v=8.0';
+import { ALL_CHARACTERS, sanitizeSlot, escapeHtml } from './mp-constants.js?v=8.1';
 
 export const mpHudLeaderboardMethods = {
     getSpectatedPeer() {
