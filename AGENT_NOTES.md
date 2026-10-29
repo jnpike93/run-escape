@@ -59,6 +59,15 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 
 ## 3. Chronological Agent Handoff Log
 
+### 2026-10-29 - Claude Code - Debug panel: game speed slider, panel pinned to top (debug-mode.js v8.5)
+- **Commit / PR**: on top of `777b02d` (v8.4)
+- **Files Modified**: `assets/debug-mode.js`, `index.html` (only the `debug-mode.js` tag, `?v=8.4` -> `?v=8.5`)
+- **Bundle / Version Impact**: None to the engine bundle or `multiplayer.js`.
+- **What Changed**:
+  - **Game speed slider** (0.25x-10x, normal 1x): wraps `client.update(dt, ...)` and adds `min(dt, 200) * (speed - 1)` ms to `client.accumulator` before each frame. The loop runs 50 ticks/s and caps each frame at 200 ms. Extra time is capped at 1000 ms per frame, and it's skipped while paused or when not in the `playing` state. Measured exactly 1x / 4x / 0.5x.
+  - **Co-op**: the host's game speed drives the world for everyone; a guest's is ignored.
+  - **Panel position**: pinned to `top: 8px`, with `box-sizing: border-box` and `max-height: calc((100vh - 16px) / var(--ui-scale, 1))` so the UI zoom can't push it off the bottom of the screen.
+
 ### 2026-10-29 - Antigravity - Hourly Upstream Auto-Sync Cron on `cuteanimegirls.moe` & GitHub Actions (`scripts/auto_sync_upstream.cjs`)
 - **Commit / PR**: Automated upstream cron sync (`?v=8.4`)
 - **Files Modified**: `scripts/auto_sync_upstream.cjs`, `.github/workflows/deploy.yaml`, `.github/workflows/sync-upstream.yaml`, `package.json`, `CHANGELOG.md`, `AGENT_NOTES.md`
