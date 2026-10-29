@@ -587,6 +587,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
     bind_host = sys.argv[2] if len(sys.argv) > 2 else BIND_HOST
+    http.server.ThreadingHTTPServer.request_queue_size = 128
     with http.server.ThreadingHTTPServer((bind_host, port), CustomHandler) as httpd:
         print(f"Serving Run Escape + WebSocket Relay on http://{bind_host}:{port} with COOP/COEP enabled...")
         httpd.serve_forever()

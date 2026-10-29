@@ -9,7 +9,8 @@ Every automated agent or contributor assistant (Antigravity, Jules, Claude Code,
    - [`MULTIPLAYER_ARCHITECTURE.md`](./MULTIPLAYER_ARCHITECTURE.md) when modifying WebSocket relay or Co-Op simulation logic.
 2. **Post-Task Handoff Note**: Before finishing a task, commit, or pull request, prepend a new entry under `## Chronological Agent Handoff Log` in [`AGENT_NOTES.md`](./AGENT_NOTES.md) using the template defined in that file.
 3. **Cache-Busting Synchronization**: Whenever [`assets/index-XWbnxuVz.js`](./assets/index-XWbnxuVz.js), [`assets/multiplayer.js`](./assets/multiplayer.js), or worker/module bundles are modified, increment the `?v=X.Y` query string across ALL 6 entry points in lockstep:
-   - [`index.html`](./index.html) (`index-*.js`, `multiplayer.js`, `index-*.css`)
+   - [`index.html`](./index.html) (`index-*.js`, `multiplayer.js`, `tile-coords.js`, `cooks-assistant.js`, `debug-mode.js`, `index-*.css`)
+   - [`assets/multiplayer.js`](./assets/multiplayer.js) (`./multiplayer/mp-*.js?v=X.Y`)
    - [`assets/index-XWbnxuVz.js`](./assets/index-XWbnxuVz.js) (`RenderDataWorker-*.js?v=X.Y`, `MapViewerApp-*.js?v=X.Y`, and `module-C9loB8SI.js?v=X.Y`)
    - [`assets/MapViewerApp-DKojfbH1.js`](./assets/MapViewerApp-DKojfbH1.js) (`index-*.js?v=X.Y`)
    - [`assets/RenderDataWorker-CRRhTJTb.js`](./assets/RenderDataWorker-CRRhTJTb.js) (`module-Cg9b2g3N.js?v=X.Y`)

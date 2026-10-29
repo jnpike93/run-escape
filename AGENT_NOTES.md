@@ -6,18 +6,23 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=7.2` - Upstream `0.13.0`)
+### Current Active Asset Files (Version `?v=7.4` - Upstream `0.13.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.2`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.4`) |
 | **Main Engine Bundle** | [`assets/index-XWbnxuVz.js`](./assets/index-XWbnxuVz.js) | `index.html`, `MapViewerApp-DKojfbH1.js`, `module-C9loB8SI.js` |
-| **Co-Op & Custom Hooks** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=7.4`, imports `assets/multiplayer/mp-*.js?v=7.4`) |
+| **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
+| **Symbol Discovery & Patcher** | [`scripts/apply_patches.js`](./scripts/apply_patches.js) | `scripts/discover_symbols.js` + `scripts/patches/01..06-*.patch.js` |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=7.4`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=7.4`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=7.4`, remove before live production) |
 | **Main Stylesheet** | [`assets/index-Cu_WH1lb.css`](./assets/index-Cu_WH1lb.css) | `index.html` |
 | **Map Viewer Bundle** | [`assets/MapViewerApp-DKojfbH1.js`](./assets/MapViewerApp-DKojfbH1.js) | `assets/index-XWbnxuVz.js` |
 | **Render Worker** | [`assets/RenderDataWorker-CRRhTJTb.js`](./assets/RenderDataWorker-CRRhTJTb.js) | `assets/index-XWbnxuVz.js` |
 | **Worker WASM Loader** | [`assets/module-Cg9b2g3N.js`](./assets/module-Cg9b2g3N.js) | `assets/RenderDataWorker-CRRhTJTb.js` (`module-yzz5kVyQ.wasm`) |
 | **Main WASM Loader** | [`assets/module-C9loB8SI.js`](./assets/module-C9loB8SI.js) | `assets/index-XWbnxuVz.js` (`module-yzz5kVyQ.wasm`) |
-| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-4cd931ae`](./caches/osrs-241_2026-09-30-slim-4cd931ae) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v9`) |
+| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-4cd931ae`](./caches/osrs-241_2026-09-30-slim-4cd931ae) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v10`) |
 
 ### Inline Hooks in `assets/index-XWbnxuVz.js`
 When merging a new upstream `index-*.js` bundle, ensure the following global hooks and custom patches are preserved or ported to the new bundle:
@@ -51,6 +56,29 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Execute Architecture Modernization Roadmap (Phases 1-5, v7.4)
+- **Commit / PR**: Modular Patch Pipeline + `assets/multiplayer/*.js` 9-Module ES Decomposition (`?v=7.4`)
+- **Files Modified**: `index.html`, `assets/index-XWbnxuVz.js`, `assets/multiplayer.js`, `assets/multiplayer/mp-constants.js`, `assets/multiplayer/mp-event-bus.js`, `assets/multiplayer/mp-prayers.js`, `assets/multiplayer/mp-transport.js`, `assets/multiplayer/mp-lobby-ui.js`, `assets/multiplayer/mp-hud-leaderboard.js`, `assets/multiplayer/mp-actor-renderer.js`, `assets/multiplayer/mp-pickups.js`, `assets/multiplayer/mp-sync-engine.js`, `scripts/discover_symbols.js`, `scripts/apply_patches.js`, `scripts/patches/01-core-engine.patch.js`, `scripts/patches/02-icon-rasterizer.patch.js`, `scripts/patches/03-maps.patch.js`, `scripts/patches/04-characters.patch.js`, `scripts/patches/05-weapons-passives.patch.js`, `scripts/patches/06-multiplayer-hooks.patch.js`, `assets/MapViewerApp-DKojfbH1.js`, `assets/RenderDataWorker-CRRhTJTb.js`, `assets/module-Cg9b2g3N.js`, `assets/module-C9loB8SI.js`, `AGENTS.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=7.3` to `?v=7.4` across all entry points and `assets/multiplayer.js` submodule imports.
+- **What Changed**:
+  - **Automated Symbol Discovery (`scripts/discover_symbols.js`)**: Implemented and verified 21 invariant anchor regex extractors (`Client`, `Sim`, `Characters`, `Maps`, `ThrallDefs`, `EnemyDefLookup`, `AppearanceLookup`, `SimAppearance`, `IconCache`, `IconRasterizer`, `WaveBuilder`, `Weapons`, `WeaponDefLookup`, `Passives`, `PassiveDefLookup`, `PostRunStats`, `PauseModal`, `SettingsModal`, `AdventurerSelectModal`, `MapDefLookup`, `MapUnlockCheck`) with 100% uniqueness assertions.
+  - **Domain-Scoped Patch Modules (`scripts/patches/01..06-*.patch.js` & `scripts/apply_patches.js`)**: Replaced the monolithic 105 KB patch script with 6 modular domain patch scripts (<20 KB each) and extended `window.gameClient` with `getWeapons: () => ir`, `getPassives: () => hw`, and `waveBuilder: Os`.
+  - **9-Module ES Decomposition of `assets/multiplayer.js`**: Split the 4,804-line `assets/multiplayer.js` monolith into a 120-line root facade (`assets/multiplayer.js`) plus 9 focused ES modules under `assets/multiplayer/` (`mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js`), preserving 100% of all 52 `MultiplayerManager` methods and all global hooks (`window.multiplayer`, `window.multiplayer.bus`, `window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`, `window.l33th4x0r`).
+- **Notes / Invariants for Future Agents**:
+  - Edit the specific domain submodule in `assets/multiplayer/mp-*.js` or `scripts/patches/01..06-*.patch.js` rather than recreating monolithic files.
+  - When bumping `?v=X.Y`, also update the `?v=X.Y` query strings on the submodule imports in `assets/multiplayer.js` and `assets/multiplayer/mp-*.js`.
+
+### 2026-10-29 - Antigravity - Pull Upstream main (v7.3) & Architecture Evaluation Report (R1-R4)
+- **Commit / PR**: Fast-forward pull of `d702c84` (`v7.3`) + `ARCHITECTURE_EVALUATION.md`
+- **Files Modified**: `AGENT_NOTES.md`, `ARCHITECTURE_EVALUATION.md` (plus fast-forwarded `v7.3` files from `d702c84`)
+- **Bundle / Version Impact**: Synced local workspace to `?v=7.4` and `CacheStorage` key `-v10`.
+- **What Changed**:
+  - Fast-forwarded local `main` to `origin/main` (`d702c84`: Cook's Assistant quest `assets/cooks-assistant.js`, Jad/Zuk co-op prayer & recovery fixes, real OSRS prayer sprites `assets/prayer/*.png`, tile coordinate HUD `assets/tile-coords.js`, debug mode `assets/debug-mode.js`, and HTTP Range/206 support in `serve.py`).
+  - Added `ARCHITECTURE_EVALUATION.md` documenting the 105-rule bundle patch classification (75 Runtime-Extractable vs 30 Core Inline Hooks), 21-symbol automated Invariant Anchor discovery pipeline, and 9-module ES decomposition blueprint for `assets/multiplayer.js`.
+  - Updated the Active Bundle & Hook Registry table in `AGENT_NOTES.md` to reflect `?v=7.4`, `-v10`, and the 3 new module scripts.
+- **Notes / Invariants for Future Agents**:
+  - Note that `assets/cooks-assistant.js`, `assets/tile-coords.js`, and `assets/debug-mode.js` already follow the external runtime script pattern recommended in `ARCHITECTURE_EVALUATION.md`; remember to include their `?v=X.Y` query strings in `index.html` when bumping versions.
 
 ### 2026-10-29 - Claude Code - Cook's Assistant, Jad co-op fixes, jad-fix port, prayer sprites, debug mode (v7.3)
 - **Commit / PR**: branch `quest-test` merged into `main`
