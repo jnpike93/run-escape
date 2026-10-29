@@ -6,18 +6,18 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=8.2` - Upstream `0.14.0`)
+### Current Active Asset Files (Version `?v=8.3` - Upstream `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.2`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.3`) |
 | **Main Engine Bundle** | [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) | `index.html`, `MapViewerApp-BeWD02jr.js`, `module-D8WM9OnE.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.2`, imports `assets/multiplayer/mp-*.js?v=8.2`) |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.3`, imports `assets/multiplayer/mp-*.js?v=8.3`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Symbol Discovery & Patcher** | [`scripts/apply_patches.js`](./scripts/apply_patches.js) | `scripts/discover_symbols.js` + `scripts/patches/01..06-*.patch.js` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.2`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.2`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.2`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.2`) |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.3`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.3`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.3`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.3`) |
 | **Map Viewer Bundle** | [`assets/MapViewerApp-BeWD02jr.js`](./assets/MapViewerApp-BeWD02jr.js) | `assets/index-BucZ8BnA.js` |
 | **Render Worker** | [`assets/RenderDataWorker-ago4Edys.js`](./assets/RenderDataWorker-ago4Edys.js) | `assets/index-BucZ8BnA.js` |
 | **Worker WASM Loader** | [`assets/module-CSC3QDlL.js`](./assets/module-CSC3QDlL.js) | `assets/RenderDataWorker-ago4Edys.js` (`module-yzz5kVyQ.wasm`) |
@@ -56,6 +56,15 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Level Best Times Leaderboard & Per-Map Stats Tracking (v8.3)
+- **Commit / PR**: Level Best Times Leaderboard (`?v=8.3`)
+- **Files Modified**: `scripts/patches/01-core-engine.patch.js`, `assets/index-BucZ8BnA.js`, `assets/MapViewerApp-BeWD02jr.js`, `assets/RenderDataWorker-ago4Edys.js`, `assets/module-CSC3QDlL.js`, `assets/module-D8WM9OnE.js`, `assets/multiplayer.js`, `index.html`, `CHANGELOG.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=8.2` to `?v=8.3`.
+- **What Changed**:
+  - Added `mapBest` (`{ seconds, winSeconds, kills, level, characterId }`) to default save state (`Uv`), save deserialization (`lR`), and run completion (`jK`, plus `characterId` in `Sim.getResult()`).
+  - Added a dedicated **Leaderboard** screen (`_LeaderboardScreen`) accessible from the Title menu (`Leaderboard` button) displaying best survival time, fastest boss clear, endless record, wins, and top kill count for every Campaign and Fun map.
+  - Added `Best time` and `Fastest clear` display to the Map Select details panel (`gJ`).
 
 ### 2026-10-29 - Antigravity - Unlock All Levels & Endless Mode with `l33th4x0r` Code (v8.2)
 - **Commit / PR**: `l33th4x0r` level & Endless mode unlock (`?v=8.2`)
