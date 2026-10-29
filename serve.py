@@ -11,7 +11,21 @@ import re
 import os
 import sys
 
-PORT = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8080))
+def _get_default_port():
+    port_env = os.environ.get("PORT")
+    if port_env:
+        try:
+            return int(port_env)
+        except ValueError:
+            pass
+    if len(sys.argv) > 1:
+        try:
+            return int(sys.argv[1])
+        except ValueError:
+            pass
+    return 8080
+
+PORT = _get_default_port()
 BIND_HOST = os.environ.get("HOST", "127.0.0.1")
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 MAX_FRAME_SIZE = 65536       # 64 KB max frame payload
@@ -46,6 +60,21 @@ CSP_POLICY = (
     "base-uri 'self'; "
     "frame-ancestors 'none'"
 )
+
+def is_allowed_origin(origin):
+    if not origin:
+        return False
+    parsed_origin = urllib.parse.urlparse(origin)
+    # Use parsed_origin.hostname to securely extract host without authority userinfo bypasses
+    host_only = (parsed_origin.hostname or "").lower()
+    allowed_hosts = {
+        "localhost",
+        "127.0.0.1",
+        "cuteanimegirls.moe",
+        "run-escape.cuteanimegirls.moe",
+        "167.71.157.5"
+    }
+    return host_only in allowed_hosts or host_only.endswith(".cuteanimegirls.moe")
 
 def sanitize_room_id(raw_room):
     if not raw_room or not isinstance(raw_room, str):
@@ -341,16 +370,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(403, "Forbidden Origin")
                 return
 
-            parsed_origin = urllib.parse.urlparse(origin)
-            host_only = parsed_origin.netloc.split(":")[0].lower()
-            allowed_hosts = {
-                "localhost",
-                "127.0.0.1",
-                "cuteanimegirls.moe",
-                "run-escape.cuteanimegirls.moe",
-                "167.71.157.5"
-            }
-            if host_only not in allowed_hosts and not host_only.endswith(".cuteanimegirls.moe"):
+            if not is_allowed_origin(origin):
                 self.send_error(403, "Forbidden Origin")
                 return
 
