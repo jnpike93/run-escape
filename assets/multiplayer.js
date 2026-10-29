@@ -6,6 +6,7 @@
 
 const ALL_CHARACTERS = [
     { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: false, secretCode: true },
+    { id: 'elias', name: 'Elias (Chihuahua)', weapon: 'scimitar', defaultUnlocked: false, secretCode: true },
     { id: 'warrior', name: 'Warrior', weapon: 'scimitar', defaultUnlocked: true },
     { id: 'wizard', name: 'Wizard', weapon: 'fire_spells', defaultUnlocked: true },
     { id: 'ranger', name: 'Ranger', weapon: 'throwing_knives', defaultUnlocked: true },
@@ -596,6 +597,7 @@ export class MultiplayerManager {
                     if (parsed && Array.isArray(parsed.unlockedCharacters)) {
                         for (const cid of parsed.unlockedCharacters) {
                             if (cid === 'dipper' && !unlockedCodes.includes('dipperthedog')) continue;
+                            if (cid === 'elias' && !unlockedCodes.includes('barkelly')) continue;
                             if (typeof cid === 'string' && ALLOWED_CHARACTERS.has(cid)) {
                                 unlocked.add(cid);
                             }
@@ -699,7 +701,7 @@ export class MultiplayerManager {
         const client = window.gameClient;
         if (client) {
             client.store?.set({ characterId: cleanChar });
-            if (cleanChar !== 'dipper' && client.getAppearance) {
+            if (cleanChar !== 'dipper' && cleanChar !== 'elias' && client.getAppearance) {
                 try {
                     client.assets?.setPlayerAppearance(client.getAppearance(cleanChar));
                 } catch(e) {}
@@ -721,7 +723,7 @@ export class MultiplayerManager {
         if (!client || !client.assets || !client.assets.models) return;
         const charIds = new Set(['warrior', 'wizard', 'ranger', 'barbarian', 'monk', ...extraChars]);
         const required = Array.from(charIds)
-            .filter(id => id && id !== 'dipper' && ALLOWED_CHARACTERS.has(id))
+            .filter(id => id && id !== 'dipper' && id !== 'elias' && ALLOWED_CHARACTERS.has(id))
             .map(id => `player_${id}`);
         const missing = required.filter(k => !client.assets.models.has(k));
 
@@ -746,6 +748,14 @@ export class MultiplayerManager {
                 kind: 'npc',
                 key: 'corgi',
                 npcId: 16370,
+                seqIds: [6561, 6560]
+            });
+        }
+        if (!client.assets.models.has('chihuahua')) {
+            bakes.push({
+                kind: 'npc',
+                key: 'chihuahua',
+                npcId: 16543,
                 seqIds: [6561, 6560]
             });
         }
@@ -890,7 +900,7 @@ export class MultiplayerManager {
             mapId: config.mapId || 'lumbridge'
         });
 
-        if (localChar !== 'dipper' && client.getAppearance) {
+        if (localChar !== 'dipper' && localChar !== 'elias' && client.getAppearance) {
             try {
                 await client.assets.setPlayerAppearance(client.getAppearance(localChar));
             } catch(e) {}
@@ -1991,10 +2001,14 @@ export class MultiplayerManager {
                         continue;
                     }
                     const isCorgi = p2.characterId === 'dipper';
+                    const isChih = p2.characterId === 'elias';
+                    const isDog = isCorgi || isChih;
                     const dynKey = `player_dynamic_${peer.slot}`;
                     let model;
                     if (isCorgi) {
                         model = client.assets.get('corgi');
+                    } else if (isChih) {
+                        model = client.assets.get('chihuahua');
                     } else if (p2.hasDynamicModel && client.assets.get(dynKey)) {
                         model = client.assets.get(dynKey);
                     } else {
@@ -2004,10 +2018,10 @@ export class MultiplayerManager {
                     if (model && model.anims && model.anims.length > 0) {
                         let anim;
                         let frame = 0;
-                        if (isDeadPeer) {
+                        if (isDeadPeer && !isDog) {
                             anim = model.getAnim(836) || model.anims[0];
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - (p2.deathTick >= 0 ? p2.deathTick : s.tick)), false) : 0;
-                        } else if (isCorgi) {
+                        } else if (isDog) {
                             anim = p2.moving ?
                                 (model.getAnim(6560) || model.anims[0]) :
                                 (model.getAnim(6561) || model.anims[0]);
@@ -2035,12 +2049,12 @@ export class MultiplayerManager {
 
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
-                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isCorgi ? 0.22 : 0);
+                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isDog ? 0.22 : 0);
 
                         actors.draw(model, anim, frame, px, height, py, p2.yaw & 2047, {
-                            scale: isCorgi ? 3.0 : 1.0,
+                            scale: isDog ? 3.0 : 1.0,
                             flash: (p2.flash > 0) ? 0.4 : 0,
-                            tint: isCorgi ? 16777215 : (p2.tint || 16777215)
+                            tint: isDog ? 16777215 : (p2.tint || 16777215)
                         });
                     }
                 }
@@ -2070,8 +2084,8 @@ export class MultiplayerManager {
                         const p1 = s.player;
                         const px1 = p1.prevX + (p1.x - p1.prevX) * alpha;
                         const py1 = p1.prevY + (p1.y - p1.prevY) * alpha;
-                        const isCorgi1 = p1.characterId === 'dipper';
-                        const modelH1 = isCorgi1 ? 95 : 200;
+                        const isDog1 = p1.characterId === 'dipper' || p1.characterId === 'elias';
+                        const modelH1 = isDog1 ? 95 : 200;
                         const groundH1 = s.grid ? s.grid.getHeight(px1, py1) / 128 : 0;
                         const worldH1 = groundH1 - (modelH1 / 128) - (15 / 128);
 
@@ -2099,14 +2113,16 @@ export class MultiplayerManager {
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const isCorgi = p2.characterId === 'dipper';
-                        const modelHeight = isCorgi ? 95 : 200;
+                        const isChih = p2.characterId === 'elias';
+                        const isDog = isCorgi || isChih;
+                        const modelHeight = isDog ? 95 : 200;
                         const groundHeight = s.grid ? s.grid.getHeight(px, py) / 128 : 0;
                         const worldHeight = groundHeight - (modelHeight / 128) - (15 / 128);
 
                         overlayRenderer.project(px, worldHeight, py, peerScreen);
 
                         const displayName = (peer.name || `Player ${peer.slot}`).toUpperCase();
-                        const classSub = isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').toUpperCase();
+                        const classSub = isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (p2.characterId || 'WARRIOR').toUpperCase());
                         const tagColor = SLOT_COLORS[peer.slot] || '#ffff00';
 
                         const margin = 50;
@@ -2513,7 +2529,7 @@ export class MultiplayerManager {
         });
 
         let appearance = null;
-        if (client.getSimAppearance && sim.characterId !== 'dipper') {
+        if (client.getSimAppearance && sim.characterId !== 'dipper' && sim.characterId !== 'elias') {
             try {
                 appearance = client.getSimAppearance(sim);
             } catch (err) {
@@ -2671,7 +2687,7 @@ export class MultiplayerManager {
         this.loadoutVersion = (this.loadoutVersion || 0) + 1;
         this.lastPartyHudKey = '';
 
-        if (msg.appearance && p2.characterId !== 'dipper') {
+        if (msg.appearance && p2.characterId !== 'dipper' && p2.characterId !== 'elias') {
             this.bakeRemotePeerAppearance(client, peer, msg.appearance);
         }
     }
@@ -2852,7 +2868,8 @@ export class MultiplayerManager {
             const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
             const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
             const isCorgi = p2.characterId === 'dipper';
-            const charName = escapeHtml(isCorgi ? 'CORGI' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase());
+            const isChih = p2.characterId === 'elias';
+            const charName = escapeHtml(isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase()));
             const displayName = escapeHtml((peer.name || `Player ${peer.slot}`).toUpperCase());
             const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
             const hpPercent = Math.round(hpRatio * 100);
