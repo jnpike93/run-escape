@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot } from './mp-constants.js?v=7.8';
+import { sanitizeSlot } from './mp-constants.js?v=7.9';
 
 export const mpActorRendererMethods = {
     sendLoadoutSync(client, healed = false) {
@@ -89,8 +89,8 @@ export const mpActorRendererMethods = {
         peer.lastEquipKey = equipKey;
         const seqIds = this.playerSeqIds || [
             808, 819, 824, 836,
-            386, 390, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
-            2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
+            386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
+            2062, 2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
         ];
         try {
             const bakeRes = await client.assets.bake([{

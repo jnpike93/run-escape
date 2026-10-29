@@ -6,23 +6,23 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=7.8` - Upstream `0.13.0`)
+### Current Active Asset Files (Version `?v=7.9` - Upstream `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.8`) |
-| **Main Engine Bundle** | [`assets/index-XWbnxuVz.js`](./assets/index-XWbnxuVz.js) | `index.html`, `MapViewerApp-DKojfbH1.js`, `module-C9loB8SI.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=7.8`, imports `assets/multiplayer/mp-*.js?v=7.8`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=7.9`) |
+| **Main Engine Bundle** | [`assets/index-BucZ8BnA.js`](./assets/index-BucZ8BnA.js) | `index.html`, `MapViewerApp-BeWD02jr.js`, `module-D8WM9OnE.js` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=7.9`, imports `assets/multiplayer/mp-*.js?v=7.9`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Symbol Discovery & Patcher** | [`scripts/apply_patches.js`](./scripts/apply_patches.js) | `scripts/discover_symbols.js` + `scripts/patches/01..06-*.patch.js` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=7.8`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=7.8`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=7.8`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-Cu_WH1lb.css`](./assets/index-Cu_WH1lb.css) | `index.html` |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-DKojfbH1.js`](./assets/MapViewerApp-DKojfbH1.js) | `assets/index-XWbnxuVz.js` |
-| **Render Worker** | [`assets/RenderDataWorker-CRRhTJTb.js`](./assets/RenderDataWorker-CRRhTJTb.js) | `assets/index-XWbnxuVz.js` |
-| **Worker WASM Loader** | [`assets/module-Cg9b2g3N.js`](./assets/module-Cg9b2g3N.js) | `assets/RenderDataWorker-CRRhTJTb.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-C9loB8SI.js`](./assets/module-C9loB8SI.js) | `assets/index-XWbnxuVz.js` (`module-yzz5kVyQ.wasm`) |
-| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-4cd931ae`](./caches/osrs-241_2026-09-30-slim-4cd931ae) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v11`) |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=7.9`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=7.9`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=7.9`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=7.9`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-BeWD02jr.js`](./assets/MapViewerApp-BeWD02jr.js) | `assets/index-BucZ8BnA.js` |
+| **Render Worker** | [`assets/RenderDataWorker-ago4Edys.js`](./assets/RenderDataWorker-ago4Edys.js) | `assets/index-BucZ8BnA.js` |
+| **Worker WASM Loader** | [`assets/module-CSC3QDlL.js`](./assets/module-CSC3QDlL.js) | `assets/RenderDataWorker-ago4Edys.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-D8WM9OnE.js`](./assets/module-D8WM9OnE.js) | `assets/index-BucZ8BnA.js` (`module-yzz5kVyQ.wasm`) |
+| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](./caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v12`) |
 
 ### Inline Hooks in `assets/index-XWbnxuVz.js`
 When merging a new upstream `index-*.js` bundle, ensure the following global hooks and custom patches are preserved or ported to the new bundle:
@@ -56,6 +56,19 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Upstream 0.14.0 Merge (Morytania, GWD, Prifddinas, Inferno, Castle Wars, Pest Control, 10 Adventurers, Gear Sets) (v7.9)
+- **Commit / PR**: Upstream `0.14.0` (`index-BucZ8BnA.js`) merge (`?v=7.9`, CacheStorage `-v12`)
+- **Files Modified**: `index.html`, `CHANGELOG.md`, `caches/caches.json`, `caches/osrs-241_2026-09-30-slim-74e0d2b3/*`, `assets/index-BucZ8BnA.js`, `assets/index-BMrv4NGQ.css`, `assets/MapViewerApp-BeWD02jr.js`, `assets/RenderDataWorker-ago4Edys.js`, `assets/module-CSC3QDlL.js`, `assets/module-D8WM9OnE.js`, `assets/multiplayer.js`, `assets/multiplayer/mp-*.js`, `scripts/discover_symbols.js`, `scripts/apply_patches.js`, `scripts/patches/01..06-*.patch.js`, `AGENTS.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=7.8` to `?v=7.9` and `CacheStorage` key from `-v11` to `-v12`. Main bundle changed from `index-XWbnxuVz.js` to `index-BucZ8BnA.js`; CSS from `index-Cu_WH1lb.css` to `index-BMrv4NGQ.css`; MapViewer from `MapViewerApp-DKojfbH1.js` to `MapViewerApp-BeWD02jr.js`; RenderDataWorker from `RenderDataWorker-CRRhTJTb.js` to `RenderDataWorker-ago4Edys.js`; worker WASM loader from `module-Cg9b2g3N.js` to `module-CSC3QDlL.js`; main WASM loader from `module-C9loB8SI.js` to `module-D8WM9OnE.js`; OSRS slim cache from `osrs-241_2026-09-30-slim-4cd931ae` to `osrs-241_2026-09-30-slim-74e0d2b3`.
+- **What Changed**:
+  - Merged upstream `0.14.0` features: **4 new campaign maps** (`morytania` with Verzik Vitur, `god_wars` with faction combat & Nex, `prifddinas` with Zulrah/Zalcano/Corrupted Hunllef, `inferno` with triple JalTok-Jads), **2 new fun maps** (`castle_wars`, `pest_control`), **10 new adventurers**, **12 new quests** + in-run Quest Tracker under the minimap, **7 new class weapons & 8 weapon evolutions**, **3 new passives** (`rigour`, `augury`, `ancient_sceptre`), and **5 Gear Sets** (`Void knight`, `Inquisitor's`, `Crystal armour`, `Torva`, `Virtus`) + DT2 rings and Armoury lines.
+  - Injected all 20 custom OSRS cache archives (`idx0` `[7294..7298, 12217]`, `idx1` `[1691]`, `idx5` `[12595, 12851]` opened Lumbridge gates, `idx7` `[199, 2406, 2437, 2504, 2531, 10980, 12750, 13897, 33011, 55847, 61972]`) into `caches/osrs-241_2026-09-30-slim-74e0d2b3`.
+  - Updated `scripts/discover_symbols.js` and all 211 rules across `scripts/patches/01..06-*.patch.js` for `0.14.0` symbol shifts (`Client: xw -> jv`, `Sim: r$ -> MK`, `Characters: Ja -> rr`, `Maps: aC -> U6`, `ThrallDefs: Zh -> lu`, `EnemyDefLookup: Jn -> Sn`, `AppearanceLookup: E0 -> qm`, `SimAppearance: U$ -> rZ`, `IconCache: A0 -> Eh`, `IconRasterizer: QG -> PX`, `WaveBuilder: Os -> ii`, `Weapons: ir -> dr`, `WeaponDefLookup: Jr -> ha`, `Passives: hw -> Cv`, `PassiveDefLookup: Qr -> ro`, `PostRunStats: ZZ -> CJ`, `PauseModal: $Z -> IJ`, `SettingsModal: kZ -> oJ`, `AdventurerSelectModal: NZ -> fJ`, `MapDefLookup: Wi -> Pi`, `MapUnlockCheck: Vr -> Zr`).
+  - Guarded `0.14.0`'s `KeyQ` quest tracker shortcut when `tztok_jad` or `tzkal_zuk` is alive so pressing `Q` for Protect from Magic in Fight Caves does not fold/unfold the quest tracker.
+  - Updated `assets/multiplayer/mp-sync-engine.js`, `mp-actor-renderer.js`, and `mp-constants.js` to sync `0.14.0` boss `shielded` state, `notice` events, new weapon `playerSeq` animations (`393`, `2062`), and the 10 new adventurers and 6 new maps.
+- **Notes / Invariants for Future Agents**:
+  - In `0.14.0`, `blood_barrage` exists upstream right after `shadow_barrage`; `05-weapons-passives.patch.js` updates upstream's `blood_barrage` entry in-place (preserving `family: "ancient_burst"`) rather than inserting a second `blood_barrage` object.
 
 ### 2026-10-29 - Antigravity - Serve Live Editable CHANGELOG.md (v7.8)
 - **Commit / PR**: Live `CHANGELOG.md` (`?v=7.8`)

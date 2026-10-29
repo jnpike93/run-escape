@@ -11,8 +11,8 @@ const path = require('path');
 const { discoverSymbols } = require('./discover_symbols');
 
 const DEFAULT_INPUT_PATH =
-  'C:/Users/jakep/.gemini/antigravity/brain/618e57ff-bdfe-4918-852a-df224a769b7a/scratch/v0130/index-XWbnxuVz.js';
-const DEFAULT_OUTPUT_PATH = path.resolve(__dirname, '../assets/index-XWbnxuVz.js');
+  'C:/Users/jakep/.gemini/antigravity/brain/7b774375-d1af-480a-aac6-1f4d05410206/scratch/v0140/index-BucZ8BnA.js';
+const DEFAULT_OUTPUT_PATH = path.resolve(__dirname, '../assets/index-BucZ8BnA.js');
 
 const PATCH_MODULES = [
   '01-core-engine.patch.js',

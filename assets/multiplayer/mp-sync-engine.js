@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.8';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.8';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=7.9';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=7.9';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -1024,7 +1024,8 @@ export const mpSyncEngineMethods = {
                                     wu.dir ?? 0,
                                     // Blast attacks (Jad's Rockfall) need their target circles on guests too
                                     Array.isArray(wu.targets) ? wu.targets.slice(0, 8).map(t => [Math.round(t.x * 100) / 100, Math.round(t.y * 100) / 100]) : []
-                                ] : null
+                                ] : null,
+                                (e.shielded || e.shieldEnd > sim.tick) ? 1 : 0
                             ]);
                         }
                     }
@@ -1143,7 +1144,8 @@ export const mpSyncEngineMethods = {
                                 ev.type === 'powerUp' ||
                                 ev.type === 'bossSpawned' ||
                                 ev.type === 'bossRose' ||
-                                ev.type === 'bossEnraged'
+                                ev.type === 'bossEnraged' ||
+                                ev.type === 'notice'
                             ) {
                                 visEvents.push(ev);
                             }
@@ -1832,7 +1834,7 @@ export const mpSyncEngineMethods = {
             for (let i = 0; i < msg.enemies.length; i++) {
                 const item = msg.enemies[i];
                 const [
-                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq, windupData
+                    uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq, windupData, shielded
                 ] = item;
                 hostUids.add(uid);
 
@@ -1892,6 +1894,15 @@ export const mpSyncEngineMethods = {
                     enemy.scale = scale;
                     if (Number.isFinite(variant)) enemy.variant = variant;
                     if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
+                    enemy.shielded = Boolean(shielded);
+                    if (shielded) {
+                        enemy.shieldEnd = Math.max(enemy.shieldEnd || 0, sim.tick + 15);
+                    } else if (enemy.shieldEnd > 0) {
+                        enemy.shieldEnd = 0;
+                        if (Array.isArray(sim.effects)) {
+                            sim.effects = sim.effects.filter(ef => !(ef.enemyUid === enemy.uid && ef.loop));
+                        }
+                    }
                     applyBossWindup(enemy, windupData);
                 } else {
                     const def = client.getEnemyDef ? client.getEnemyDef(defId) : null;
@@ -1924,6 +1935,11 @@ export const mpSyncEngineMethods = {
                                 enemy.scale = scale;
                                 if (Number.isFinite(variant)) enemy.variant = variant;
                                 if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
+                                enemy.shielded = Boolean(shielded);
+                                enemy.shieldEnd = shielded ? Math.max(enemy.shieldEnd || 0, sim.tick + 15) : 0;
+                                if (!shielded && Array.isArray(sim.effects)) {
+                                    sim.effects = sim.effects.filter(ef => !(ef.enemyUid === enemy.uid && ef.loop));
+                                }
                                 applyBossWindup(enemy, windupData);
                             }
                         } catch (err) {

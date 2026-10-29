@@ -22,10 +22,20 @@ export const ALL_CHARACTERS = [
     { id: 'shayzien_soldier', name: 'Shayzien Soldier', weapon: 'scimitar', defaultUnlocked: false },
     { id: 'gladiator', name: 'Gladiator', weapon: 'dual_macuahuitl', defaultUnlocked: false },
     { id: 'javelineer', name: 'Javelineer', weapon: 'eclipse_atlatl', defaultUnlocked: false },
+    { id: 'vampyre_hunter', name: 'Vampyre Hunter', weapon: 'ivandis_flail', defaultUnlocked: false },
+    { id: 'werewolf', name: 'Werewolf', weapon: 'dragon_claws', defaultUnlocked: false },
+    { id: 'godsword_knight', name: 'Godsword Knight', weapon: 'godsword', defaultUnlocked: false },
+    { id: 'armadyl_ranger', name: 'Armadyl Ranger', weapon: 'armadyl_crossbow', defaultUnlocked: false },
+    { id: 'elf_archer', name: 'Elf Archer', weapon: 'crystal_bow', defaultUnlocked: false },
+    { id: 'gauntlet_runner', name: 'Gauntlet Runner', weapon: 'crystal_staff', defaultUnlocked: false },
+    { id: 'infernal_champion', name: 'Infernal Champion', weapon: 'toxic_blowpipe', defaultUnlocked: false },
+    { id: 'tzhaar_hur', name: 'TzHaar-Hur', weapon: 'toktz_mej_tal', defaultUnlocked: false },
     { id: 'scammer', name: 'Scammer', weapon: 'throwing_knives', defaultUnlocked: false },
     { id: 'f2p_pker', name: 'F2P PKer', weapon: 'two_handed_sword', defaultUnlocked: false },
     { id: 'durial321', name: 'Durial321', weapon: 'abyssal_whip', defaultUnlocked: false },
-    { id: 'lms_sweat', name: 'LMS Sweat', weapon: 'ice_burst', defaultUnlocked: false }
+    { id: 'lms_sweat', name: 'LMS Sweat', weapon: 'ice_burst', defaultUnlocked: false },
+    { id: 'castle_wars_veteran', name: 'Castle Wars Veteran', weapon: 'two_handed_sword', defaultUnlocked: false },
+    { id: 'void_knight', name: 'Void Knight', weapon: 'scimitar', defaultUnlocked: false }
 ];
 
 export const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
@@ -42,11 +52,17 @@ export const ALL_REGIONS = [
     { id: 'karamja', name: 'Karamja', bosses: 'Elvarg, Nezikchened, Ket-Zek & TzTok-Jad', difficulty: '2.25x Base HP / 1.75x Dmg' },
     { id: 'kourend', name: 'Kourend', bosses: 'Lizardman Shaman, Sarachnis, Skotizo & Alchemical Hydra', difficulty: '2.5x Base HP / 1.9x Dmg' },
     { id: 'varlamore', name: 'Varlamore', bosses: 'Manticore, Colossi & Sol Heredit', difficulty: '2.75x Base HP / 2.05x Dmg' },
+    { id: 'morytania', name: 'Morytania', bosses: 'Vanstrom Klause, Pestilent Bloat, Sotetseg & Verzik Vitur', difficulty: '3.0x Base HP / 2.2x Dmg' },
+    { id: 'god_wars', name: 'God Wars Dungeon', bosses: 'Zilyana, Kree\'arra, K\'ril, Graardor & Nex', difficulty: '3.25x Base HP / 1.95x Dmg' },
+    { id: 'prifddinas', name: 'Prifddinas', bosses: 'Zulrah, Zalcano, Crystalline & Corrupted Hunllef', difficulty: '3.5x Base HP / 2.5x Dmg' },
+    { id: 'inferno', name: 'The Inferno', bosses: 'JalTok-Jad, Champions & Triple JalTok-Jads', difficulty: '3.75x Base HP / 2.7x Dmg' },
     { id: 'fight_caves', name: 'Fight Caves (Jad & Zuk)', bosses: 'TzTok-Jad (6:00) & TzKal-Zuk (12:00 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' },
     { id: 'grand_exchange', name: 'Grand Exchange (Fun)', bosses: 'The Doubler, Lure Master, Bot Farmer & Melodox', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'east_varrock', name: 'East Varrock Ditch (Fun)', bosses: 'Clan Leader, Rune 2h Pure & Wildy Mage', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'falador', name: 'Falador Massacre (Fun)', bosses: 'Player Moderator, Cursed You & Mod Murdoch', difficulty: 'Endless Fun Map (All Durial321)' },
-    { id: 'last_man_standing', name: 'Last Man Standing (Fun)', bosses: 'AGS Specer, Claws Specer & Dharok Risker', difficulty: 'Endless Fun Map (1.0x Base)' }
+    { id: 'last_man_standing', name: 'Last Man Standing (Fun)', bosses: 'AGS Specer, Claws Specer & Dharok Risker', difficulty: 'Endless Fun Map (1.0x Base)' },
+    { id: 'castle_wars', name: 'Castle Wars (Fun)', bosses: 'Flag Carrier, Catapult Crew & Zamorak Tank', difficulty: 'Endless Fun Map (1.0x Base)' },
+    { id: 'pest_control', name: 'Pest Control (Fun)', bosses: 'Purple, Blue, Yellow & Red Portals', difficulty: 'Endless Fun Map (1.15x HP / 1.1x Dmg)' }
 ];
 export const ALLOWED_REGIONS = new Set(ALL_REGIONS.map(r => r.id));
 

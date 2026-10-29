@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_BUNDLE_PATH = path.resolve(__dirname, '../assets/index-XWbnxuVz.js');
+const DEFAULT_BUNDLE_PATH = path.resolve(__dirname, '../assets/index-BucZ8BnA.js');
 
 const SYMBOL_DEFINITIONS = [
   {
@@ -34,7 +34,7 @@ const SYMBOL_DEFINITIONS = [
     name: 'Maps',
     category: 'Content Registry',
     desc: 'Map levels definition array',
-    regex: /victoryText:"(?:Sol Heredit is defeated!|TzKal-Zuk is slain! You have conquered the Fight Caves!)"\}\],\s*([a-zA-Z0-9_$]+)\s*=\s*\[\.\.\./
+    regex: /victoryText:"(?:Sol Heredit is defeated!|The JalTok-Jads are slain! You are the champion of the Inferno!|TzKal-Zuk is slain! You have conquered the Fight Caves!)"\}\],\s*([a-zA-Z0-9_$]+)\s*=\s*\[\.\.\./
   },
   {
     name: 'ThrallDefs',
@@ -64,7 +64,7 @@ const SYMBOL_DEFINITIONS = [
     name: 'IconCache',
     category: 'Rendering / Cache',
     desc: 'Icon raster / sprite LRU cache instance',
-    regex: /const\s+([a-zA-Z0-9_$]+)\s*=\s*new\s+Th;/
+    regex: /const\s+([a-zA-Z0-9_$]+)\s*=\s*new\s+(?:Th|oa);/
   },
   {
     name: 'IconRasterizer',
@@ -82,7 +82,7 @@ const SYMBOL_DEFINITIONS = [
     name: 'Weapons',
     category: 'Content Registry',
     desc: 'Weapon progression registry array',
-    regex: /const\s+([a-zA-Z0-9_$]+)\s*=\s*\[\{id:"scimitar",name:"Scimitar",kind:"slash"/
+    regex: /const\s+(?:[a-zA-Z0-9_$]+=[0-9]+,)?([a-zA-Z0-9_$]+)\s*=\s*\[\{id:"scimitar",name:"Scimitar",kind:"slash"/
   },
   {
     name: 'WeaponDefLookup',

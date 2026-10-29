@@ -3,7 +3,7 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner), so it's written for players.
 
-## Custom Edition Updates (v7.7)
+## Custom Edition Updates (v7.9)
 
 ### Balance & Combat Adjustments
 
@@ -12,7 +12,7 @@ the version in the corner), so it's written for players.
 
 ### New Content & Modes
 
-- **Co-Op Multiplayer & Damage Leaderboard**: Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard.
+- **Co-Op Multiplayer & Damage Leaderboard**: Co-Op rooms with synchronized waves, enemies, bosses, shared ground loot, revives, overhead chat, and a live party Damage Dealt HUD leaderboard (now supporting all `0.14.0` maps, adventurers, and bosses).
 - **Fight Caves & Inferno Bosses**: Enter the **Fight Caves** map, complete with **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge to complete the quest for bonus XP, coins, and a guaranteed chest.
 - **Secret Adventurers**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave) and **Elias the Chihuahua** (Ankle Bite).
@@ -20,6 +20,136 @@ the version in the corner), so it's written for players.
 ### Quality of Life
 
 - **Pause Menu & HUD**: Hovering weapons, passives, and equipment in the Pause menu displays item effects exclusively in the dedicated Pause menu info box without a duplicate floating tooltip. Added **UI Scale** (**Auto**, **1x**, **1.25x**, **1.5x**) and **Tile Coordinates** toggles in Settings.
+
+## 0.14.0 - 2026-10-29
+
+### Added
+
+- Four more maps after Varlamore, each opened by beating the one before, and each harder again.
+  The Inferno is the hardest map in the game.
+    - **Morytania**: Slepe and the swamp under Darkmeyer's walls, with Mort Myre's ghasts, shades
+      and zombies, werewolves, vampyres, vyrewatch, nail beasts, mutated bloodvelds and the Theatre
+      of Blood's Nylocas (the big ones split in two when they die). **Vanstrom Klause**, the
+      **Pestilent Bloat** and **Sotetseg** come one by one, and at 15:00 **Verzik Vitur**:
+      shielded on her throne at first, then up in her second form spitting webs and calling in
+      Nylocas, and last as the great spider.
+    - **God Wars Dungeon**: the main cave, where the armies of Bandos, Armadyl, Saradomin and
+      Zamorak march in from their own sides and **fight each other** as much as they fight you.
+      Lead them into each other: what they kill of each other is nobody's kill and drops nothing,
+      but it's fewer of them. **Commander Zilyana**, **Kree'arra** and **K'ril Tsutsaroth** come
+      one by one, each calling in their bodyguards as they're hurt, General Graardor leads an ork
+      charge late on, and at 15:00 **Nex** comes in four forms (smoke, shadow, blood and ice),
+      each calling in its own bodyguard.
+    - **Prifddinas**: the elven city, with the Gauntlet's crystalline creatures, the city's guards,
+      the Iorwerth, Zulrah's snakelings, and the corrupted creatures late on. **Zulrah** stays
+      where it surfaces and dives into its next form twice, **Zalcano** brings the roof down, then
+      the **Crystalline Hunllef**, and at 15:00 the **Corrupted Hunllef**, with tornadoes that
+      chase you.
+    - **The Inferno**: Mor Ul Rek and the Inferno's creatures: nibblers, bats, Jal-Ak blobs that
+      split into three when they die, Jal-ImKot that dig up right next to you, Jal-Xil, and
+      Jal-Zek that raise the dead. **JalTok-Jad** and his healers, a **Jal-Zek champion** who
+      keeps raising them, and a **TzHaar-Ket champion** with an obsidian maul, who leaps onto
+      you and calls in his own. At 15:00, **three JalTok-Jads at once**, each calling in healers:
+      the run's won when the last of them falls.
+- Two more **fun maps**, open from the start and endless:
+    - **Castle Wars**: the Zamorak team in hooded cloaks and decorative armour, and the Saradomin
+      team, who fight Zamorak as much as they fight you. Bosses: the **Flag carrier**, who runs
+      off with your flag and teleports away when he's caught (two caskets if you get him), the
+      **Catapult crew**, who drop rocks where you stood, and a **Zamorak tank** in full gold
+      decorative armour.
+    - **Pest Control**: the Void Knight's island, overrun by brawlers, ravagers, splatters that
+      blow up when they die, shifters that teleport to you, defilers, torchers and spinners that
+      heal the portals. The **four portals** open together, their shields dropping one by one,
+      and call in pests until they're destroyed. Each drops a casket, and the last one a master
+      casket too; a few minutes later the next four open.
+- Ten more adventurers:
+    - **Vampyre hunter** (Ivandis flail, hits bosses 25% harder): beat Morytania.
+    - **Werewolf** (Dragon claws, heals off its hits now and then, moves 5% faster): kill the
+      Pestilent Bloat in Morytania.
+    - **Godsword knight** (a godsword, picks its hilt; takes 1 less damage, but weapons are 5%
+      slower): beat the God Wars Dungeon.
+    - **Armadyl ranger** (Armadyl crossbow, ranged hits 10% harder and flies 15% faster): kill
+      Kree'arra in the God Wars Dungeon.
+    - **Elf archer** (Crystal bow, moves 10% faster, ranged hits 5% harder): beat Prifddinas.
+    - **Gauntlet runner** (Crystal staff, starts 30% weaker but hits 2% harder with every level,
+      up to 50% harder at level 41): survive 10 minutes in Prifddinas.
+    - **Infernal champion** (Toxic blowpipe, 20% more hitpoints): beat the Inferno.
+    - **TzHaar-Hur** (Toktz-mej-tal, 15% bigger areas): kill JalTok-Jad in the Inferno.
+    - **Castle Wars veteran** (Bronze 2h sword, bandages heal, 10% more hitpoints): kill the Flag
+      carrier in Castle Wars.
+    - **Void knight** (Bronze scimitar, in the Void knight's equipment, hits 10% harder): destroy
+      the purple portal in Pest Control.
+- Twelve more **quests**, three on each new map: Nature Spirit, Darkness of Hallowvale and A
+  Night at the Theatre in Morytania; Temple of Ikov, The Frozen Door (all four generals) and
+  Secrets of the North (Nex) in the God Wars Dungeon; Roving Elves, Regicide (Zulrah) and Song of
+  the Elves (the Corrupted Hunllef) in Prifddinas; and in the Inferno, Nibblers, Begone!, Jad?
+  What Are You Doing Here? and The Inferno itself, worth 2,500 coins for beating it. Crystalline
+  rats count for Ratcatchers.
+- **Quests in a run**: a quest tracker under the minimap shows how far this map's quests (and
+  the ones done all over) have got, this run's kills included, coloured like the quest tab. Click
+  its title or press Q to fold it away. The pause menu lists them with what each asks for.
+- New class weapons, each brought in with its adventurer:
+    - **Godsword** (Melee): a heavy two-handed sweep. At level 2 you **pick its hilt**, and with
+      it its special attack: Armadyl, Bandos, Saradomin or Zamorak.
+    - **Dragon claws** (Melee): four quick slashes at a time, the last the hardest.
+    - **Ivandis flail** (Melee): vampyres and the undead are hit 50% harder.
+    - **Armadyl crossbow** (Ranged): bolts that go through what they hit, and one in five is
+      enchanted: a ruby's takes a share of what's left of its hitpoints, a diamond's goes on
+      through more, a dragonstone's burns.
+    - **Crystal bow** (Ranged): arrows split into three where they first hit.
+    - **Crystal staff** (Magic): crystal spells that grow from basic to attuned at level 4 and
+      perfected at 7.
+    - **Toktz-mej-tal** (Magic): pulses of obsidian heat around you that leave the ground
+      burning for a while.
+- Every weapon can evolve now. New evolutions: the shortbow with **Rigour** into the **Dark
+  bow**, the fire spells with **Augury** into **Flames of Zamorak**, the throwing axes with the
+  Tome of fire into **Chain-hit axes**, Blood Burst with Rapid Heal into **Blood Barrage**, Smoke
+  and Shadow Burst with the **Ancient sceptre** into **Smoke** and **Shadow Barrage**, the
+  Ivandis flail with the Book of the dead into the **Blisterwood flail**, and the Crystal bow
+  with the Graceful outfit into the **Corrupted bow**.
+- Three new passives: **Rigour** (arrows, bolts and everything thrown hit harder), **Augury**
+  (spells hit harder, and their effects last longer) and the **Ancient sceptre** (auras and
+  Ancient spells cover more ground).
+- **Gear sets**: wear enough pieces of a set for its bonus, shown on the casket and in your gear
+  as "Void knight 2/4". Once you wear a piece, caskets often bring the set's missing ones, so a
+  set started in a run can usually be finished in it. Torva, Virtus and the Zaryte vambraces come
+  in once you've killed Nex.
+    - **Void knight** (Uncommon; 3 of its 4 pieces): +10% damage.
+    - **Inquisitor's** (Rare; 2 of 3): slashes and sweeps hit 15% harder.
+    - **Crystal armour** (Rare; 2 of 3): crystal bows and staves hit 20% harder and are 15%
+      faster.
+    - **Torva** (Very rare; 2 of 3): 20% more hitpoints and 1 more armour.
+    - **Virtus** (Very rare; 2 of 3): auras and Ancient spells cover 20% more area.
+- More gear from caskets: the **Neitiznot faceguard**, the **Amulet of rancour**, the **Twisted
+  buckler**, the **Zaryte vambraces** and Desert Treasure II's **Ultor**, **Venator**, **Magus**
+  and **Bellator** rings. Some gear now boosts one style's damage (Melee, Ranged or Magic), or
+  auras' area.
+- Armoury lines for the new gear: the Void knight's into Elite void and its ornament kit, Crystal
+  armour into corrupted crystal, Torva into Sanguine torva, Virtus into Ancient ceremonial, and
+  the Amulet of rancour into the Amulet of rancour (s). A set's pieces still count for it once
+  upgraded.
+
+### Changed
+
+- **Enemy projectiles are easier to see**: small ones are drawn bigger, and they all have an
+  orange outline and a soft glow, so even arrows and bolts stand out.
+- **Quests don't count on the fun maps**: kills and caskets there no longer go towards them, and
+  the fun maps don't show the quest tracker.
+- **The map list** is split into the campaign and the fun maps, and the map pointed at stays in
+  view below the list, which scrolls on its own in a short window. Scrolling no longer swaps the
+  map shown; only moving the pointer does. The adventurer list works the same way.
+- The ring lines in the Armoury go one step further: the imbued Berserker, Seers and Archers
+  rings become the **Ultor**, **Magus** and **Venator** rings.
+- **Ice Barrage** counts as an Ancient burst now, like the other barrages, so it's the one
+  Ancient spell you carry.
+- Weapons no longer waste their shots on an enemy whose shield is up.
+- When several bosses are up at once (Pest Control's portals), the boss bar shows the nearest.
+  A final boss's bar stays up over the others.
+
+### Fixed
+
+- The minimap draws as soon as a run starts. On busy maps it could stay black for the first few
+  seconds.
 
 ## 0.13.0 - 2026-10-29
 
