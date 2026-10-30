@@ -35,7 +35,8 @@ export const ALL_CHARACTERS = [
     { id: 'durial321', name: 'Durial321', weapon: 'abyssal_whip', defaultUnlocked: false },
     { id: 'lms_sweat', name: 'LMS Sweat', weapon: 'ice_burst', defaultUnlocked: false },
     { id: 'castle_wars_veteran', name: 'Castle Wars Veteran', weapon: 'two_handed_sword', defaultUnlocked: false },
-    { id: 'void_knight', name: 'Void Knight', weapon: 'scimitar', defaultUnlocked: false }
+    { id: 'void_knight', name: 'Void Knight', weapon: 'scimitar', defaultUnlocked: false },
+    { id: 'penance_fighter', name: 'Penance Fighter', weapon: 'battleaxe', defaultUnlocked: false }
 ];
 
 export const ALLOWED_CHARACTERS = new Set(ALL_CHARACTERS.map(c => c.id));
@@ -166,3 +167,89 @@ export function sanitizePeerStats(raw) {
     }
     return clean;
 }
+
+// Weapon stance animations matching src/game/content/stances.ts (0.18.0)
+export const DEFAULT_PLAYER_STANCE = { idle: 808, run: 824 };
+
+export const PLAYER_STANCES = [
+    // 2h swords
+    { idle: 2561, run: 2563, objIds: [1307, 1309, 1311, 1313, 1315, 1317, 1319, 7158] },
+    // Godswords
+    { idle: 7053, run: 7043, objIds: [11802, 11804, 11806, 11808, 26233] },
+    // Colossal blade
+    { idle: 9460, run: 9459, objIds: [27021] },
+    // Elder maul
+    { idle: 7518, run: 7519, objIds: [21003] },
+    // Tzhaar-ket-om and Hill giant club
+    { idle: 2065, run: 824, objIds: [6528, 20756] },
+    // Dinh's bulwarks
+    { idle: 7508, run: 7509, objIds: [21015, 28682] },
+    // Scythes
+    { idle: 8057, run: 824, objIds: [22325, 25739] },
+    // Ivandis and Blisterwood flails
+    { idle: 8009, run: 8016, objIds: [22398, 24699] },
+    // Abyssal whip
+    { idle: 808, run: 1661, objIds: [4151] },
+    // Osmumten's fang
+    { idle: 809, run: 824, objIds: [26219] },
+    // Thunder khopesh
+    { idle: 11935, run: 11937, objIds: [30388] },
+    // Blue moon spear
+    { idle: 11120, run: 11118, objIds: [28988] },
+    // Staves, wands, sceptres, Toktz-mej-tal, blowpipe, atlatl, crystal staff
+    {
+        idle: 813,
+        run: 1210,
+        objIds: [
+            1387, 1389, 6526, 9013, 12926, 21006, 21276, 22323, 22370, 23898, 23899, 23900, 25489, 25491,
+            25492, 25731, 29000
+        ]
+    },
+    // Nightmare staves
+    { idle: 4504, run: 1210, objIds: [24423, 24425] },
+    // Tumeken's shadows
+    { idle: 9494, run: 1707, objIds: [27275, 28547] },
+    // Crossbows
+    { idle: 4591, run: 4228, objIds: [11785, 21012] }
+];
+
+const STANCE_BY_OBJ = new Map(
+    PLAYER_STANCES.flatMap(s => s.objIds.map(objId => [objId, { idle: s.idle, run: s.run }]))
+);
+
+export function getWeaponStance(objId) {
+    const id = Number(objId);
+    if (!Number.isFinite(id) || id <= 0) return DEFAULT_PLAYER_STANCE;
+    return STANCE_BY_OBJ.get(id) || DEFAULT_PLAYER_STANCE;
+}
+
+export function getPlayerStanceSeqs() {
+    return [...new Set(PLAYER_STANCES.flatMap(s => [s.idle, s.run]))];
+}
+
+// Walk (819) must always be first so the baked actor height comes from the neutral walk pose
+// rather than raised-weapon stances (matching GameAssets.ts in 0.18.0).
+export const DEFAULT_PLAYER_ATTACK_SEQS = [
+    386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
+    2062, 2614, 2661, 3157, 4230, 5061, 7045, 7511, 7514, 7516, 7638,
+    7640, 7642, 7644, 7855, 8056, 9171, 9493, 10656, 10989, 11140
+];
+
+export function buildPlayerBakeSeqIds(client) {
+    const dynamicAttackSeqs = [];
+    if (client && typeof client.getWeapons === 'function') {
+        try {
+            for (const w of client.getWeapons()) {
+                if (Number.isFinite(w?.playerSeq)) dynamicAttackSeqs.push(w.playerSeq);
+                if (Number.isFinite(w?.special?.playerSeq)) dynamicAttackSeqs.push(w.special.playerSeq);
+            }
+        } catch (err) {}
+    }
+    return [...new Set([
+        819, 808, 824, 836,
+        ...getPlayerStanceSeqs(),
+        ...DEFAULT_PLAYER_ATTACK_SEQS,
+        ...dynamicAttackSeqs
+    ])];
+}
+

@@ -11,7 +11,9 @@ import {
     sanitizeRoomId,
     sanitizeCharacter,
     sanitizeSlot,
-    escapeHtml
+    escapeHtml,
+    buildPlayerBakeSeqIds,
+    getWeaponStance
 } from './mp-constants.js?v=8.6';
 
 const sanitizePlayerName = (name, fallback = '') => sanitizeName(name) || fallback;
@@ -245,12 +247,9 @@ export const mpLobbyUiMethods = {
             monk: { 4: 544, 7: 542, 2: 1718, 3: 1389 }
         };
 
-        const seqIds = [
-            808, 819, 824, 836,
-            386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
-            2062, 2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
-        ];
+        const seqIds = buildPlayerBakeSeqIds(client);
         this.playerSeqIds = seqIds;
+        if (!this.charStances) this.charStances = new Map();
         const bakes = [];
 
         if (!client.assets.models.has('corgi')) {
@@ -301,11 +300,13 @@ export const mpLobbyUiMethods = {
                     equipment: equip
                 };
             }
+            const stance = getWeaponStance(appearance.equipment?.[3]);
+            this.charStances.set(pureId, stance);
             bakes.push({
                 kind: 'player',
                 key: cid,
                 appearance,
-                seqIds
+                seqIds: [...new Set([819, stance.idle, stance.run, ...seqIds])]
             });
         }
 

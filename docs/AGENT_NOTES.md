@@ -8,10 +8,37 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Merge Upstream `0.17.1` - `0.17.2` (`59b6eff`), Sentinel `usedItemId` Spoofing Fix (`acb15a3`) & Debug Panel Game Speed Slider (`c56f7fa`)
+### [2026-10-30] Merge Upstream `0.18.0` (`3e5885c`), Rebuild Slim Cache (`64ff6328`), Fix Out-of-Bounds Map Square Worker Flood & Add Co-Op `0.18.0` Sync
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-CHTowyrV.js` (`?v=8.6`, MapViewer `MapViewerApp-B6q-pfZW.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-VGKAynAb.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+
+**Scope**: Merged upstream `main` (`59b6eff..3e5885c`, release `0.18.0` and `sim-collision-snapshots`) into `main`, regenerated and verified the slim cache (`osrs-241_2026-09-30-slim-64ff6328`, 14,394 groups in full mode) for all new `0.18.0` weapon stances, power-ups (`sled`, `giant_essence`, `evil_bob`, `fairy_ring`, `drill_demon`), and Toktz-mej-tal fire loc animations, fixed `MapManager` / `WebGLMapViewerRenderer` out-of-bounds map square worker flooding and `invalidMapIds` clearing on plane changes, and integrated all `0.18.0` features into Co-Op Multiplayer.
+
+**Changes implemented**:
+- **Upstream `0.18.0` Merge (`src/game/core/Sim.ts`, `src/game/core/entities.ts`, `src/game/client/GameAssets.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/game/content/powerups.ts`, `src/game/content/stances.ts`, `src/mapviewer/webgl/loc/UpperLevels.ts`, `src/mapviewer/webgl/loc/SceneLocs.ts`, `src/mapviewer/webgl/buffer/SceneBuffer.ts`, `scripts/cache/slim-cache.ts`, `scripts/game/collision-snapshot.ts`)**:
+  - Merged per-weapon stances (`stances.ts`, walk-first `819` baking), 5 new power-ups (`Sled`, `Giant rune essence`, `Evil Bob`, `Fairy ring`, `Drill Demon`), Toktz-mej-tal real fire patches (`loc 5499`, `seq 475`, `sim.fires`), Prifddinas walkways & roof hiding (`UpperLevels.ts`), blocked-terrain faction war timeout (`canWalkStraight` / `foeWait`), and endless casket scarcity past 15 minutes.
+  - Added custom weapon item IDs (`20756` Hill giant club, `9013`/`21276` Skull sceptre, `22370` Bryophyta's staff) to `src/game/content/stances.ts`.
+  - Rebuilt and verified `caches/osrs-241_2026-09-30-slim-64ff6328` (`26.0 MB`) from the local full OSRS 241 cache and removed `caches/osrs-241_2026-09-30-slim-fa564245`.
+- **Map Rendering & Worker Pool Fixes (`src/mapviewer/MapManager.ts`, `src/mapviewer/MapManager.test.ts`, `src/mapviewer/webgl/WebGLMapViewerRenderer.ts`, `src/game/client/GameClient.ts`)**:
+  - Clamped `MapManager.update()` map square bounds (`mapStartX..mapEndX`, `mapStartY..mapEndY`) to `playArea` (`[baseX, baseY, baseX + sizeX, baseY + sizeY]`) and called `this.syncPlayArea()` in `GameClient` constructor, `startRun()`, and `leaveRun()`, preventing `camera ± 128` (`renderDistance`) from queuing unbaked border map squares outside the arena into `RenderDataWorkerPool`.
+  - Preserved `invalidMapIds` across `MapManager.clearMaps()` / `setPlane()` transitions (e.g. entering or leaving God Wars Dungeon `plane: 2`).
+  - Updated `WebGLMapViewerRenderer.queueLoadMap()` and `render()` to mark failed map square loads invalid (`addInvalidMap`) and clean up `loadingMapIds` when `!isValidMapData(mapData)`.
+- **Co-Op Multiplayer `0.18.0` Integration & Bug Fixes (`src/custom/multiplayer/mp-constants.js`, `mp-lobby-ui.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js`, `multiplayer.test.ts`, `assets/multiplayer/`)**:
+  - Added missing `penance_fighter` (`weapon: 'battleaxe'`) to `ALL_CHARACTERS` in `mp-constants.js`.
+  - Fixed `sim.relocate(enemy, behind)` hook in `mp-sync-engine.js` to pass `behind = true` through to `origRelocate` so the Fairy Ring power-up teleports nearby enemies behind the player in Co-Op.
+  - Fixed Guest `sled` pickup in `mp-pickups.js`, `mp-actor-renderer.js`, and `mp-sync-engine.js` so a Guest picking up a Sled activates sledding on that Guest (rather than hijacking the Host's `sim.sledEndTick`) and renders `${dynKey}_sled` (`seqIds: [819, 1461, 1462]`) for sledding peers.
+  - Added per-weapon stance baking (`819` walk-first) and Host -> Guest `sync_world` synchronization for `sim.rocks`, `sim.rampages`, `sim.rings`, `sim.fires`, `playerShout`, `powerUpHit`, and `powerUpEnded`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (407/407 passed across all 20 test suites), `npm run verify-slim-cache` (verified 3,529 groups in 5.30s; `--verify-full` verified 14,394 groups across all 20 maps in 29.35s), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Merge Upstream `0.17.1` - `0.17.2` (`59b6eff`), Sentinel `usedItemId` Spoofing Fix (`acb15a3`) & Debug Panel Game Speed Slider (`c56f7fa`)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `8dea2e4`
 **Bundle**: `index-DDOLshWh.js` (`?v=8.6`, MapViewer `MapViewerApp-Pk2JB77M.js`, Worker `RenderDataWorker-D4-1qx-e.js`, WASM loader `module-qsFJRNBT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
 
 **Scope**: Merged upstream `main` (`efc49f6..59b6eff`, releases `0.17.1` and `0.17.2`) into `main`, integrated the Jules Sentinel security fix (`acb15a3` on `origin/sentinel/fix-coop-loadout-useditemid-spoofing-12907676329992050147`) preventing Guest `usedItemId` spoofing in Co-Op loadout sync, and integrated the Debug Panel `gameSpeed` slider and top-pinned layout (`c56f7fa` on `origin/debug-panel`).

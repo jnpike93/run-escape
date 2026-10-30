@@ -54,7 +54,6 @@ import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./Dis
 import {
     GameAssets,
     HITSPLAT_SPRITES,
-    PLAYER_SEQS,
     getCharacterAppearance,
     getRunAppearance,
 } from "./GameAssets";
@@ -274,6 +273,7 @@ export class GameClient implements GameFrameHandler {
         this.save = store.getSnapshot().save;
         this.grid = titleGrid;
         this.grids.set(TITLE_MAP.id, titleGrid);
+        this.syncPlayArea();
         this.sounds = new GameSounds(audio);
         store.set({ audio: audio.settings, display: this.display });
         this.view = new GameView(assets);
@@ -561,6 +561,7 @@ export class GameClient implements GameFrameHandler {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
         }
         this.sim = sim;
+        this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);
         this.minimap.setMap(map);
         const music = map.music && MUSIC[map.music];
@@ -701,6 +702,7 @@ export class GameClient implements GameFrameHandler {
         this.paused = false;
         this.audio.stopMusic();
         this.grid = this.grids.get(TITLE_MAP.id)!;
+        this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
@@ -865,12 +867,7 @@ export class GameClient implements GameFrameHandler {
         this.store.expireToasts();
 
         // The world fades out past the edge of the map
-        const { baseX, baseY, sizeX, sizeY } = this.grid;
-        const playArea = this.renderer.playArea;
-        playArea[0] = baseX;
-        playArea[1] = baseY;
-        playArea[2] = baseX + sizeX;
-        playArea[3] = baseY + sizeY;
+        this.syncPlayArea();
 
         const sim = this.sim;
         if (!sim) {
@@ -913,6 +910,15 @@ export class GameClient implements GameFrameHandler {
         const py = player.prevY + (player.y - player.prevY) * alpha;
         // Aim at the player's chest, not their feet
         this.cameraRig.apply(camera, px, this.grid.getHeight(px, py) / 128 - 0.6, py);
+    }
+
+    private syncPlayArea(): void {
+        const { baseX, baseY, sizeX, sizeY } = this.grid;
+        const playArea = this.renderer.playArea;
+        playArea[0] = baseX;
+        playArea[1] = baseY;
+        playArea[2] = baseX + sizeX;
+        playArea[3] = baseY + sizeY;
     }
 
     private getAlpha(): number {
@@ -1112,7 +1118,7 @@ export class GameClient implements GameFrameHandler {
         if (model) {
             const anim = isDog
                 ? model.getAnim(6561) || model.anims[0]
-                : model.getAnim(PLAYER_SEQS.idle);
+                : model.getAnim(this.assets.getPlayerStance().idle);
             const tick = Math.floor(this.attractTick);
             if (anim) {
                 actors.draw(

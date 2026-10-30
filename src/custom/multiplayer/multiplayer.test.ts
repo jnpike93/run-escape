@@ -6,9 +6,12 @@ import { mpTransportMethods } from "./mp-transport.js";
 import {
     ALL_CHARACTERS,
     ALL_REGIONS,
+    CHAR_WEAPONS,
     COOP_DIFFICULTY_WEIGHTS,
+    buildPlayerBakeSeqIds,
     escapeHtml,
     getCoopDifficultyWeights,
+    getWeaponStance,
     sanitizeCharacter,
     sanitizeHexColor,
     sanitizeMapId,
@@ -631,3 +634,195 @@ describe("Co-Op leaderboard point calculation & sorting (mp-hud-leaderboard)", (
         }
     });
 });
+
+describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fairy Rings & Ground Fires", () => {
+    test("Includes penance_fighter and maps 0.18.0 weapon stances with walk (819) baked first", () => {
+        expect(sanitizeCharacter("penance_fighter")).toBe("penance_fighter");
+        expect(CHAR_WEAPONS.penance_fighter).toBe("battleaxe");
+
+        // Walk (819) must always be index 0 so actor height comes from neutral walk pose
+        const seqs = buildPlayerBakeSeqIds(null);
+        expect(seqs[0]).toBe(819);
+        expect(seqs).toContain(7053); // Godsword idle
+        expect(seqs).toContain(7043); // Godsword run
+        expect(seqs).toContain(1661); // Whip run
+        expect(seqs).toContain(813);  // Staff idle
+        expect(seqs).toContain(1210); // Staff run
+        expect(seqs).toContain(9171); //Atlatl / new attack seqs
+
+        expect(getWeaponStance(11802)).toEqual({ idle: 7053, run: 7043 }); // Armadyl godsword
+        expect(getWeaponStance(4151)).toEqual({ idle: 808, run: 1661 });   // Abyssal whip
+        expect(getWeaponStance(6526)).toEqual({ idle: 813, run: 1210 });   // Toktz-mej-tal
+        expect(getWeaponStance(1333)).toEqual({ idle: 808, run: 824 });    // Rune scimitar (default stance)
+    });
+
+    test("applyWorldSync synchronizes 0.18.0 rocks, rampages, fairy rings, ground fires, and remote sled state", async () => {
+        const prevWindow = (globalThis as any).window;
+        const prevImage = (globalThis as any).Image;
+        try {
+            (globalThis as any).window = { ...(prevWindow || {}), addEventListener() {} };
+            (globalThis as any).Image = prevImage || class { src = ""; };
+            const { mpSyncEngineMethods } = await import("./mp-sync-engine.js");
+
+            const peerEntity: any = {
+                slot: 2,
+                x: 30,
+                y: 40,
+                prevX: 30,
+                prevY: 40,
+                netX: 30,
+                netY: 40,
+                vx: 0,
+                vy: 0,
+                hp: 25,
+                maxHp: 25,
+                moving: true,
+                sled: false,
+            };
+            const peer: any = {
+                slot: 2,
+                name: "Player 2",
+                entity: peerEntity,
+                pauseState: null,
+                _initialPosSynced: true,
+            };
+            const sim: any = {
+                tick: 200,
+                kills: 0,
+                xp: 0,
+                round: 1,
+                state: "playing",
+                player: { hp: 25, maxHp: 25, spectating: false },
+                enemies: [],
+                pickups: [],
+                turrets: [],
+                thralls: [],
+                enemyProjectiles: [],
+                effects: [],
+                rocks: [],
+                rampages: [],
+                rings: [],
+                fires: [],
+            };
+            (globalThis as any).window = {
+                gameClient: {
+                    sim,
+                    accumulator: 0,
+                    syncOverlay() {},
+                    updateHud() {},
+                    handleEvents() {},
+                },
+            };
+
+            const ctx: any = {
+                ...mpSyncEngineMethods,
+                localSlot: 1,
+                _lastHostSyncTick: 198,
+                remotePeers: new Map([[2, peer]]),
+                damageStats: new Map(),
+                invalidateSortedRemotePeers() {},
+                updatePauseOverlay() {},
+                syncLocalPauseState() {},
+                showToast() {},
+            };
+
+            ctx.applyWorldSync({
+                type: "sync_world",
+                tick: 200,
+                players: [{ slot: 2, hp: 25, maxHp: 25, x: 31, y: 41, moving: true, sled: true }],
+                rocks: [[501, "giant_rune_essence", 32, 42, 190, 235, 260, 4369, 60, 3.5]],
+                rampages: [[601, "evil_bob", 28, 38, 512, 40, 50, 0.36, 195, 595, -1, 6560, 2.8]],
+                rings: [[701, 30, 40, 190, 940, 2.5, 29228, 569, 1.5]],
+                fires: [[801, 30.5, 40.5, 1.8, 350, 20000]],
+            });
+
+            expect(peerEntity.sled).toBe(true);
+            expect(sim.rocks.length).toBe(1);
+            expect(sim.rocks[0].uid).toBe(501);
+            expect(sim.rocks[0].locId).toBe(4369);
+            expect(sim.rampages.length).toBe(1);
+            expect(sim.rampages[0].uid).toBe(601);
+            expect(sim.rampages[0].goalX).toBe(40);
+            expect(sim.rings.length).toBe(1);
+            expect(sim.rings[0].uid).toBe(701);
+            expect(sim.fires.length).toBe(1);
+            expect(sim.fires[0].uid).toBe(801);
+            expect(sim.fires[0].flames.length).toBe(7);
+        } finally {
+            (globalThis as any).window = prevWindow;
+            (globalThis as any).Image = prevImage;
+        }
+    });
+
+    test("Remote peer sled pickup activates sled on the Guest without hijacking Host sled state", () => {
+        const prevWindow = (globalThis as any).window;
+        try {
+            let hostUsePowerUpCalled = false;
+            const sentMessages: any[] = [];
+            const p2: any = { x: 15, y: 15, hp: 25, maxHp: 25, frozen: 10, invulnerable: 0, sled: false, sledEndTick: 0 };
+            const peer: any = { slot: 2, name: "Bob", entity: p2 };
+            const hostSim: any = {
+                tick: 100,
+                sledEndTick: 0,
+                stats: { magnet: 0 },
+                events: [],
+                pickups: [{ uid: 1, kind: "powerUp", powerUp: "sled", x: 15.1, y: 15.1, value: 1 }],
+                _origCollect() {
+                    hostUsePowerUpCalled = true;
+                },
+            };
+            (globalThis as any).window = { gameClient: { sim: hostSim } };
+
+            const hostCtx: any = {
+                ...mpPickupsMethods,
+                localSlot: 1,
+                hostSlot: 1,
+                send(msg: any) {
+                    sentMessages.push(msg);
+                },
+            };
+
+            hostCtx.stepRemotePlayerPickups(hostSim, peer);
+            expect(hostUsePowerUpCalled).toBe(false);
+            expect(hostSim.sledEndTick).toBe(0);
+            expect(p2.sled).toBe(true);
+            expect(p2.sledEndTick).toBe(500);
+            expect(p2.frozen).toBe(0);
+            expect(p2.invulnerable).toBeGreaterThanOrEqual(13);
+            expect(sentMessages.length).toBe(1);
+            expect(sentMessages[0]).toMatchObject({
+                type: "coop_pickup",
+                kind: "powerUp",
+                powerUpId: "sled",
+                targetSlot: 2,
+            });
+
+            // Now verify Guest (slot 2) receives that message and activates sled locally
+            let guestSledActivated = false;
+            const guestSim: any = {
+                tick: 100,
+                usePowerUp(def: any) {
+                    if (def?.id === "sled") guestSledActivated = true;
+                },
+                takeEvents: () => [],
+            };
+            (globalThis as any).window = {
+                gameClient: {
+                    sim: guestSim,
+                    handleEvents() {},
+                    updateHud() {},
+                },
+            };
+            const guestCtx: any = {
+                ...mpPickupsMethods,
+                localSlot: 2,
+                hostSlot: 1,
+            };
+            guestCtx.applyCoopPickup({ ...sentMessages[0], senderSlot: 1 });
+            expect(guestSledActivated).toBe(true);
+        } finally {
+            (globalThis as any).window = prevWindow;
+        }
+    });
+});
+

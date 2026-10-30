@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot, sanitizeHexColor, sanitizePeerStats } from './mp-constants.js?v=8.6';
+import { sanitizeSlot, sanitizeHexColor, sanitizePeerStats, getWeaponStance, buildPlayerBakeSeqIds } from './mp-constants.js?v=8.6';
 
 export const mpActorRendererMethods = {
     getLobbyGrowthMultiplier(sim) {
@@ -119,35 +119,56 @@ export const mpActorRendererMethods = {
             }
         }
         if (!appearance || !Array.isArray(appearance.equipment)) return;
-        const equipKey = appearance.equipment.join(',');
+        const cleanEquip = appearance.equipment.slice(0, 12).map(n => Number.isFinite(Number(n)) ? Math.round(Number(n)) : -1);
+        const stance = getWeaponStance(cleanEquip[3]);
+        peer.stance = stance;
+        if (peer.entity) peer.entity.stance = stance;
+        const equipKey = cleanEquip.join(',');
         const dynKey = `player_dynamic_${peer.slot}`;
+        const sledKey = `${dynKey}_sled`;
         if (peer.lastEquipKey === equipKey && client.assets.models.has(dynKey)) {
             if (peer.entity) peer.entity.hasDynamicModel = true;
             return;
         }
         peer.lastEquipKey = equipKey;
-        const seqIds = this.playerSeqIds || [
-            808, 819, 824, 836,
-            386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
-            2062, 2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
-        ];
+        const baseSeqIds = this.playerSeqIds || buildPlayerBakeSeqIds(client);
+        const seqIds = [...new Set([819, stance.idle, stance.run, ...baseSeqIds])];
+        const cleanAppearance = {
+            gender: appearance.gender === 1 ? 1 : 0,
+            colors: Array.isArray(appearance.colors) ? appearance.colors.slice(0, 5).map(n => Number(n) || 0) : [0, 0, 0, 0, 0],
+            kits: Array.isArray(appearance.kits) ? appearance.kits.slice(0, 7).map(n => Number(n) || 0) : [0, 10, 18, 26, 33, 36, 42],
+            equipment: cleanEquip
+        };
+        const sledEquip = cleanEquip.slice();
+        sledEquip[3] = 4084;
+        sledEquip[5] = -1;
         try {
-            const bakeRes = await client.assets.bake([{
-                kind: 'player',
-                key: dynKey,
-                appearance: {
-                    gender: appearance.gender === 1 ? 1 : 0,
-                    colors: Array.isArray(appearance.colors) ? appearance.colors.slice(0, 5).map(n => Number(n) || 0) : [0, 0, 0, 0, 0],
-                    kits: Array.isArray(appearance.kits) ? appearance.kits.slice(0, 7).map(n => Number(n) || 0) : [0, 10, 18, 26, 33, 36, 42],
-                    equipment: appearance.equipment.slice(0, 12).map(n => Number.isFinite(Number(n)) ? Math.round(Number(n)) : -1)
+            const bakeRes = await client.assets.bake([
+                {
+                    kind: 'player',
+                    key: dynKey,
+                    appearance: cleanAppearance,
+                    seqIds
                 },
-                seqIds
-            }]);
+                {
+                    kind: 'player',
+                    key: sledKey,
+                    appearance: {
+                        ...cleanAppearance,
+                        equipment: sledEquip
+                    },
+                    seqIds: [819, 1461, 1462]
+                }
+            ]);
             if (bakeRes.loadedTextures?.length > 0) {
                 client.assets.renderer.updateTextureArray(bakeRes.loadedTextures);
             }
             const added = client.assets.actors.addBake(bakeRes);
             for (const [k, v] of added) {
+                const old = client.assets.models.get(k);
+                if (old && old.page !== undefined && typeof client.assets.actors?.removePage === 'function') {
+                    client.assets.actors.removePage(old.page);
+                }
                 client.assets.models.set(k, v);
             }
             if (peer.entity) {

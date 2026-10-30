@@ -667,13 +667,15 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             if (mapData) {
                 if (this.isValidMapData(mapData)) {
                     this.mapsToLoad.push(mapData);
+                } else {
+                    this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
                 }
             } else {
                 this.mapManager.addInvalidMap(mapX, mapY);
             }
         } catch (e) {
             console.error("Failed queueLoadMap", mapX, mapY, e);
-            this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
+            this.mapManager.addInvalidMap(mapX, mapY);
         }
     }
 
@@ -859,7 +861,13 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         const renderDistance = this.mapViewer.renderDistance;
 
         const mapManagerStart = performance.now();
-        this.mapManager.update(camera, frameCount, renderDistance, this.mapViewer.unloadDistance);
+        this.mapManager.update(
+            camera,
+            frameCount,
+            renderDistance,
+            this.mapViewer.unloadDistance,
+            this.playArea,
+        );
         const mapManagerTime = performance.now() - mapManagerStart;
 
         this.cameraPosUni[0] = camera.getPosX();
@@ -979,17 +987,21 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
 
         // Load new map squares
         const mapData = this.mapsToLoad.shift();
-        if (mapData && this.isValidMapData(mapData)) {
-            this.loadMap(
-                this.mainProgram,
-                this.mainAlphaProgram,
-                this.npcProgram,
-                this.textureArray,
-                this.textureMaterials,
-                this.sceneUniformBuffer,
-                mapData,
-                timeSec,
-            );
+        if (mapData) {
+            if (this.isValidMapData(mapData)) {
+                this.loadMap(
+                    this.mainProgram,
+                    this.mainAlphaProgram,
+                    this.npcProgram,
+                    this.textureArray,
+                    this.textureMaterials,
+                    this.sceneUniformBuffer,
+                    mapData,
+                    timeSec,
+                );
+            } else {
+                this.mapManager.loadingMapIds.delete(getMapSquareId(mapData.mapX, mapData.mapY));
+            }
         }
 
         if (showDebugTimer) {
