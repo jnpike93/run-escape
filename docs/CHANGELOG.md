@@ -7,6 +7,7 @@ the version in the corner), so it's written for players.
 
 ### Performance & Multiplayer Stability Optimizations
 
+- **Server & Infrastructure Directory Isolation (`server/`)**: Relocated `serve.py`, `test_serve.py`, `nginx.conf`, and `ecosystem.config.cjs` out of the repository root into `server/` to keep the root directory aligned with upstream and isolate server files outside the static web root.
 - **Static Asset Offloading & Gzip Compression**: Added direct Nginx `sendfile` serving and immutable caching for `/assets/`, enabled level-6 `gzip` compression for JS/JSON/WASM/CSS/TTF (reducing non-audio payload size by 83.4%, from 8.72 MB to 1.44 MB), and fixed `/caches/` regex matching for `.dat2` and `.idx0`-`.idx255` archives with full COOP/COEP headers.
 - **Unreachable Loot Recovery Speedup (64x-221x Faster)**: Removed redundant per-tick `isPickupSpotReachable` checks on resting pickups in `stepPickupSlide`, pre-filtered stationary enemies once before `findReachablePickupSpot` ring searches, stepped directly across perimeter cells, and added mid-slide pile interruption recovery in `Sim.slideIntoPile`.
 - **Co-Op 25 Hz World Sync & Event Buffering**: Decoupled `sync_world` broadcasts to 25 Hz while buffering `sim.events` at the full 50 Hz simulation rate (with immediate flush on non-damage boss/state events) and normalizing Guest entity velocity interpolation by `tickDelta`.

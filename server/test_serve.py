@@ -1,6 +1,11 @@
+import os
+import sys
 import unittest
-from serve import is_allowed_origin, safe_close
 from unittest.mock import MagicMock
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import serve
+from serve import is_allowed_origin, safe_close
 
 class TestSafeClose(unittest.TestCase):
     def test_safe_close_valid_socket(self):

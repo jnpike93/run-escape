@@ -8,10 +8,29 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Upstream-Safe Performance & Multiplayer Stability Optimizations
+### [2026-10-30] Relocate Backend & Infrastructure Files into `server/`
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-mmaGS3Nd.js` (`?v=8.5`)
+
+**Scope**: Moved `serve.py`, `test_serve.py`, `nginx.conf`, and `ecosystem.config.cjs` out of the repository root into `server/`, removed root `__pycache__/`, and updated all scripts, CI/CD workflows, and documentation references.
+
+**Changes implemented**:
+- Moved `serve.py` -> `server/serve.py` (`DIRECTORY` updated to `os.path.dirname(os.path.dirname(os.path.abspath(__file__)))` so it serves the repository root).
+- Moved `test_serve.py` -> `server/test_serve.py` (`sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))` added so `python -m unittest server/test_serve.py` and `python -m unittest discover -s server` run cleanly from the root).
+- Moved `nginx.conf` -> `server/nginx.conf` (added `server(/|$)|` to the Nginx path deny block).
+- Moved `ecosystem.config.cjs` -> `server/ecosystem.config.cjs` (`script: 'server/serve.py'`).
+- Updated `.github/workflows/deploy.yaml`, `scripts/auto_sync_upstream.cjs`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `README.md`, and `docs/MULTIPLAYER_ARCHITECTURE.md`.
+
+**Tests**: `python -m unittest server/test_serve.py` (54 tests OK), `npx tsc --noEmit` (0 errors), `npm test` (290 tests OK).
+
+---
+
+### [2026-10-30] Upstream-Safe Performance & Multiplayer Stability Optimizations
+
+**Model**: Gemini (Antigravity)
+**Commit**: `9ac73b9`
 **Bundle**: `index-D7NfIRw6.js` (`?v=8.5`)
 
 **Scope**: End-to-end verification, micro-benchmarking, and implementation of upstream-safe performance and protocol stability optimizations across `nginx.conf`, `serve.py`, `src/game/core/custom/`, `src/game/core/Sim.ts`, `src/mapviewer/worker/customNpcIcon.ts`, `src/game/ui/ChangelogPanel.tsx`, and `src/custom/`.
@@ -92,7 +111,8 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-D7NfIRw6.js`](../assets/index-D7NfIRw6.js) | `index.html`, `MapViewerApp-DkHWqAjz.js`, `module-h2I9xmqO.js` |
+| **Main Engine Bundle** | [`assets/index-mmaGS3Nd.js`](../assets/index-mmaGS3Nd.js) | `index.html`, `MapViewerApp-DGluN-Tn.js`, `module-KUQM-P-c.js` |
+| **Backend & Server Config** | [`server/`](../server/) | `server/serve.py`, `server/test_serve.py`, `server/nginx.conf`, `server/ecosystem.config.cjs` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -102,13 +122,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | NOT loaded from `index.html` (security fix - load manually in dev only) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-DkHWqAjz.js`](../assets/MapViewerApp-DkHWqAjz.js) | `assets/index-D7NfIRw6.js` |
-| **Render Worker** | [`assets/RenderDataWorker-BZS73kvJ.js`](../assets/RenderDataWorker-BZS73kvJ.js) | `assets/index-D7NfIRw6.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-DGluN-Tn.js`](../assets/MapViewerApp-DGluN-Tn.js) | `assets/index-mmaGS3Nd.js` |
+| **Render Worker** | [`assets/RenderDataWorker-BZS73kvJ.js`](../assets/RenderDataWorker-BZS73kvJ.js) | `assets/index-mmaGS3Nd.js` |
 | **Worker WASM Loader** | [`assets/module-DQGm7-d_.js`](../assets/module-DQGm7-d_.js) | `assets/RenderDataWorker-BZS73kvJ.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-h2I9xmqO.js`](../assets/module-h2I9xmqO.js) | `assets/index-D7NfIRw6.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-KUQM-P-c.js`](../assets/module-KUQM-P-c.js) | `assets/index-mmaGS3Nd.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-D7NfIRw6.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-mmaGS3Nd.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
    - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), secret codes (`secretCodes.ts`), and in-place content array overrides (`customOverrides.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, `weapons.ts`, `GameClient.ts`) via 1-line `applyCustom*(...)` calls or spreads.

@@ -10,7 +10,7 @@ Playable at [https://run-escape.cuteanimegirls.moe/](https://run-escape.cuteanim
 
 This repository extends [Dynrothe/Run-Escape](https://github.com/Dynrothe/Run-Escape) with multiplayer co-op, custom maps, quests, bosses, balance adjustments, and automated upstream synchronization:
 
-- **2-4 Player Co-Op Multiplayer (`serve.py` & `assets/multiplayer/`)**:
+- **2-4 Player Co-Op Multiplayer (`server/serve.py` & `assets/multiplayer/`)**:
   - Host-authoritative RFC 6455 WebSocket room relay (`OSRS-XXXX` room codes) with synchronized waves, enemies, bosses, projectiles, 3D equipment/weapon model baking, overhead HP bars, chat, revives, spectator mode, persistent per-player lobby names, and a live party infograph (showing player levels, HP, weapons, and passives) plus a post-run Co-Op Damage Leaderboard.
   - Shared Co-Op XP scaling based on the Host's shop skills and pooled item/character XP bonuses divided across the party, unique casket item rolls per player, and a Host-selectable Co-Op Difficulty Multiplier (`1x` - `3x`).
 - **Fight Caves Map & Overhead Protection Prayers (`Q` / `E` / `R`)**:

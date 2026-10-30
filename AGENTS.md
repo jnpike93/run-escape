@@ -5,7 +5,7 @@ Every automated agent or contributor assistant (Antigravity, Jules, Claude Code,
 
 1. **Pre-Flight Read**: Before modifying any files or resolving a merge, read:
    - [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md) for the latest cross-agent handoff log, active bundle hashes, and custom hook locations.
-   - [`.jules/sentinel.md`](./.jules/sentinel.md) for historical security findings and invariants in [`serve.py`](./serve.py).
+   - [`.jules/sentinel.md`](./.jules/sentinel.md) for historical security findings and invariants in [`server/serve.py`](./server/serve.py).
    - [`docs/MULTIPLAYER_ARCHITECTURE.md`](./docs/MULTIPLAYER_ARCHITECTURE.md) when modifying WebSocket relay or Co-Op simulation logic.
 2. **Upstream-Friendly Architecture & Feature Placement Rules**:
    To keep merges from `upstream/main` (`https://github.com/Dynrothe/Run-Escape.git`) conflict-free, all new features and modifications MUST follow these modular boundaries:
@@ -26,4 +26,4 @@ Every automated agent or contributor assistant (Antigravity, Jules, Claude Code,
 ## 2. Guidelines for Fast Merges
 - **Source-Based Upstream Merges (`upstream/main`)**: Pull upstream source changes from `https://github.com/Dynrothe/Run-Escape.git` (`git fetch upstream && git merge upstream/main` or `npm run sync-upstream`), resolve any TypeScript conflicts in `src/`, and run `npm test && npm run build`.
 - **Parallel Subagent Chunking**: Whenever a task spans multiple files or domains, split it into small, parallel subagents with disjoint file ownership. Never emit a >20 KB file in a single `write_file` tool call; instead, write a compact (<10 KB) Node/Python transformation script or edit targeted regions with `edit_file`.
-- **Verification**: Always run `npx tsc --noEmit`, `npm test`, `python -m unittest test_serve.py`, and `node --check src/custom/multiplayer.js` before finalizing any merge or commit.
+- **Verification**: Always run `npx tsc --noEmit`, `npm test`, `python -m unittest server/test_serve.py`, and `node --check src/custom/multiplayer.js` before finalizing any merge or commit.

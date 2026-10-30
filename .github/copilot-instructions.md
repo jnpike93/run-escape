@@ -16,4 +16,4 @@ All AI coding agents operating in this repository MUST follow these rules withou
 4. **Mandatory Handoff Log & Changelog Update**:
    - Every agent change or PR MUST update `docs/CHANGELOG.md`, run `npm run build`, and prepend a new entry under `## 3. Chronological Agent Handoff Log` in `docs/AGENT_NOTES.md` using the template in that file.
 5. **Verification**:
-   - Run `npx tsc --noEmit`, `npm test`, `python -m unittest test_serve.py`, and `node --check src/custom/multiplayer.js` before completing work.
+   - Run `npx tsc --noEmit`, `npm test`, `python -m unittest server/test_serve.py`, and `node --check src/custom/multiplayer.js` before completing work.

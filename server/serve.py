@@ -1,5 +1,5 @@
 # AGENT DIRECTIVE: Before modifying this file, read AGENTS.md, docs/AGENT_NOTES.md, and .jules/sentinel.md.
-# After completing changes, run `python -m unittest test_serve.py` and prepend a handoff entry to docs/AGENT_NOTES.md.
+# After completing changes, run `python -m unittest server/test_serve.py` and prepend a handoff entry to docs/AGENT_NOTES.md.
 import http.server
 import urllib.parse
 import hashlib
@@ -30,7 +30,7 @@ def _get_default_port():
 
 PORT = _get_default_port()
 BIND_HOST = os.environ.get("HOST", "127.0.0.1")
-DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CACHED_DIR_RAW = DIRECTORY
 REAL_DIRECTORY = os.path.realpath(DIRECTORY)
 MAX_FRAME_SIZE = 65536       # 64 KB max frame payload

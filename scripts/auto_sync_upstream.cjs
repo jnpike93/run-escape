@@ -169,7 +169,7 @@ function updateChangelogAndNotes(oldVer, newVer, upstreamCommits, upstreamSha) {
             `- **What Changed**:`,
             summaryLines || `  - Merged latest commits from \`upstream/main\`.`,
             `- **Notes / Invariants for Future Agents**:`,
-            `  - Automated merge verified via \`npx tsc --noEmit\`, \`npm test\`, \`test_serve.py\`, and \`node --check assets/multiplayer.js\`.`,
+            `  - Automated merge verified via \`npx tsc --noEmit\`, \`npm test\`, \`server/test_serve.py\`, and \`node --check assets/multiplayer.js\`.`,
             "",
         ].join("\n");
 
@@ -247,7 +247,7 @@ function main() {
         log(`origin/main is ahead by ${originAhead} commit(s); syncing origin/main first...`);
         const ff = tryRun("git merge --ff-only origin/main");
         if (ff.ok) {
-            tryRun("pm2 restart ecosystem.config.cjs --update-env");
+            tryRun("pm2 restart server/ecosystem.config.cjs --update-env");
         }
     }
 
@@ -347,7 +347,7 @@ function main() {
 
     syncBundleHashesInAgentNotes();
 
-    log("Running verification suite (tsc, vitest, test_serve.py, multiplayer.js)...");
+    log("Running verification suite (tsc, vitest, server/test_serve.py, multiplayer.js)...");
     const tscRes = tryRun("npx tsc --noEmit");
     if (!tscRes.ok) {
         rollback(prevHead, `TypeScript verification failed:\n${tscRes.out}`);
@@ -359,7 +359,7 @@ function main() {
     }
 
     const pyCmd = spawnSync("python3", ["--version"]).status === 0 ? "python3" : "python";
-    const pyRes = tryRun(`${pyCmd} -m unittest test_serve.py`);
+    const pyRes = tryRun(`${pyCmd} -m unittest server/test_serve.py`);
     if (!pyRes.ok) {
         rollback(prevHead, `Python server unit tests failed:\n${pyRes.out}`);
     }
@@ -380,7 +380,7 @@ function main() {
     // Reload PM2 if running on production server
     if (spawnSync("pm2", ["-v"]).status === 0) {
         log("Reloading PM2 run-escape service...");
-        tryRun("pm2 restart ecosystem.config.cjs --update-env");
+        tryRun("pm2 restart server/ecosystem.config.cjs --update-env");
         tryRun("pm2 save");
     }
 

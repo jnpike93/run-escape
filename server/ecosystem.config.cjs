@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'run-escape',
-      script: 'serve.py',
+      script: 'server/serve.py',
       interpreter: 'python3',
       args: '8085 127.0.0.1',
       instances: 1,

@@ -68,18 +68,19 @@ jobs:
             chmod 644 /etc/cron.d/run-escape-upstream-sync
 
             echo "=== 3. Starting / Restarting Run Escape with PM2 (Loopback Bind) ==="
-            pm2 describe run-escape > /dev/null 2>&1 && pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
+            pm2 delete run-escape > /dev/null 2>&1 || true
+            pm2 start server/ecosystem.config.cjs --update-env
             pm2 save
 
             echo "=== 4. Configuring Nginx and Preserving TLS ==="
             CERT_DIR="/etc/letsencrypt/live/run-escape.cuteanimegirls.moe"
             if [ -f "$CERT_DIR/fullchain.pem" ] && [ -f "$CERT_DIR/privkey.pem" ]; then
-              cp /opt/run-escape/nginx.conf /etc/nginx/sites-available/run-escape
+              cp /opt/run-escape/server/nginx.conf /etc/nginx/sites-available/run-escape
               ln -sf /etc/nginx/sites-available/run-escape /etc/nginx/sites-enabled/run-escape
               certbot --nginx -d run-escape.cuteanimegirls.moe --non-interactive --agree-tos --email jakepike2011@gmail.com --redirect --keep-until-expiring
               nginx -t && systemctl reload nginx
             else
-              cp /opt/run-escape/nginx.conf /etc/nginx/sites-available/run-escape
+              cp /opt/run-escape/server/nginx.conf /etc/nginx/sites-available/run-escape
               ln -sf /etc/nginx/sites-available/run-escape /etc/nginx/sites-enabled/run-escape
               nginx -t && systemctl reload nginx
               certbot --nginx -d run-escape.cuteanimegirls.moe --non-interactive --agree-tos --email jakepike2011@gmail.com --redirect --keep-until-expiring

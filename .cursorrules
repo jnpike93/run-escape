@@ -10,4 +10,4 @@
    - Keep root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched for upstream fast-forwards; record all custom changes in `docs/CHANGELOG.md`. Use LF (`\n`) line endings.
 3. SOURCE-FIRST WORKFLOW & CACHE-BUSTING: Edit source in `src/` and compile via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never hand-edit minified bundles in `assets/index-*.js`.
 4. MANDATORY HANDOFF LOG: Before finishing any task, commit, or PR, update `docs/CHANGELOG.md`, run `npm run build`, and prepend a new entry to `docs/AGENT_NOTES.md` under `## 3. Chronological Agent Handoff Log`.
-5. VERIFICATION: Run `npx tsc --noEmit`, `npm test`, `python -m unittest test_serve.py`, and `node --check src/custom/multiplayer.js` prior to completion.
+5. VERIFICATION: Run `npx tsc --noEmit`, `npm test`, `python -m unittest server/test_serve.py`, and `node --check src/custom/multiplayer.js` prior to completion.

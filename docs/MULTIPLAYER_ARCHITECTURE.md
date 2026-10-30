@@ -6,7 +6,7 @@
 
 Run Escape was originally architected as a single-player WebGL2 and WebAssembly survival game ([`assets/index-XvFTU0hX.js`](./assets/index-XvFTU0hX.js)). Co-Op Multiplayer extends the engine into a 2-player networked game using a **Host-Authoritative WebSocket Relay Architecture** composed of two primary components:
 
-1. **Backend WebSocket Room Relay ([`serve.py`](../serve.py))**:
+1. **Backend WebSocket Room Relay ([`server/serve.py`](../server/serve.py))**:
    - Implements a zero-dependency RFC 6455 WebSocket server inside `COOPHandler`.
    - Manages 2-player rooms (`OSRS-XXXX`), enforces per-IP connection caps (`MAX_CONNS_PER_IP = 12`), room caps (`MAX_ROOMS = 250`), frame size limits (`MAX_FRAME_SIZE = 65536`), and sliding-window rate limits (`90 frames/sec`).
    - Assigns the first registrant in a room as `host` and the second as `guest`, automatically promoting `guest` to `host` if the Host leaves the lobby prior to run launch.
@@ -31,7 +31,7 @@ flowchart LR
 
     subgraph Server["Droplet (167.71.157.5) - run-escape.cuteanimegirls.moe"]
         Nginx["Nginx Reverse Proxy<br/>TLS + COOP/COEP + Static /caches/"]
-        Relay["serve.py (Port 5508)<br/>RFC 6455 WebSocket Room Relay<br/>TCP_NODELAY + C-Int XOR Unmasking"]
+        Relay["server/serve.py (Port 5508)<br/>RFC 6455 WebSocket Room Relay<br/>TCP_NODELAY + C-Int XOR Unmasking"]
         Nginx <-->|"WSS /ws?room=OSRS-XXXX"| Relay
     end
 
@@ -103,7 +103,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant H as Player 1 (Host)
-    participant S as WS Relay (serve.py)
+    participant S as WS Relay (server/serve.py)
     participant G as Player 2 (Guest)
 
     H->>S: Connect /ws?room=OSRS-XXXX
@@ -158,9 +158,9 @@ sequenceDiagram
 
 ## 6. Performance Optimizations Implemented
 
-1. **TCP_NODELAY Socket Option ([`serve.py`](./serve.py))**:
+1. **TCP_NODELAY Socket Option ([`server/serve.py`](../server/serve.py))**:
    - Enabled `socket.TCP_NODELAY` on all upgraded WebSocket connections in `handle_ws_client` to disable Nagle's algorithm, preventing 40ms-200ms TCP packet coalescing delays on 30 Hz `sync_world` and `input` frames.
-2. **Vectorized C-Speed Frame Unmasking ([`serve.py`](./serve.py))**:
+2. **Vectorized C-Speed Frame Unmasking ([`server/serve.py`](../server/serve.py))**:
    - Replaced the byte-by-byte Python `for` loop in RFC 6455 frame unmasking with `int.from_bytes(..., "big") ^ int.from_bytes(..., "big")`, accelerating WebSocket payload unmasking by ~50x in CPython.
 3. **Dead-Enemy Delta Window Reduction ([`assets/multiplayer.js`](./assets/multiplayer.js))**:
    - Reduced Host transmission of dead enemies from 45 ticks to 2 ticks (`sim.tick - e.deathTick <= 2`) while allowing the Guest client to retain dead enemies locally for their full 45-tick death animation (`sim.tick - e.deathTick < 45`). This reduces `sync_world` bandwidth by 30-50% during high-density monster waves.
