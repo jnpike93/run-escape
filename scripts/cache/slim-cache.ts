@@ -156,6 +156,10 @@ function getContentObjIds(): number[] {
     const ids = new Set<number>([
         ...Object.values(PICKUP_OBJS),
         ...Object.values(PILE_LOOKS).flatMap((looks) => looks.map((look) => look.objId)),
+        // Cook's Assistant quest item ids (bucket of milk, egg, pot of flour)
+        1927,
+        1944,
+        1933,
     ]);
     for (const [, objId] of getWornObjs()) {
         ids.add(objId);
@@ -163,7 +167,7 @@ function getContentObjIds(): number[] {
     const seen = new Set<object>();
     const visit = (value: unknown, key: string): void => {
         if (typeof value === "number") {
-            if (/objIds?$/i.test(key) && value >= 0) {
+            if (/objIds?$/i.test(key)) {
                 ids.add(value);
             }
         } else if (value && typeof value === "object" && !seen.has(value)) {
@@ -193,6 +197,7 @@ function getContentObjIds(): number[] {
 
 // Stackables like coins have a model per stack size
 function getStackCounts(state: WorkerState, objId: number): number[] {
+    if (objId < 0) return [1];
     const counts = state.objTypeLoader.load(objId).countCo ?? [];
     return [1, ...counts.filter((count) => count > 1)];
 }
@@ -236,8 +241,17 @@ async function loadWhatTheGameLoads(cache: LoadedCache): Promise<void> {
             playerRequest(`${slot}:${objId}`, createAppearance({ [slot]: objId }), []),
         ),
     ];
+    const questRequests: BakeRequest[] = [
+        { kind: "npc", key: "quest:cook", npcId: 4626, seqIds: [808, 860] },
+        { kind: "obj", key: "quest:obj:1927", objId: 1927, count: 1 },
+        { kind: "obj", key: "quest:obj:1944", objId: 1944, count: 1 },
+        { kind: "obj", key: "quest:obj:1933", objId: 1933, count: 1 },
+    ];
     const bakeLoader = new ActorBakeLoader();
-    for (const requests of [GameAssets.getBaseRequests(), playerRequests]) {
+    const allBakeRequests = [...GameAssets.getBaseRequests(), ...questRequests, ...playerRequests];
+    const BAKE_CHUNK_SIZE = 40;
+    for (let i = 0; i < allBakeRequests.length; i += BAKE_CHUNK_SIZE) {
+        const requests = allBakeRequests.slice(i, i + BAKE_CHUNK_SIZE);
         await load(bakeLoader, { requests, loadedTextureIds: new Set<number>() });
     }
 

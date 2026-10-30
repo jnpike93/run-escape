@@ -70,23 +70,4 @@ export class SpotAnimType extends Type {
             throw new Error("SpotAnimType: Opcode " + opcode + " not implemented.");
         }
     }
-
-    override post(): void {
-        switch (this.id) {
-            case 1171: // Burning claws special (Burning Slice) -> fiery slash burst
-                this.modelId = 4036;
-                this.sequenceId = 2261;
-                this.recolorFrom = [949, 16];
-                this.recolorTo = [6080, 7104];
-                break;
-            case 559: // Thunder khopesh special (Thunderclap) -> Saradomin Strike lightning
-                this.modelId = 3066;
-                this.sequenceId = 647;
-                break;
-            case 1197: // Kree'arra ranged feathers -> Armadyl whirlwind feather model in slim cache
-                this.modelId = 28078;
-                this.sequenceId = 6974;
-                break;
-        }
-    }
 }

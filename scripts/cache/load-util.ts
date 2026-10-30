@@ -7,7 +7,23 @@ import { detectCacheType } from "../../src/rs/cache/CacheType";
 
 export function loadCacheInfos(): CacheInfo[] {
     const json = fs.readFileSync("./caches/caches.json", "utf8");
-    return JSON.parse(json);
+    const infos: CacheInfo[] = JSON.parse(json);
+    const fullDir = "./caches/osrs-241_2026-09-30/";
+    if (
+        !infos.some((c) => c.name === "osrs-241_2026-09-30") &&
+        fs.existsSync(fullDir + "info.json")
+    ) {
+        const raw = JSON.parse(fs.readFileSync(fullDir + "info.json", "utf8"));
+        infos.unshift({
+            name: "osrs-241_2026-09-30",
+            game: raw.game,
+            environment: raw.environment,
+            revision: raw.builds[0].major,
+            timestamp: raw.timestamp,
+            size: raw.size,
+        });
+    }
+    return infos;
 }
 
 export function loadCacheList(caches: CacheInfo[]): CacheList {

@@ -15,6 +15,7 @@ scratch/
 *.log
 /*.png
 scratch_model_55847.dat
+/caches/osrs-241_2026-09-30/
 
 # Python
 __pycache__/

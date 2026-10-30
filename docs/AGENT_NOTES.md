@@ -8,10 +8,32 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Merge Upstream `0.15.0` - `0.17.0` (`efc49f6`) & Add Slim-Cache Overrides for New Weapons, Evolutions & Sequences
+### [2026-10-30] Download Full `osrs-241_2026-09-30` Local Cache, Rebuild Authentic Slim Cache (`fa564245`) & Restore Genuine Models (`10555` Penance Skirt)
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-aozrqZGM.js` (`?v=8.5`, MapViewer `MapViewerApp-B3h7dzLA.js`, Worker `RenderDataWorker-CmraDDTI.js`, WASM loader `module-BBylQNgT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Downloaded the full 182 MiB OSRS 241 cache (`caches/osrs-241_2026-09-30/`) locally and added `/caches/osrs-241_2026-09-30/` to `.gitignore` for local cache searching (`scripts/cache/find-objs.ts`, `scripts/cache/find-npcs.ts`) and slim-cache regeneration. Removed all temporary slim-cache model/sprite/sequence substitute overrides (`ObjType.post`, `NpcType.post`, `SpotAnimType.post`, `SeqType.post`, and `chivalry.iconSpriteId: undefined`) and regenerated `caches/osrs-241_2026-09-30-slim-fa564245` (26.0 MB) from the full cache so **Penance fighter** wears genuine OSRS item `10555` (`Penance skirt`, `maleModel: 19252`, `model: 19194`) on his legs (`EquipSlot.LEGS`) and all custom + upstream `0.17.0` items, NPCs, bosses, sequences, and sprites use their authentic cache archives.
+
+**Changes implemented**:
+- **Local Full Cache & Gitignore (`.gitignore`, `scripts/cache/load-util.ts`)**:
+  - Downloaded `caches/osrs-241_2026-09-30/` locally via `scripts/download-caches.cjs` and added `/caches/osrs-241_2026-09-30/` to `.gitignore`.
+  - Updated `loadCacheInfos()` in `scripts/cache/load-util.ts` so CLI search and slim-cache scripts automatically discover `./caches/osrs-241_2026-09-30/info.json` on disk while `caches/caches.json` serves only the slim cache entry to browser clients.
+- **Slim Cache Generation (`scripts/cache/slim-cache.ts`, `caches/osrs-241_2026-09-30-slim-fa564245/`, `caches/caches.json`)**:
+  - Updated `scripts/cache/slim-cache.ts` to chunk `ActorBakeLoader` requests into batches of 40 (preventing `SceneBuffer` array-length overflow in Node), include Cook's Assistant 3D world assets (`npcId: 4626` with `seqIds: [808, 860]`, and `objId: 1927, 1944, 1933`), and preserve negative `iconObjId` NPC icons (`-12676` Corgi, `-12516` Chihuahua).
+  - Generated and verified `caches/osrs-241_2026-09-30-slim-fa564245` (`26.0 MB`) and replaced `caches/osrs-241_2026-09-30-slim-74e0d2b3`.
+- **Authentic Model Restoration (`src/rs/config/objtype/ObjType.ts`, `src/rs/config/npctype/NpcType.ts`, `src/rs/config/spotanimtype/SpotAnimType.ts`, `src/rs/config/seqtype/SeqType.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Removed temporary `post()` model/sequence/sprite overrides so item `10555` (`Penance skirt`), all Barbarian Village weapons/helmets/bosses (`Obor` `7416`, `Bryophyta` `8195`), and all upstream `0.16.0` - `0.17.0` weapons/evolutions/animations use their genuine OSRS 241 models.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Merge Upstream `0.15.0` - `0.17.0` (`efc49f6`) & Add Slim-Cache Overrides for New Weapons, Evolutions & Sequences
+
+**Model**: Gemini (Antigravity)
+**Commit**: `9235cfe`
 **Bundle**: `index-DSKGIPvH.js` (`?v=8.5`, MapViewer `MapViewerApp-8YMVHdhe.js`, Worker `RenderDataWorker-CfhowBko.js`, WASM loader `module-Dy8rI3c4.js`, styles `index-C3aiJD4m.css`)
 
 **Scope**: Merged upstream `main` (`b29f532..efc49f6`, releases `0.15.0`, `0.16.0`, and `0.17.0`) into `main`, integrating the new Collection Log screen, 9 new weapon evolutions (3-level evolved weapons), Thunder khopesh, Dinh's bulwark, Chivalry passive, Smithing/Crafting/Woodcutting skills, level-up Skip button (`X`), post-run weapon Damage/Kills/DPS breakdown, and weapon stat lines, while preserving all custom maps (`barbarian_village`, `fight_caves`), adventurers (`penance_fighter`, `dipper`, `elias`), 2-step Adventurer/Map selection UI, Co-Op Multiplayer, Leaderboard/Top Score system, and slim-cache compatibility.

@@ -316,50 +316,6 @@ export class SeqType extends Type {
         }
     }
 
-    override post(): void {
-        if (this.id === 9171) {
-            // Ancient godsword Blood Sacrifice special (slim-cache fallback to ZGS 7638 frames)
-            this.skeletalId = -1;
-            this.frameIds = [
-                796000257, 796000261, 796000260, 796000262, 796000266, 796000263, 796000264,
-                796000265, 796000258, 796000280, 796000268, 796000269, 796000270, 796000271,
-                796000259, 796000272, 796000273, 796000274, 796000275, 796000276, 796000267,
-                796000277, 796000278, 796000279, 796000257,
-            ];
-            this.frameLengths = [
-                2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-            ];
-        } else if (this.id === 7514 || this.id === 7511) {
-            // Burning claws special (7514) & Dinh's bulwark bash (7511) (slim-cache fallback to 393/401 frames)
-            this.skeletalId = -1;
-            this.frameIds = [
-                696778753, 696778754, 696778755, 696778756, 696778757, 696778758, 696778759,
-                696778760,
-            ];
-            this.frameLengths = [4, 4, 4, 4, 8, 2, 8, 4];
-        } else if (this.id === 7516) {
-            // Elder maul swing & Pulverise special (slim-cache fallback to Tzhaar-ket-om 2661 frames)
-            this.skeletalId = -1;
-            this.frameIds = [
-                770703361, 770703362, 770703363, 770703364, 770703365, 770703366, 770703367,
-                770703368, 770703369, 770703370, 770703371, 770703372, 770703373, 770703374,
-                770703375, 770703376, 770703377, 770703378, 770703379, 770703380, 770703381,
-            ];
-            this.frameLengths = [
-                5, 5, 4, 4, 5, 5, 6, 7, 10, 2, 1, 1, 2, 2, 2, 2, 11, 4, 4, 5, 6,
-            ];
-        } else if (this.id === 3157) {
-            // Thunder khopesh Thunderclap special (slim-cache fallback to 7045 slash frames)
-            this.skeletalId = -1;
-            this.frameIds = [
-                795344897, 795344909, 795344903, 795344904, 795344910, 795344911, 795344905,
-                795344898, 795344912, 795344906, 795344901, 795344914, 795344899, 795344907,
-                795344900, 795344902, 795344908, 795344913, 795344897,
-            ];
-            this.frameLengths = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
-        }
-    }
-
     isSkeletalSeq(): boolean {
         return this.skeletalId >= 0;
     }

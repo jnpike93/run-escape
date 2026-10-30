@@ -213,10 +213,6 @@ export function applyCustomGear(casketGear: GearDef[]): void {
 }
 
 const PASSIVE_OVERRIDES: Record<string, Partial<PassiveDef>> = {
-    chivalry: {
-        // Slim cache only includes Piety sprite 946, so use Holy symbol iconObjId 1718
-        iconSpriteId: undefined,
-    },
     piety: {
         description: "Increases all weapon damage.",
     },
