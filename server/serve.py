@@ -556,6 +556,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "File not found")
             return None
 
+        if unquoted_path == "/favicon.ico" and not os.path.exists(os.path.join(DIRECTORY, "favicon.ico")):
+            public_favicon = os.path.join(DIRECTORY, "public", "favicon.ico")
+            if os.path.exists(public_favicon):
+                self.path = "/public/favicon.ico"
+
         # Translate path to filesystem path and resolve canonical path
         try:
             target_path = self.translate_path(self.path)
@@ -579,7 +584,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return None
 
         # Enforce strict public static asset allowlist
-        allowed_exact = {"/", "/index.html", "/favicon.ico", "/CHANGELOG.md", "/changelog.md", "/docs/CHANGELOG.md", "/docs/changelog.md"}
+        allowed_exact = {"/", "/index.html", "/favicon.ico", "/public/favicon.ico", "/CHANGELOG.md", "/changelog.md", "/docs/CHANGELOG.md", "/docs/changelog.md"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
             and not normalized.endswith(".map")

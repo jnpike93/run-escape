@@ -7,4 +7,4 @@ Before reading, modifying, or merging any code in this repository, you MUST read
 
 **Mandatory Post-Task Requirement**:
 1. Run `npx tsc --noEmit`, `npm test`, `python -m unittest server/test_serve.py`, and `node --check src/custom/multiplayer.js` to verify all changes.
-2. Update [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) (never edit root `CHANGELOG.md`), run `npm run build` so `docs/CHANGELOG.md` and `src/custom/` are synced into `assets/`, and prepend a handoff entry to [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md) before completing any task, commit, or pull request.
+2. Keep [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) strictly as a high-level overview of player-facing gameplay differences from upstream (never edit root `CHANGELOG.md`, and put technical/security/refactor details only in [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md)), run `npm run build` so `docs/CHANGELOG.md` and `src/custom/` are synced into `assets/`, and prepend a handoff entry to [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md) before completing any task, commit, or pull request.

@@ -9,11 +9,11 @@ All AI coding agents operating in this repository MUST follow these rules withou
    - Add custom UI screens/modals/controls as standalone components in `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`, `CustomSettingsControls.tsx`) to keep `GameUi.tsx` diffs minimal.
    - Edit hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`) in `src/custom/`; `npm run build` copies `src/custom/` into `assets/` via `scripts/sync_dist.cjs`.
    - Declare global `window.*` bridges in `src/game/types/globals.d.ts`.
-   - Leave root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched so `upstream/main` fast-forwards cleanly; write custom changelog entries only in `docs/CHANGELOG.md`. Maintain LF (`\n`) line endings per `.gitattributes`.
+   - Leave root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched so `upstream/main` fast-forwards cleanly; keep `docs/CHANGELOG.md` strictly as a high-level overview of player-facing gameplay differences (put technical/security/refactor notes only in `docs/AGENT_NOTES.md`). Maintain LF (`\n`) line endings per `.gitattributes`.
 3. **Source-First TypeScript Workflow & Cache Busting**:
    - Make all engine, map, enemy, and UI modifications in `src/` and build via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never directly regex-patch minified bundles in `assets/index-*.js`.
    - Preserve global hooks (`window.gameClient`, `window.multiplayer`, `window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`) in `src/`.
 4. **Mandatory Handoff Log & Changelog Update**:
-   - Every agent change or PR MUST update `docs/CHANGELOG.md`, run `npm run build`, and prepend a new entry under `## 3. Chronological Agent Handoff Log` in `docs/AGENT_NOTES.md` using the template in that file.
+   - Every agent change or PR MUST update `docs/CHANGELOG.md` if gameplay differences changed, run `npm run build`, and prepend a new entry under `## 3. Chronological Agent Handoff Log` in `docs/AGENT_NOTES.md` using the template in that file.
 5. **Verification**:
    - Run `npx tsc --noEmit`, `npm test`, `python -m unittest server/test_serve.py`, and `node --check src/custom/multiplayer.js` before completing work.
