@@ -9,15 +9,23 @@ import {
     RunSummary,
     buyArmouryUpgrade,
     buyUpgrade,
+    calculateLevelPoints,
+    calculateLevelPointsBreakdown,
+    calculateRunPoints,
+    calculateRunPointsBreakdown,
     createSave,
     exportSave,
     getArmourySpent,
     getArmouryStep,
+    getCampaignPoints,
     getEarnedUnlocks,
     getFinishedQuests,
+    getFunMapPoints,
+    getMapDifficultyMultiplier,
     getMetaStats,
     getNextUpgradeCost,
     getQuestProgress,
+    getTotalPoints,
     importSave,
     isEndlessRecord,
     isEndlessUnlocked,
@@ -585,5 +593,130 @@ describe("quests", () => {
     test("casketsOpened is clamped to 100000 on migrateSave", () => {
         const migrated = migrateSave({ casketsOpened: 1e15 });
         expect(migrated.casketsOpened).toBe(100000);
+    });
+});
+
+describe("level and run points", () => {
+    test("calculateRunPoints scales with kills, pace, bosses, victory speed, endless rounds, and map difficulty", () => {
+        const lowKills = calculateRunPoints(run("lumbridge", { kills: 200, seconds: 300 }));
+        const highKills = calculateRunPoints(run("lumbridge", { kills: 600, seconds: 300 }));
+        expect(highKills).toBeGreaterThan(lowKills);
+
+        // Faster pace (same kills in less time -> higher KPM bonus on killPoints)
+        const slowPace = calculateRunPointsBreakdown(
+            run("lumbridge", { kills: 600, seconds: 600 }),
+        );
+        const fastPace = calculateRunPointsBreakdown(
+            run("lumbridge", { kills: 600, seconds: 180 }),
+        );
+        expect(fastPace.killPoints).toBeGreaterThan(slowPace.killPoints);
+
+        // Bosses killed add clear points
+        const noBoss = calculateRunPoints(run("lumbridge", { bossesKilled: [] }));
+        const twoBosses = calculateRunPoints(
+            run("lumbridge", { bossesKilled: ["count_draynor", "wise_old_man"] }),
+        );
+        expect(twoBosses).toBeGreaterThan(noBoss);
+
+        // Victory + fast boss clear speed bonus vs slow clear
+        const fastWin = calculateRunPoints(
+            run("lumbridge", {
+                victory: true,
+                seconds: 905,
+                bossesKilled: ["count_draynor", "wise_old_man"],
+            }),
+        );
+        const slowWin = calculateRunPoints(
+            run("lumbridge", {
+                victory: true,
+                seconds: 1000,
+                bossesKilled: ["count_draynor", "wise_old_man"],
+            }),
+        );
+        expect(fastWin).toBeGreaterThan(slowWin);
+
+        // Endless extra rounds grant endless points
+        const round1 = calculateRunPoints(
+            run("lumbridge", { endless: true, round: 1, seconds: 900 }),
+        );
+        const round3 = calculateRunPoints(
+            run("lumbridge", { endless: true, round: 3, seconds: 2100 }),
+        );
+        expect(round3).toBeGreaterThan(round1);
+
+        // Map difficulty multiplier: lumbridge < barrows < inferno, and fight_caves = 3.0
+        expect(getMapDifficultyMultiplier("lumbridge")).toBeLessThan(
+            getMapDifficultyMultiplier("barrows"),
+        );
+        expect(getMapDifficultyMultiplier("barrows")).toBeLessThan(
+            getMapDifficultyMultiplier("inferno"),
+        );
+        expect(getMapDifficultyMultiplier("fight_caves")).toBe(3.0);
+
+        const lumPts = calculateRunPoints(run("lumbridge", { victory: true, seconds: 900 }));
+        const barPts = calculateRunPoints(run("barrows", { victory: true, seconds: 900 }));
+        const infPts = calculateRunPoints(run("inferno", { victory: true, seconds: 900 }));
+        expect(lumPts).toBeLessThan(barPts);
+        expect(barPts).toBeLessThan(infPts);
+    });
+
+    test("calculateLevelPoints and getTotalPoints accumulate mastery and work retroactively", () => {
+        const save = createSave();
+        expect(calculateLevelPoints(save, "lumbridge")).toBe(0);
+        expect(getTotalPoints(save)).toBe(0);
+
+        recordRun(
+            save,
+            run("lumbridge", {
+                victory: true,
+                seconds: 910,
+                kills: 1000,
+                level: 35,
+                bossesKilled: ["count_draynor", "wise_old_man"],
+            }),
+        );
+        const firstPts = calculateLevelPoints(save, "lumbridge");
+        expect(firstPts).toBeGreaterThan(0);
+        expect(save.mapBest.lumbridge.points).toBe(firstPts);
+        expect(save.mapBest.lumbridge.totalKills).toBe(1000);
+        expect(save.mapBest.lumbridge.bossesKilled).toBe(2);
+
+        // Second run accumulates totalKills and repeat win mastery points
+        recordRun(
+            save,
+            run("lumbridge", {
+                victory: true,
+                seconds: 920,
+                kills: 800,
+                level: 32,
+                bossesKilled: ["count_draynor", "wise_old_man"],
+            }),
+        );
+        const secondBreakdown = calculateLevelPointsBreakdown(save, "lumbridge");
+        expect(save.mapBest.lumbridge.totalKills).toBe(1800);
+        expect(secondBreakdown.masteryPoints).toBe(800 * 2 + 1000);
+        expect(secondBreakdown.totalPoints).toBeGreaterThan(firstPts);
+
+        // Campaign vs fun map points sum into getTotalPoints
+        recordRun(
+            save,
+            run("grand_exchange", { endless: true, round: 2, seconds: 1200, kills: 1500 }),
+        );
+        expect(getCampaignPoints(save)).toBe(calculateLevelPoints(save, "lumbridge"));
+        expect(getFunMapPoints(save)).toBe(calculateLevelPoints(save, "grand_exchange"));
+        expect(getTotalPoints(save)).toBe(getCampaignPoints(save) + getFunMapPoints(save));
+
+        // Retroactive calculation on legacy saves with only mapVictories or endlessBest
+        const legacy = migrateSave({
+            mapVictories: { lumbridge: 2 },
+            endlessBest: { barrows: { round: 3, seconds: 1900 } },
+        });
+        expect(calculateLevelPoints(legacy, "lumbridge")).toBeGreaterThan(0);
+        expect(calculateLevelPoints(legacy, "barrows")).toBeGreaterThan(0);
+
+        // Export and import preserve mapBest point fields cleanly
+        const roundTrip = importSave(exportSave(save));
+        expect(roundTrip.mapBest.lumbridge).toEqual(save.mapBest.lumbridge);
+        expect(getTotalPoints(roundTrip)).toBe(getTotalPoints(save));
     });
 });

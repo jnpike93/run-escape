@@ -28,6 +28,8 @@ import {
     SaveStore,
     buyArmouryUpgrade,
     buyUpgrade,
+    calculateLevelPoints,
+    calculateRunPoints,
     exportSave,
     getEarnedUnlocks,
     getFinishedQuests,
@@ -662,7 +664,12 @@ export class GameClient implements GameFrameHandler {
         const lockedItems = LOCKABLE_ITEMS.filter((i) => !this.save.unlockedItems.includes(i.id));
         const endlessRecord = result.endless && isEndlessRecord(this.save, result);
         const newGear = result.gearFound.filter((id) => !this.save.foundGear.includes(id));
+        const prevLevelPoints = calculateLevelPoints(this.save, result.mapId);
+        const points = calculateRunPoints(result);
         const quests = recordRun(this.save, result);
+        const newLevelPoints = calculateLevelPoints(this.save, result.mapId);
+        void newLevelPoints;
+        const pointsRecord = points > prevLevelPoints;
         this.persist();
         const unlockedMap = locked.find((m) => isMapUnlocked(this.save, m.id));
         const unlockedCharacters = lockedCharacters.filter((c) =>
@@ -678,6 +685,8 @@ export class GameClient implements GameFrameHandler {
                 ...result,
                 characterName: getCharacter(sim.characterId).name,
                 endlessRecord,
+                points,
+                pointsRecord,
                 unlockedMap: unlockedMap?.name,
                 unlockedCharacters: unlockedCharacters.map((c) => c.name),
                 unlockedItems: unlockedItems.map((i) => i.name),

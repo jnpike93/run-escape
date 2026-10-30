@@ -34,7 +34,9 @@ import { WEAPONS, getWeapon } from "../content/weapons";
 import { MAX_PASSIVES, MAX_WEAPONS } from "../core/Upgrades";
 import {
     SaveData,
+    calculateLevelPoints,
     getNextUpgradeCost,
+    getTotalPoints,
     importSave,
     isEndlessUnlocked,
     isMapUnlocked,
@@ -466,8 +468,9 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                     <div className="ui-title-stats">
                         <Coins amount={save.coins} />
                         <div>
-                            Runs {save.runs} · Wins {save.victories} · Best{" "}
-                            {formatTime(save.bestSeconds)} · Best level {save.bestLevel}
+                            Points {getTotalPoints(save).toLocaleString()} · Runs {save.runs} · Wins{" "}
+                            {save.victories} · Best {formatTime(save.bestSeconds)} · Best level{" "}
+                            {save.bestLevel}
                         </div>
                     </div>
                 </div>
@@ -744,6 +747,9 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
     const wins = save.mapVictories[map.id] ?? 0;
     const unlocked = isMapUnlocked(save, map.id);
     const endless = save.endlessBest[map.id];
+    const mapPoints = calculateLevelPoints(save, map.id);
+    const mb = (save as any).mapBest?.[map.id];
+    const totalMapKills = Math.max(mb?.totalKills ?? 0, mb?.kills ?? 0);
     return (
         <div className="ui-select-details">
             <div className="ui-select-details-head">
@@ -761,6 +767,12 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                                 ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
                                 : "Not beaten yet"}
                     </div>
+                    {mapPoints > 0 && (
+                        <div className="ui-card-style" style={{ color: "#ffff00" }}>
+                            Level points: {mapPoints.toLocaleString()} pts
+                            {totalMapKills > 0 ? ` · Kills: ${totalMapKills.toLocaleString()}` : ""}
+                        </div>
+                    )}
                     {(((save as any).mapBest?.[map.id]?.seconds ?? 0) > 0 ||
                         endless ||
                         wins > 0) && (
@@ -1387,6 +1399,12 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                         Your furthest endless run in {getMap(result.mapId).name}!
                     </p>
                 )}
+                {result?.pointsRecord && result.points > 0 && (
+                    <p className="ui-unlocked">
+                        New high score in {getMap(result.mapId).name}:{" "}
+                        {result.points.toLocaleString()} pts!
+                    </p>
+                )}
                 {result?.unlockedMap && (
                     <p className="ui-unlocked">{result.unlockedMap} is open to you now!</p>
                 )}
@@ -1432,6 +1450,12 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                             <tr>
                                 <td>Kills</td>
                                 <td>{result.kills.toLocaleString()}</td>
+                            </tr>
+                            <tr>
+                                <td>Run points</td>
+                                <td style={{ color: "#ffff00", fontWeight: "bold" }}>
+                                    {(result.points ?? 0).toLocaleString()} pts
+                                </td>
                             </tr>
                             <tr>
                                 <td>Coins banked</td>

@@ -30,7 +30,7 @@ export function CoopDamageLeaderboardTable(): JSX.Element | null {
                     textShadow: "1px 1px #000",
                 }}
             >
-                Co-Op Damage Leaderboard
+                Co-Op Run Leaderboard
             </div>
             <table className="ui-result-table" style={{ width: "100%", fontSize: "13px" }}>
                 <thead>
@@ -46,6 +46,7 @@ export function CoopDamageLeaderboardTable(): JSX.Element | null {
                         <th style={{ textAlign: "right", padding: "2px 4px" }}>Damage</th>
                         <th style={{ textAlign: "right", padding: "2px 4px" }}>Share</th>
                         <th style={{ textAlign: "right", padding: "2px 4px" }}>Kills</th>
+                        <th style={{ textAlign: "right", padding: "2px 4px" }}>Points</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -102,6 +103,16 @@ export function CoopDamageLeaderboardTable(): JSX.Element | null {
                                 }}
                             >
                                 {(row.kills || 0).toLocaleString()}
+                            </td>
+                            <td
+                                style={{
+                                    textAlign: "right",
+                                    padding: "2px 4px",
+                                    color: "#ffff00",
+                                    fontWeight: "bold",
+                                }}
+                            >
+                                {Math.round(row.points || 0).toLocaleString()}
                             </td>
                         </tr>
                     ))}

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { mpActorRendererMethods } from "./mp-actor-renderer.js";
+import { mpHudLeaderboardMethods } from "./mp-hud-leaderboard.js";
 import { mpPickupsMethods } from "./mp-pickups.js";
 import { mpTransportMethods } from "./mp-transport.js";
 import {
@@ -502,5 +503,79 @@ describe("25 Hz sync_world velocity normalization & batched coop_pickup frames",
         ctx.queueCoopPickup({ type: "coop_pickup", kind: "bones", value: 5, xpGained: 5, totalXp: 135 });
         expect(sentMessages.length).toBe(4);
         expect(sentMessages[3].value).toBe(5);
+    });
+});
+
+describe("Co-Op leaderboard point calculation & sorting (mp-hud-leaderboard)", () => {
+    test("buildLeaderboard computes individual points from kills, damage, level, and difficulty and sorts by points/damage", () => {
+        const prevWindow = (globalThis as any).window;
+        try {
+            (globalThis as any).window = {
+                gameClient: {
+                    sim: {
+                        level: 10,
+                        seconds: 300, // 5 minutes
+                        state: "victory",
+                        map: {
+                            id: "wilderness",
+                            difficulty: { hp: 2.0, damage: 1.5 }, // mapDiff = 0.6*2 + 0.4*1.5 = 1.8
+                        },
+                    },
+                },
+            };
+
+            const damageStats = new Map<number, any>([
+                [
+                    1,
+                    {
+                        slot: 1,
+                        name: "Alice",
+                        characterId: "warrior",
+                        charName: "Warrior",
+                        damage: 10000,
+                        kills: 150,
+                        level: 10,
+                    },
+                ],
+                [
+                    2,
+                    {
+                        slot: 2,
+                        name: "Bob",
+                        characterId: "ranger",
+                        charName: "Ranger",
+                        damage: 25000,
+                        kills: 200,
+                        level: 12,
+                    },
+                ],
+            ]);
+
+            const ctx: any = {
+                ...mpHudLeaderboardMethods,
+                localSlot: 1,
+                selectedMapId: "wilderness",
+                difficultyMult: 2.0, // coopMult = 2.0 -> diffMult = 1.8 * (0.7 + 0.3 * 2.0) = 1.8 * 1.3 = 2.34
+                remotePeers: new Map([[2, { slot: 2, level: 12 }]]),
+                damageStats,
+                lastLeaderboard: null,
+            };
+
+            const board = ctx.buildLeaderboard();
+            expect(board.length).toBe(2);
+            // Bob has higher kills, damage, and level so Bob is #1
+            expect(board[0].slot).toBe(2);
+            expect(board[1].slot).toBe(1);
+            expect(board[0].points).toBeGreaterThan(board[1].points);
+            expect(board[0].points).toBeGreaterThan(0);
+            expect(board[1].points).toBeGreaterThan(0);
+
+            // Verify overrideStats preserves higher points if provided
+            const boardOverride = ctx.buildLeaderboard([{ slot: 1, points: 999999 }]);
+            expect(boardOverride[0].slot).toBe(1);
+            expect(boardOverride[0].points).toBe(999999);
+        } finally {
+            (globalThis as any).window = prevWindow;
+        }
     });
 });

@@ -13,14 +13,36 @@ import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/sh
 import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
 import {
+    LevelPointsBreakdown,
     MapBestRecord,
+    calculateLevelPoints,
+    calculateLevelPointsBreakdown,
+    calculateRunPoints,
+    calculateRunPointsBreakdown,
     getArmourySpent,
+    getCampaignPoints,
+    getFunMapPoints,
+    getMapDifficultyMultiplier,
+    getTotalPoints,
     migrateCustomSaveFields,
     recordCustomRunStats,
     refundArmoury,
 } from "./custom/customSave";
 
-export { getArmourySpent, refundArmoury, type MapBestRecord };
+export {
+    calculateLevelPoints,
+    calculateLevelPointsBreakdown,
+    calculateRunPoints,
+    calculateRunPointsBreakdown,
+    getArmourySpent,
+    getCampaignPoints,
+    getFunMapPoints,
+    getMapDifficultyMultiplier,
+    getTotalPoints,
+    refundArmoury,
+    type LevelPointsBreakdown,
+    type MapBestRecord,
+};
 
 // Progress kept between runs: banked coins, permanent upgrades, unlocks and
 // records. Versioned so older saves can be upgraded when the format changes.

@@ -212,11 +212,13 @@ export const mpHudLeaderboardMethods = {
                     if (Number.isFinite(Number(st.damage))) entry.damage = Math.max(entry.damage, Math.round(Number(st.damage)));
                     if (Number.isFinite(Number(st.kills))) entry.kills = Math.max(entry.kills, Math.round(Number(st.kills)));
                     if (Number.isFinite(Number(st.level))) entry.level = Math.max(entry.level || 1, Math.round(Number(st.level)));
+                    if (Number.isFinite(Number(st.points))) entry.points = Math.max(entry.points || 0, Math.round(Number(st.points)));
                 }
             }
         }
         if (!this.damageStats || this.damageStats.size === 0) return [];
-        const localSimLvl = Math.max(1, Math.round(Number(window.gameClient?.sim?.level) || 1));
+        const sim = window.gameClient?.sim;
+        const localSimLvl = Math.max(1, Math.round(Number(sim?.level) || 1));
         const localEntry = this.damageStats.get(this.localSlot);
         if (localEntry) {
             localEntry.level = Math.max(localEntry.level || 1, localSimLvl);
@@ -228,6 +230,19 @@ export const mpHudLeaderboardMethods = {
                 pEntry.level = Math.max(pEntry.level || 1, pLvl);
             }
         }
+        const mapId = sim?.map?.id || this.selectedMapId || 'lumbridge';
+        let mapDiff = 1.0;
+        if (mapId === 'fight_caves') {
+            mapDiff = 3.0;
+        } else if (sim?.map?.difficulty) {
+            mapDiff = Math.round((0.6 * (sim.map.difficulty.hp || 1) + 0.4 * (sim.map.difficulty.damage || 1)) * 100) / 100;
+        }
+        const coopMult = Math.max(0.5, Math.min(10, Number(this.gameConfig?.difficultyMult || this.difficultyMult) || 1.0));
+        const diffMult = mapDiff * (0.7 + 0.3 * coopMult);
+        const runSec = Math.max(0, Number(sim?.seconds) || 0);
+        const minutes = Math.max(1, runSec / 60);
+        const isVictory = sim?.state === 'victory';
+
         const list = Array.from(this.damageStats.values()).map(e => ({
             slot: e.slot,
             name: e.name,
@@ -236,13 +251,24 @@ export const mpHudLeaderboardMethods = {
             damage: Math.max(0, Math.round(e.damage || 0)),
             kills: Math.max(0, Math.round(e.kills || 0)),
             level: Math.max(1, Math.round(Number(e.level) || 1)),
+            points: Math.max(0, Math.round(Number(e.points) || 0)),
             isLocal: e.slot === this.localSlot
         }));
-        list.sort((a, b) => (b.damage - a.damage) || (b.kills - a.kills) || (a.slot - b.slot));
         const totalDmg = list.reduce((sum, r) => sum + r.damage, 0);
         for (const r of list) {
             r.pct = totalDmg > 0 ? Math.round((r.damage / totalDmg) * 1000) / 10 : 0;
+            const kills = Math.max(0, Math.round(r.kills || 0));
+            const dmg = Math.max(0, Math.round(r.damage || 0));
+            const lvl = Math.max(1, Math.round(Number(r.level) || 1));
+            const kpm = Math.min(300, kills / minutes);
+            const killPts = Math.round(kills * (10 + kpm * 0.04));
+            const dmgPts = Math.round(dmg * 0.08);
+            const lvlPts = Math.max(0, lvl - 1) * 75;
+            const clearPts = isVictory ? 2500 : 0;
+            const computedPts = Math.round((killPts + dmgPts + lvlPts + clearPts) * diffMult);
+            r.points = Math.max(Math.round(Number(r.points) || 0), computedPts);
         }
+        list.sort((a, b) => (b.points - a.points) || (b.damage - a.damage) || (b.kills - a.kills) || (a.slot - b.slot));
         this.lastLeaderboard = list;
         return list;
     },

@@ -168,6 +168,8 @@ export type UiSnapshot = {
     result?: RunResult & {
         characterName: string;
         endlessRecord: boolean;
+        points: number;
+        pointsRecord: boolean;
         unlockedMap?: string;
         unlockedCharacters: string[];
         unlockedItems: string[];
