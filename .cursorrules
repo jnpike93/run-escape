@@ -1,7 +1,12 @@
 # Cursor & AI Agent Rules for Run Escape
 
 1. MANDATORY PRE-READ: Always read `AGENTS.md`, `docs/AGENT_NOTES.md`, and `.jules/sentinel.md` before editing any files or resolving merges.
-2. SOURCE-FIRST WORKFLOW: Edit TypeScript engine source in `src/` and compile via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never hand-edit or regex-patch minified bundles in `assets/index-*.js`.
-3. CACHE-BUSTING LOCKSTEP: Whenever client JS, WASM, or CSS files change, run `npm run build` (or `node scripts/sync_dist.cjs --version=X.Y`) to synchronize the `?v=X.Y` query parameter across `index.html` and `assets/`.
-4. MANDATORY HANDOFF LOG: Before finishing any task, commit, or PR, update `docs/CHANGELOG.md` and prepend a new entry to `docs/AGENT_NOTES.md` under `## 3. Chronological Agent Handoff Log` detailing modified files, bundle/symbol changes, and notes for future agents.
-5. VERIFICATION: Run `npm test`, `python -m unittest test_serve.py`, and `node --check assets/multiplayer.js` prior to completion.
+2. UPSTREAM-FRIENDLY MODULARIZATION:
+   - Place custom characters, maps, enemies, and secret codes in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`).
+   - Place custom UI screens/modals/tables in standalone components under `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`) rather than inlining large blocks in `GameUi.tsx`.
+   - Edit hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`) in `src/custom/` (synced to `assets/` by `npm run build`).
+   - Declare global `window.*` properties in `src/game/types/globals.d.ts`.
+   - Keep root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched for upstream fast-forwards; record all custom changes in `docs/CHANGELOG.md`. Use LF (`\n`) line endings.
+3. SOURCE-FIRST WORKFLOW & CACHE-BUSTING: Edit source in `src/` and compile via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never hand-edit minified bundles in `assets/index-*.js`.
+4. MANDATORY HANDOFF LOG: Before finishing any task, commit, or PR, update `docs/CHANGELOG.md`, run `npm run build`, and prepend a new entry to `docs/AGENT_NOTES.md` under `## 3. Chronological Agent Handoff Log`.
+5. VERIFICATION: Run `npx tsc --noEmit`, `npm test`, `python -m unittest test_serve.py`, and `node --check src/custom/multiplayer.js` prior to completion.

@@ -3,11 +3,16 @@
 All AI coding agents operating in this repository MUST follow these rules without exception:
 
 1. **Pre-Flight Requirement**: Read `AGENTS.md`, `docs/AGENT_NOTES.md`, and `.jules/sentinel.md` before proposing or applying changes.
-2. **Source-First TypeScript Workflow & Cache Busting**:
-   - Make all engine, map, enemy, and UI modifications in the unminified TypeScript source (`src/`) and build via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never directly regex-patch minified bundles in `assets/index-*.js`.
+2. **Upstream-Friendly Modularization**:
+   - Add custom characters, maps, enemies, and secret codes in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`) and spread/delegate them via single lines in upstream files.
+   - Add custom UI screens/modals/tables as standalone components in `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`) to keep `GameUi.tsx` diffs minimal.
+   - Edit hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`) in `src/custom/`; `npm run build` copies `src/custom/` into `assets/` via `scripts/sync_dist.cjs`.
+   - Declare global `window.*` bridges in `src/game/types/globals.d.ts`.
+   - Leave root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched so `upstream/main` fast-forwards cleanly; write custom changelog entries only in `docs/CHANGELOG.md`. Maintain LF (`\n`) line endings per `.gitattributes`.
+3. **Source-First TypeScript Workflow & Cache Busting**:
+   - Make all engine, map, enemy, and UI modifications in `src/` and build via `npm run build` (`vite build && node scripts/sync_dist.cjs`). Never directly regex-patch minified bundles in `assets/index-*.js`.
    - Preserve global hooks (`window.gameClient`, `window.multiplayer`, `window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`) in `src/`.
-   - When modifying client JS/CSS/WASM assets, synchronize `?v=X.Y` via `node scripts/sync_dist.cjs --version=X.Y` across `index.html` and `assets/` as documented in `AGENTS.md`.
-3. **Mandatory Handoff Log & Changelog Update**:
-   - Every agent change or PR MUST update `docs/CHANGELOG.md` and prepend a new entry under `## 3. Chronological Agent Handoff Log` in `docs/AGENT_NOTES.md` using the template in that file.
-4. **Verification**:
-   - Run `npm test`, `python -m unittest test_serve.py`, and `node --check assets/multiplayer.js` before completing work.
+4. **Mandatory Handoff Log & Changelog Update**:
+   - Every agent change or PR MUST update `docs/CHANGELOG.md`, run `npm run build`, and prepend a new entry under `## 3. Chronological Agent Handoff Log` in `docs/AGENT_NOTES.md` using the template in that file.
+5. **Verification**:
+   - Run `npx tsc --noEmit`, `npm test`, `python -m unittest test_serve.py`, and `node --check src/custom/multiplayer.js` before completing work.

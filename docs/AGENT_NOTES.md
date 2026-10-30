@@ -28,17 +28,23 @@
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
 ### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-DlybI6VF.js`)
-When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
-1. **Client Instance Export (`window.gameClient`)**:
+When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
+1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
+   - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), and secret codes (`secretCodes.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `GameClient.ts`) via 1-line imports/spreads.
+   - [`src/game/ui/`](../src/game/ui/): Standalone custom UI components ([`LeaderboardScreen.tsx`](../src/game/ui/LeaderboardScreen.tsx), [`CoopGameOverSection.tsx`](../src/game/ui/CoopGameOverSection.tsx)) imported by [`GameUi.tsx`](../src/game/ui/GameUi.tsx).
+   - [`src/custom/`](../src/custom/): Canonical hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`), prayer icons (`prayer/*.png`), and multiplayer unit tests (`multiplayer/multiplayer.test.ts`). `npm run build` copies `src/custom/` into `assets/` (excluding `*.test.*`) via [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs).
+   - [`src/game/types/globals.d.ts`](../src/game/types/globals.d.ts): Typed `Window` declarations for all global bridges between `src/game/` and `src/custom/`.
+   - [`docs/CHANGELOG.md`](../docs/CHANGELOG.md) vs root [`CHANGELOG.md`](../CHANGELOG.md): Keep root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` identical to `upstream/main`; write all custom notes in `docs/CHANGELOG.md` (`src/game/ui/changelog.ts` combines both).
+2. **Client Instance Export (`window.gameClient`)**:
    - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](../assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
-2. **Multiplayer Hook Callbacks (`window.multiplayer`)**:
+3. **Multiplayer Hook Callbacks (`window.multiplayer`)**:
    - References across `src/game/` delegate state transitions, spectator flow-field/pickup guards, minimap player dots, pause checks, and post-run damage leaderboards to `window.multiplayer`.
-3. **OSRS Overhead Prayer Hooks (`window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`)**:
+4. **OSRS Overhead Prayer Hooks (`window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`)**:
    - Used for Fight Caves (`fight_caves`) protection prayers (`magic` / `ranged` / `melee` via `Q` / `E` / `R`) against `tztok_jad` (NPC 3127) and `tzkal_zuk` (NPC 7706).
    - `window._drawOsrsPrayerOverlay(viewport, sim, alpha, ctx, scale, playerScreenPos)` renders overhead prayer icons and boss attack windup banners.
-4. **Custom Maps, Characters, Weapons & Boss Definitions**:
-   - `fight_caves`: Spawns TzTok-Jad (`tztok_jad`, NPC 3127) at 6:00 (`at: 360`) and TzKal-Zuk (`tzkal_zuk`, NPC 7706, collision radius `0.45`) at 12:00 (`at: 720`), plus custom cache archives in `caches/osrs-241_2026-09-30-slim-74e0d2b3/`.
-   - Custom secret-code characters in `src/game/data/characters.ts`: `dipper` (NPC `16370`, code `dipperthedog`) and `elias` (NPC `16543`, code `barkelly`), rendered in 2D icons and in 3D via `drawPlayer` / `submitActors`.
+5. **Custom Maps, Characters, Weapons & Boss Definitions**:
+   - `fight_caves` (`src/game/content/custom/customMaps.ts`): Spawns TzTok-Jad (`tztok_jad`, NPC 3127) at 6:00 (`at: 360`) and TzKal-Zuk (`tzkal_zuk`, NPC 7706, collision radius `0.45`, in `src/game/content/custom/customEnemies.ts`) at 12:00 (`at: 720`), plus custom cache archives in `caches/osrs-241_2026-09-30-slim-74e0d2b3/`.
+   - Custom secret-code characters in `src/game/content/custom/customCharacters.ts`: `dipper` (NPC `16370`, code `dipperthedog`) and `elias` (NPC `16543`, code `barkelly`), rendered in 2D icons and in 3D via `drawPlayer` / `submitActors`.
    - Custom `blood_burst` -> `blood_barrage` (`id: "blood_barrage"`, `SpotAnim 377`) weapon evolution paired with `rapid_heal`, plus buffed `Saradomin brew` and `Sanfew serum`.
 
 ---
@@ -59,6 +65,15 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Document Upstream-Friendly Feature Architecture Across All Agent Rules & Skills
+- **Commit / PR**: Codify upstream-friendly architecture in all agent instruction files (`?v=8.5`)
+- **Files Modified**: `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `docs/AGENT_NOTES.md` (plus workspace `c:\Git\AGENTS.md` and `c:\Git\.agents\skills\merge-update\SKILL.md`)
+- **Bundle / Version Impact**: `?v=8.5` (no bundle changes)
+- **What Changed**:
+  - Updated `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `docs/AGENT_NOTES.md`, workspace `c:\Git\AGENTS.md`, and `c:\Git\.agents\skills\merge-update\SKILL.md` so all future agents know where custom code lives (`src/game/content/custom/`, `src/custom/`, standalone `src/game/ui/` components, `src/game/types/globals.d.ts`, and `docs/CHANGELOG.md`) and follow upstream-friendly modularization rules when adding features or resolving merges.
+- **Notes / Invariants for Future Agents**:
+  - Always follow `AGENTS.md` Section 1.2 ("Upstream-Friendly Architecture & Feature Placement Rules") when adding new features.
 
 ### 2026-10-29 - Antigravity - Global Type Bridge, UI/Secret Code Extraction, Gated Debug Mode & Multiplayer Unit Tests
 - **Commit / PR**: Upstream-safe codebase modularization and test coverage (`?v=8.5`)
