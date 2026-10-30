@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot, sanitizeHexColor, sanitizePeerStats } from './mp-constants.js?v=8.5';
+import { sanitizeSlot, sanitizeHexColor, sanitizePeerStats } from './mp-constants.js?v=8.6';
 
 export const mpActorRendererMethods = {
     getLobbyGrowthMultiplier(sim) {

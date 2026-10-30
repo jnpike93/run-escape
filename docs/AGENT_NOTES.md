@@ -8,10 +8,29 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Extreme One Chunk Man (2x Diff, 1.5x Pts) & Nightmare Man (3x Diff, 2.5x Pts) Challenge Modes
+### [2026-10-30] Halve Dipper & Elias 3D Model Scale (`3.0` -> `1.5`)
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-T4QWDNBf.js` (`?v=8.6`, MapViewer `MapViewerApp-BqlDYSTn.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-BtUvp74D.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Reduced the 3D actor model scale for **Dipper** (`dipper`, Corgi) and **Elias** (`elias`, Chihuahua) by half (`3.0` -> `1.5`, and height offset `0.22` -> `0.11`) across singleplayer gameplay, the title/character select attract screen, and Co-Op multiplayer peer rendering.
+
+**Changes implemented**:
+- **Dog Actor Constants (`src/game/client/custom/dogActors.ts`)**:
+  - Exported `DOG_ACTOR_SCALE = 1.5` (previously `3.0`) and `DOG_HEIGHT_OFFSET = 0.11` (previously `0.22`).
+- **Singleplayer, Title Screen & Co-Op Rendering (`src/game/client/GameView.ts`, `src/game/client/GameClient.ts`, `src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
+  - Updated `GameView.drawPlayer` and `GameClient.submitActors` to use `DOG_ACTOR_SCALE` and `DOG_HEIGHT_OFFSET`.
+  - Updated `mp-sync-engine.js` remote peer dog actor rendering to use `scale: 1.5` and `getCenterHeight() - 0.11`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm run build` (`index-T4QWDNBf.js`), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Add Extreme One Chunk Man (2x Diff, 1.5x Pts) & Nightmare Man (3x Diff, 2.5x Pts) Challenge Modes
+
+**Model**: Gemini (Antigravity)
+**Commit**: `84e04d6`
 **Bundle**: `index-D6Ox1VYG.js` (`?v=8.5`, MapViewer `MapViewerApp-DXw8zrc2.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-DMrSu1Mm.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
 
 **Scope**: Added selectable **Extreme One Chunk Man** (`2x` map difficulty for `1.5x` points) and **Nightmare Man** (`3x` map difficulty for `2.5x` points) challenge modes alongside **Normal** mode (`1x` difficulty, `1x` points) across simulation enemy/boss scaling, run & leaderboard point calculations, singleplayer Map Selection / HUD / Result screens, and Co-Op lobbies.

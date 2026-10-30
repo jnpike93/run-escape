@@ -12,7 +12,7 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './mp-constants.js?v=8.5';
+} from './mp-constants.js?v=8.6';
 
 const sanitizePlayerName = (name, fallback = '') => sanitizeName(name) || fallback;
 

@@ -2,6 +2,9 @@ import { ActorModel } from "../../../mapviewer/webgl/actor/ActorRenderer";
 import { Sim } from "../../core/Sim";
 import { GameAssets } from "../GameAssets";
 
+export const DOG_ACTOR_SCALE = 1.5;
+export const DOG_HEIGHT_OFFSET = 0.11;
+
 export function isDogCharacter(characterId?: string): boolean {
     return characterId === "dipper" || characterId === "elias";
 }

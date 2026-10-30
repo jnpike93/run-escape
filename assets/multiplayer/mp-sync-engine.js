@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=8.5';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.5';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=8.6';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.6';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -1589,10 +1589,10 @@ export const mpSyncEngineMethods = {
 
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
-                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isDog ? 0.22 : 0);
+                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isDog ? 0.11 : 0);
 
                         actors.draw(model, anim, frame, px, height, py, p2.yaw & 2047, {
-                            scale: isDog ? 3.0 : 1.0,
+                            scale: isDog ? 1.5 : 1.0,
                             flash: (p2.flash > 0) ? 0.4 : 0,
                             tint: isDog ? 16777215 : (p2.tint || 16777215)
                         });

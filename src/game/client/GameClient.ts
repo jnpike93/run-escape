@@ -65,7 +65,12 @@ import { ChoiceView, GameStore, HudView, QuestTrackView, Screen, SlotView } from
 import { GameView } from "./GameView";
 import { getBuffViews, getChestView, getGearViews, getInventoryViews } from "./ItemViews";
 import { Minimap } from "./Minimap";
-import { getPlayerOrDogModel, isDogCharacter } from "./custom/dogActors";
+import {
+    DOG_ACTOR_SCALE,
+    DOG_HEIGHT_OFFSET,
+    getPlayerOrDogModel,
+    isDogCharacter,
+} from "./custom/dogActors";
 import { Overlay, ScreenPoint } from "./Overlay";
 import { getBossKillViews, getDamageViews } from "./RunStatsViews";
 
@@ -1116,10 +1121,10 @@ export class GameClient implements GameFrameHandler {
                     anim.getFrame(tick),
                     TITLE_MAP.spawn.x,
                     this.grid.getHeight(TITLE_MAP.spawn.x, TITLE_MAP.spawn.y) / 128 -
-                        (isDog ? 0.22 : 0),
+                        (isDog ? DOG_HEIGHT_OFFSET : 0),
                     TITLE_MAP.spawn.y,
                     0,
-                    { scale: isDog ? 3.0 : 1 },
+                    { scale: isDog ? DOG_ACTOR_SCALE : 1 },
                 );
             }
         }

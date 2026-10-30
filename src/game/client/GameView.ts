@@ -25,7 +25,13 @@ import {
     getShieldedModelKey,
 } from "./GameAssets";
 import { Overlay, ScreenPoint } from "./Overlay";
-import { getPlayerOrDogModel, isDogCharacter, resolveCoopEventPlayer } from "./custom/dogActors";
+import {
+    DOG_ACTOR_SCALE,
+    DOG_HEIGHT_OFFSET,
+    getPlayerOrDogModel,
+    isDogCharacter,
+    resolveCoopEventPlayer,
+} from "./custom/dogActors";
 
 const FROZEN_TINT = 0xa8d8ff;
 // Shielded enemies (that can't be hurt yet) are washed in lilac
@@ -508,14 +514,14 @@ export class GameView {
                 anim,
                 frame,
                 x,
-                this.ground(sim, x, y) - (isDog ? 0.22 : 0),
+                this.ground(sim, x, y) - (isDog ? DOG_HEIGHT_OFFSET : 0),
                 y,
                 player.yaw,
                 {
                     silhouette: true,
                     tint,
                     flash,
-                    scale: isDog ? 3.0 : 1,
+                    scale: isDog ? DOG_ACTOR_SCALE : 1,
                 },
             );
         }
