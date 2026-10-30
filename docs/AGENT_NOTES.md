@@ -9,27 +9,27 @@
 ### Current Active Asset Files (Version `?v=8.5` - Source-Built `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
-| **TypeScript Source Tree** | [`src/`](./src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-DFhq8KrM.js`](./assets/index-DFhq8KrM.js) | `index.html`, `MapViewerApp-CvUyPoMO.js`, `module-D4Rj_YIr.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
-| **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
-| **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](./scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
-| **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](./scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.5`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.5`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-CvUyPoMO.js`](./assets/MapViewerApp-CvUyPoMO.js) | `assets/index-DFhq8KrM.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](./assets/RenderDataWorker-DJjFWldW.js) | `assets/index-DFhq8KrM.js` |
-| **Worker WASM Loader** | [`assets/module--MAiymg_.js`](./assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-D4Rj_YIr.js`](./assets/module-D4Rj_YIr.js) | `assets/index-DFhq8KrM.js` (`module-yzz5kVyQ.wasm`) |
-| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](./caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v12`) |
+| **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
+| **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
+| **Main Engine Bundle** | [`assets/index-Di6mdnQT.js`](../assets/index-Di6mdnQT.js) | `index.html`, `MapViewerApp-DaF9yjOZ.js`, `module-Du8dpbZA.js` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
+| **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
+| **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
+| **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](../scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](../assets/cooks-assistant.js) | `index.html` (`?v=8.5`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-DaF9yjOZ.js`](../assets/MapViewerApp-DaF9yjOZ.js) | `assets/index-Di6mdnQT.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-Di6mdnQT.js` |
+| **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-Du8dpbZA.js`](../assets/module-Du8dpbZA.js) | `assets/index-Di6mdnQT.js` (`module-yzz5kVyQ.wasm`) |
+| **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-DFhq8KrM.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-Di6mdnQT.js`)
 When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
 1. **Client Instance Export (`window.gameClient`)**:
-   - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](./assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
+   - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](../assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
 2. **Multiplayer Hook Callbacks (`window.multiplayer`)**:
    - References across `src/game/` delegate state transitions, spectator flow-field/pickup guards, minimap player dots, pause checks, and post-run damage leaderboards to `window.multiplayer`.
 3. **OSRS Overhead Prayer Hooks (`window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`)**:
@@ -58,6 +58,17 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Relocate MULTIPLAYER_ARCHITECTURE.md, CHANGELOG.md & AGENT_NOTES.md into `docs/`
+- **Commit / PR**: Move documentation files into `docs/` (`?v=8.5`)
+- **Files Modified**: `docs/MULTIPLAYER_ARCHITECTURE.md` (moved from `MULTIPLAYER_ARCHITECTURE.md`), `docs/CHANGELOG.md` (moved from `CHANGELOG.md`), `docs/AGENT_NOTES.md` (moved from `AGENT_NOTES.md`), `docs/DEVELOPMENT.md`, `src/game/ui/changelog.ts`, `src/game/ui/ChangelogPanel.tsx`, `serve.py`, `scripts/auto_sync_upstream.cjs`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `README.md`, `assets/multiplayer.js`, `../AGENTS.md`, `../.agents/skills/merge-update/SKILL.md`
+- **Bundle / Version Impact**: `?v=8.5` (rebuilt via `npm run build` after updating `src/game/ui/changelog.ts` and `src/game/ui/ChangelogPanel.tsx` to read `docs/CHANGELOG.md`)
+- **What Changed**:
+  - Moved `MULTIPLAYER_ARCHITECTURE.md`, `CHANGELOG.md`, and `AGENT_NOTES.md` into `docs/`.
+  - Updated `src/game/ui/changelog.ts` (`../../../docs/CHANGELOG.md?raw`), `src/game/ui/ChangelogPanel.tsx` (`fetch("docs/CHANGELOG.md")`), `serve.py` (`allowed_exact` includes `/docs/CHANGELOG.md` and `/docs/changelog.md`), and `scripts/auto_sync_upstream.cjs` (`CHANGELOG_MD` and `AGENT_NOTES_MD` paths).
+  - Updated all agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `README.md`, `assets/multiplayer.js`, `c:\Git\AGENTS.md`, `c:\Git\.agents\skills\merge-update\SKILL.md`) and internal doc links to reference `docs/AGENT_NOTES.md`, `docs/CHANGELOG.md`, and `docs/MULTIPLAYER_ARCHITECTURE.md`.
+- **Notes / Invariants for Future Agents**:
+  - `CHANGELOG.md`, `AGENT_NOTES.md`, and `MULTIPLAYER_ARCHITECTURE.md` now live inside `docs/`.
 
 ### 2026-10-29 - Antigravity - 12 Co-Op Multiplayer, Animation, Balance, Lobby & UI Fixes + Vite Duplicate Bundle Fix (v8.5)
 - **Commit / PR**: 12 multiplayer/gameplay/UI fixes & Vite script entry fix (`?v=8.5`)

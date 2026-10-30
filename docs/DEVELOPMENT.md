@@ -136,7 +136,7 @@ game loads rather than built in, so on a hosted game `notice.md` can be edited o
 
 ### Versions
 
-The version is `package.json`'s, shown in the title screen's corner, and [CHANGELOG.md](../CHANGELOG.md)
+The version is `package.json`'s, shown in the title screen's corner, and [CHANGELOG.md](./CHANGELOG.md)
 says what changed in each one; the title screen shows it too. Note changes under Unreleased as
 they're made. For a release, `npm version minor --no-git-tag-version` (or `patch` for fixes alone),
 then turn Unreleased into the new version's heading with the date. A test checks the two agree.

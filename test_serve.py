@@ -250,6 +250,7 @@ class TestStaticFileHandler(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         os.makedirs(os.path.join(self.temp_dir, "assets"), exist_ok=True)
         os.makedirs(os.path.join(self.temp_dir, "caches"), exist_ok=True)
+        os.makedirs(os.path.join(self.temp_dir, "docs"), exist_ok=True)
 
         with open(os.path.join(self.temp_dir, "index.html"), "w") as f:
             f.write("<html>Index</html>")
@@ -259,6 +260,8 @@ class TestStaticFileHandler(unittest.TestCase):
             f.write("console.log(1);")
         with open(os.path.join(self.temp_dir, "caches", "data.json"), "w") as f:
             f.write("{}")
+        with open(os.path.join(self.temp_dir, "docs", "CHANGELOG.md"), "w") as f:
+            f.write("# Changelog")
 
         self.handler = CustomHandler.__new__(CustomHandler)
         self.handler.directory = self.temp_dir
@@ -295,6 +298,7 @@ class TestStaticFileHandler(unittest.TestCase):
             "/favicon.ico",
             "/assets/main.js",
             "/caches/data.json",
+            "/docs/CHANGELOG.md",
         ]
         for p in allowed:
             with self.subTest(path=p):

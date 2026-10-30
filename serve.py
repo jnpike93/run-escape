@@ -1,5 +1,5 @@
-# AGENT DIRECTIVE: Before modifying this file, read AGENTS.md, AGENT_NOTES.md, and .jules/sentinel.md.
-# After completing changes, run `python -m unittest test_serve.py` and prepend a handoff entry to AGENT_NOTES.md.
+# AGENT DIRECTIVE: Before modifying this file, read AGENTS.md, docs/AGENT_NOTES.md, and .jules/sentinel.md.
+# After completing changes, run `python -m unittest test_serve.py` and prepend a handoff entry to docs/AGENT_NOTES.md.
 import http.server
 import urllib.parse
 import hashlib
@@ -489,7 +489,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return None
 
         # Enforce strict public static asset allowlist
-        allowed_exact = {"/", "/index.html", "/favicon.ico", "/CHANGELOG.md", "/changelog.md"}
+        allowed_exact = {"/", "/index.html", "/favicon.ico", "/CHANGELOG.md", "/changelog.md", "/docs/CHANGELOG.md", "/docs/changelog.md"}
         is_allowed_asset = (
             normalized.startswith("/assets/")
             and not normalized.endswith(".map")

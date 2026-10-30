@@ -1,16 +1,16 @@
 # Run Escape - Co-Op Multiplayer Architecture & Performance Guide
 
-> **[!IMPORTANT] Mandatory Agent Protocol**: All AI coding agents reading or modifying this codebase MUST read [`AGENTS.md`](./AGENTS.md) and [`AGENT_NOTES.md`](./AGENT_NOTES.md) prior to making changes, and MUST prepend a handoff summary to [`AGENT_NOTES.md`](./AGENT_NOTES.md) upon completion.
+> **[!IMPORTANT] Mandatory Agent Protocol**: All AI coding agents reading or modifying this codebase MUST read [`AGENTS.md`](../AGENTS.md) and [`docs/AGENT_NOTES.md`](./AGENT_NOTES.md) prior to making changes, and MUST prepend a handoff summary to [`docs/AGENT_NOTES.md`](./AGENT_NOTES.md) upon completion.
 
 ## 1. Architectural Overview
 
 Run Escape was originally architected as a single-player WebGL2 and WebAssembly survival game ([`assets/index-XvFTU0hX.js`](./assets/index-XvFTU0hX.js)). Co-Op Multiplayer extends the engine into a 2-player networked game using a **Host-Authoritative WebSocket Relay Architecture** composed of two primary components:
 
-1. **Backend WebSocket Room Relay ([`serve.py`](./serve.py))**:
+1. **Backend WebSocket Room Relay ([`serve.py`](../serve.py))**:
    - Implements a zero-dependency RFC 6455 WebSocket server inside `COOPHandler`.
    - Manages 2-player rooms (`OSRS-XXXX`), enforces per-IP connection caps (`MAX_CONNS_PER_IP = 12`), room caps (`MAX_ROOMS = 250`), frame size limits (`MAX_FRAME_SIZE = 65536`), and sliding-window rate limits (`90 frames/sec`).
    - Assigns the first registrant in a room as `host` and the second as `guest`, automatically promoting `guest` to `host` if the Host leaves the lobby prior to run launch.
-2. **Frontend Engine Hook & Sync Manager ([`assets/multiplayer.js`](./assets/multiplayer.js))**:
+2. **Frontend Engine Hook & Sync Manager ([`assets/multiplayer.js`](../assets/multiplayer.js))**:
    - Attaches `window.multiplayer` (`MultiplayerManager`) to the live `Lv` (`window.gameClient`) and `RY` (`client.sim`) instances.
    - Intercepts simulation stepping, monster spawning, enemy targeting, weapon firing, pickup collection, casket rolling, 3D character model baking, camera framing, and overlay/HUD rendering without requiring source rebuilds of the core WebGL/WASM bundle.
 

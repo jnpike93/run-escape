@@ -8,13 +8,13 @@ type Props = {
     onClose: () => void;
 };
 
-// What's changed, version by version, from CHANGELOG.md. Unreleased only
+// What's changed, version by version, from docs/CHANGELOG.md. Unreleased only
 // shows once something's under it.
 export function ChangelogPanel({ onClose }: Props): JSX.Element {
     const [clData, setClData] = useState(CHANGELOG);
     useEffect(() => {
         let mounted = true;
-        fetch("CHANGELOG.md", { cache: "no-cache" })
+        fetch("docs/CHANGELOG.md", { cache: "no-cache" })
             .then((r) => (r.ok ? r.text() : null))
             .then((txt) => {
                 if (mounted && txt) {

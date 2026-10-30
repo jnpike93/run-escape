@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Co-Op Module (RFC 6455 WebSockets)
-// AGENT DIRECTIVE: Before modifying this file, read ../AGENTS.md and ../AGENT_NOTES.md.
-// After completing changes, run `node --check assets/multiplayer.js`, bump `?v=X.Y` across all 6 entry points in ../AGENTS.md, and prepend a handoff entry to ../AGENT_NOTES.md.
+// AGENT DIRECTIVE: Before modifying this file, read ../AGENTS.md and ../docs/AGENT_NOTES.md.
+// After completing changes, run `node --check assets/multiplayer.js`, bump `?v=X.Y` across all 6 entry points in ../AGENTS.md, and prepend a handoff entry to ../docs/AGENT_NOTES.md.
 // Supports 2 to 4 players with Host-authoritative simulation, class model baking,
 // jitter-free velocity extrapolation + soft correction, dynamic party HP scaling,
 // mutual player awareness (custom lobby names, overhead HP bars, nametags, multi-partner HUD, off-screen arrows),

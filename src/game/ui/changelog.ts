@@ -1,4 +1,4 @@
-import changelogText from "../../../CHANGELOG.md?raw";
+import changelogText from "../../../docs/CHANGELOG.md?raw";
 
 export const GAME_VERSION = __APP_VERSION__;
 

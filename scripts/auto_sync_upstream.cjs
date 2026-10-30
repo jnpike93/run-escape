@@ -17,8 +17,8 @@ const GIT_DIR = path.join(ROOT_DIR, ".git");
 const LOCK_FILE = path.join(GIT_DIR, "auto_sync_upstream.lock");
 const UPSTREAM_URL = "https://github.com/Dynrothe/Run-Escape.git";
 const INDEX_HTML = path.join(ROOT_DIR, "index.html");
-const CHANGELOG_MD = path.join(ROOT_DIR, "CHANGELOG.md");
-const AGENT_NOTES_MD = path.join(ROOT_DIR, "AGENT_NOTES.md");
+const CHANGELOG_MD = path.join(ROOT_DIR, "docs", "CHANGELOG.md");
+const AGENT_NOTES_MD = path.join(ROOT_DIR, "docs", "AGENT_NOTES.md");
 const ASSETS_DIR = path.join(ROOT_DIR, "assets");
 
 function log(msg) {
@@ -125,7 +125,7 @@ function updateChangelogAndNotes(oldVer, newVer, upstreamCommits, upstreamSha) {
         const entry = [
             `### ${today} - Automated Cron Sync - Upstream Merge (\`${upstreamSha}\`, v${newVer})`,
             `- **Commit / PR**: Automated upstream sync from \`upstream/main\` (\`${upstreamSha}\`, \`?v=${newVer}\`)`,
-            `- **Files Modified**: \`src/**\`, \`assets/**\`, \`index.html\`, \`CHANGELOG.md\`, \`AGENT_NOTES.md\``,
+            `- **Files Modified**: \`src/**\`, \`assets/**\`, \`index.html\`, \`docs/CHANGELOG.md\`, \`docs/AGENT_NOTES.md\``,
             `- **Bundle / Version Impact**: Bumped cache-busting query string from \`?v=${oldVer}\` to \`?v=${newVer}\`.`,
             `- **What Changed**:`,
             summaryLines || `  - Merged latest commits from \`upstream/main\`.`,
@@ -252,7 +252,13 @@ function main() {
         .filter(Boolean);
 
     // Auto-resolve generated/regenerated files if they are the only conflicts
-    const AUTO_RESOLVABLE = new Set(["index.html", "CHANGELOG.md", "AGENT_NOTES.md"]);
+    const AUTO_RESOLVABLE = new Set([
+        "index.html",
+        "CHANGELOG.md",
+        "AGENT_NOTES.md",
+        "docs/CHANGELOG.md",
+        "docs/AGENT_NOTES.md",
+    ]);
     const hardConflicts = conflictFiles.filter(
         (f) => !AUTO_RESOLVABLE.has(f) && !f.startsWith("assets/"),
     );
@@ -291,7 +297,7 @@ function main() {
     }
 
     const { oldVer, newVer } = readNextVersion();
-    log(`Updating CHANGELOG.md and AGENT_NOTES.md (${oldVer} -> ${newVer})...`);
+    log(`Updating docs/CHANGELOG.md and docs/AGENT_NOTES.md (${oldVer} -> ${newVer})...`);
     updateChangelogAndNotes(oldVer, newVer, upstreamCommits, upstreamSha);
 
     log(`Building TypeScript source and syncing bundles (?v=${newVer})...`);
