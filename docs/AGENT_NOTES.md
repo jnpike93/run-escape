@@ -59,11 +59,12 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 
 ## 3. Chronological Agent Handoff Log
 
-### 2026-10-29 - Antigravity - Relocate MULTIPLAYER_ARCHITECTURE.md, CHANGELOG.md & AGENT_NOTES.md into `docs/`
-- **Commit / PR**: Move documentation files into `docs/` (`?v=8.5`)
-- **Files Modified**: `docs/MULTIPLAYER_ARCHITECTURE.md` (moved from `MULTIPLAYER_ARCHITECTURE.md`), `docs/CHANGELOG.md` (moved from `CHANGELOG.md`), `docs/AGENT_NOTES.md` (moved from `AGENT_NOTES.md`), `docs/DEVELOPMENT.md`, `src/game/ui/changelog.ts`, `src/game/ui/ChangelogPanel.tsx`, `serve.py`, `scripts/auto_sync_upstream.cjs`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `README.md`, `assets/multiplayer.js`, `../AGENTS.md`, `../.agents/skills/merge-update/SKILL.md`
+### 2026-10-29 - Antigravity - Relocate MULTIPLAYER_ARCHITECTURE.md, CHANGELOG.md & AGENT_NOTES.md into `docs/` + Update README.md
+- **Commit / PR**: Move documentation files into `docs/` and integrate upstream `README.md` with custom edition differences at the top (`?v=8.5`)
+- **Files Modified**: `README.md`, `docs/MULTIPLAYER_ARCHITECTURE.md` (moved from `MULTIPLAYER_ARCHITECTURE.md`), `docs/CHANGELOG.md` (moved from `CHANGELOG.md`), `docs/AGENT_NOTES.md` (moved from `AGENT_NOTES.md`), `docs/DEVELOPMENT.md`, `src/game/ui/changelog.ts`, `src/game/ui/ChangelogPanel.tsx`, `serve.py`, `scripts/auto_sync_upstream.cjs`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `assets/multiplayer.js`, `../AGENTS.md`, `../.agents/skills/merge-update/SKILL.md`
 - **Bundle / Version Impact**: `?v=8.5` (rebuilt via `npm run build` after updating `src/game/ui/changelog.ts` and `src/game/ui/ChangelogPanel.tsx` to read `docs/CHANGELOG.md`)
 - **What Changed**:
+  - Updated `README.md` to use the full upstream `Dynrothe/Run-Escape` README with a comprehensive **Custom Edition Additions & Differences** section and AI Agent Directive at the top.
   - Moved `MULTIPLAYER_ARCHITECTURE.md`, `CHANGELOG.md`, and `AGENT_NOTES.md` into `docs/`.
   - Updated `src/game/ui/changelog.ts` (`../../../docs/CHANGELOG.md?raw`), `src/game/ui/ChangelogPanel.tsx` (`fetch("docs/CHANGELOG.md")`), `serve.py` (`allowed_exact` includes `/docs/CHANGELOG.md` and `/docs/changelog.md`), and `scripts/auto_sync_upstream.cjs` (`CHANGELOG_MD` and `AGENT_NOTES_MD` paths).
   - Updated all agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `README.md`, `assets/multiplayer.js`, `c:\Git\AGENTS.md`, `c:\Git\.agents\skills\merge-update\SKILL.md`) and internal doc links to reference `docs/AGENT_NOTES.md`, `docs/CHANGELOG.md`, and `docs/MULTIPLAYER_ARCHITECTURE.md`.
