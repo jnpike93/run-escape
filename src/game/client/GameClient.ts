@@ -4,6 +4,7 @@ import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
 import { RegionData, RegionDataInput } from "../../mapviewer/worker/RegionData";
 import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
 import massacre from "../../media/music/massacre.ogg";
+import { CUSTOM_MUSIC, TITLE_MUSIC } from "./custom/customMusic";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { CHARACTERS, getCharacter } from "../content/characters";
 import { redeemSecretCode } from "../content/custom/secretCodes";
@@ -85,6 +86,7 @@ const TITLE_MAP = MAPS[0];
 // Wiki
 const MUSIC: Record<string, string> = {
     Massacre: massacre,
+    ...CUSTOM_MUSIC,
 };
 
 // Title screen camera: lower and slowly circling the character (RS angle units
@@ -301,6 +303,7 @@ export class GameClient implements GameFrameHandler {
             this.store.set({ characterId: options.autostart });
             this.startRun();
         } else {
+            this.audio.playMusic(MUSIC[TITLE_MUSIC]);
             this.showScreen("title");
         }
     }
@@ -704,7 +707,7 @@ export class GameClient implements GameFrameHandler {
         window._hideOsrsPrayerBar?.();
         this.sim = undefined;
         this.paused = false;
-        this.audio.stopMusic();
+        this.audio.playMusic(MUSIC[TITLE_MUSIC]);
         this.grid = this.grids.get(TITLE_MAP.id)!;
         this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);

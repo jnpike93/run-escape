@@ -1,5 +1,29 @@
+import { FUN_MAPS } from "../fun/maps";
 import { MapDef } from "../types";
 import { RUN_LENGTH, paced } from "../waves";
+
+export const MAP_MUSIC_BY_ID: Record<string, string> = {
+    lumbridge: "Harmony",
+    barbarian_village: "Barbarianism",
+    barrows: "Dangerous Way",
+    wilderness: "Wilderness",
+    desert: "Arabian",
+    fremennik: "Rellekka",
+    karamja: "Jungle Troubles",
+    kourend: "March of the Shayzien",
+    varlamore: "Mistrock",
+    morytania: "The Curtain Closes",
+    god_wars: "Armageddon",
+    prifddinas: "Elven Seed",
+    inferno: "Inferno",
+    fight_caves: "Fire and Brimstone",
+    grand_exchange: "The Trade Parade",
+    east_varrock: "Adventure",
+    falador: "Massacre",
+    last_man_standing: "Last Man Standing",
+    castle_wars: "Melodrama",
+    pest_control: "Null and Void",
+};
 
 export const CUSTOM_MAPS: MapDef[] = [
     {
@@ -155,6 +179,12 @@ export function applyCustomMaps(maps: MapDef[]): void {
     for (const customMap of CUSTOM_MAPS) {
         if (customMap.id !== "barbarian_village") {
             maps.push(customMap);
+        }
+    }
+    for (const map of [...maps, ...FUN_MAPS]) {
+        const track = MAP_MUSIC_BY_ID[map.id];
+        if (track) {
+            map.music = track;
         }
     }
 }

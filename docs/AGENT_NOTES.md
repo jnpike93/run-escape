@@ -8,13 +8,13 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning (`FlowField.update`) & Async/Co-Op Music Autoplay Unlock
+### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning (`FlowField.update`), Async/Co-Op Music Autoplay Unlock & Full 20-Map OSRS Music Soundtrack
 
 **Model**: Gemini (Antigravity)
-**Commit**: `fd2c917` / `66dd60d` (and follow-up music fix commit - see git log)
-**Bundle**: `index-CwNzga-c.js` (`?v=8.6`, MapViewer `MapViewerApp-C1rwywj8.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-BCBypTwr.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+**Commit**: `fd2c917` / `66dd60d` / `54b73a5` (and full 20-map OSRS soundtrack commit - see git log)
+**Bundle**: `index-Ha2ZVZWw.js` (`?v=8.6`, MapViewer `MapViewerApp-DiGiAIvF.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-D4rA2rWo.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
 
-**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players, and fixed `GameAudio` music playback failing when started after async `loadGrid` or Co-Op WebSocket `start_run`.
+**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players, fixed `GameAudio` music playback failing when started after async `loadGrid` or Co-Op WebSocket `start_run`, and added authentic OSRS music tracks across the Title Screen and all 20 campaign and fun maps.
 
 **Changes implemented**:
 - **Root Cause & Fix (`src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
@@ -22,14 +22,19 @@
   - Passing `(tx, ty, sim.grid)` bound `grid` to the number `tx` and threw `TypeError: grid.isSolid is not a function` inside `canStep(grid, ...)` on every tick before `origStepEnemies()` or wave spawning could execute, leaving only the 5 manually spawned starter enemies frozen in place while `stepPlayer()` still let players walk through them.
   - Added `updateEntityFlowField(flowField, entity, force)` in `setupInGameHooks` which resolves solid tiles within `d = 1..3` (matching `Sim.updateFlowField()`) and invokes `flowField.update(sim.grid, tileX, tileY)` with the correct `(grid, targetX, targetY)` argument order.
   - Copied `peer.flowField.ditchY = sim.flowField.ditchY` when creating `peer.flowField`, initialized `poisonDamage: 0, poisonEnd: -1, lastHitTick: -999` on remote peer entities, and updated initial Host spawn `sim.flowField.update(sim.grid, ...)` after applying `SPAWN_OFFSETS`.
+- **Full OSRS Music Soundtrack (`src/game/client/custom/customMusic.ts`, `src/game/client/custom/customMusic.test.ts`, `src/game/content/custom/customMaps.ts`, `src/game/client/GameClient.ts`, `scripts/sync_dist.cjs`, `assets/music/*.ogg`)**:
+  - Added 20 compressed (`32 kHz` Vorbis `.ogg`) OSRS music tracks in `assets/music/*.ogg` (preserved in `scripts/sync_dist.cjs` `PRESERVED_ASSETS`) and assigned every campaign map, fun map, and the Title Screen its regional OSRS theme:
+    - Title Screen / Menus: `Scape Main`
+    - Campaign Maps: `Harmony` (Lumbridge), `Barbarianism` (Barbarian Village), `Dangerous Way` (Barrows), `Wilderness` (Wilderness), `Arabian` (Kharidian Desert), `Rellekka` (Fremennik Province), `Jungle Troubles` (Karamja), `March of the Shayzien` (Kourend), `Mistrock` (Varlamore), `The Curtain Closes` (Morytania), `Armageddon` (God Wars Dungeon), `Elven Seed` (Prifddinas), `Inferno` (The Inferno), `Fire and Brimstone` (Fight Caves)
+    - Fun Maps: `The Trade Parade` (Grand Exchange), `Adventure` (East Varrock), `Massacre` (Falador), `Last Man Standing` (Last Man Standing), `Melodrama` (Castle Wars), `Null and Void` (Pest Control)
 - **Music Playback & Settings Slider Fix (`src/game/client/GameAudio.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `server/serve.py`)**:
   - Started `this.audio.playMusic(music)` synchronously at the beginning of `GameClient.startRun()` before `await this.loadGrid(mapId)` so the browser's user-gesture activation is preserved on first-time map loads.
-  - Updated `GameAudio.unlock` and `GameAudio.setSettings` to resume `this.music.element.play()` if `this.music.element.paused && !this.settings.muted` (e.g., when a Co-Op run starts asynchronously via WebSocket `start_run`).
+  - Updated `GameAudio.unlock` and `GameAudio.setSettings` to resume `this.music.element.play()` if `this.music.element.paused && !this.settings.muted` (e.g., on the Title Screen or when a Co-Op run starts asynchronously via WebSocket `start_run`).
   - Enabled the `Music` volume slider on the main `Settings` screen (`<SoundSettings ui={ui} client={client} music />`) and added explicit `audio/ogg` MIME mapping in `server/serve.py`.
-- **Integration Tests (`src/custom/multiplayer/multiplayer.test.ts`)**:
-  - Added real-`Sim` Co-Op integration tests on Barrows across Regular (`1x`) and Nightmare (`3x`) difficulty verifying that wave monsters spawn continuously beyond the initial 5 rats, chase players via `FlowField`, deal contact damage, and broadcast via `sync_world`.
+- **Integration Tests (`src/custom/multiplayer/multiplayer.test.ts`, `src/game/client/custom/customMusic.test.ts`)**:
+  - Added real-`Sim` Co-Op integration tests on Barrows across Regular (`1x`) and Nightmare (`3x`) difficulty verifying that wave monsters spawn continuously beyond the initial 5 rats, chase players via `FlowField`, deal contact damage, and broadcast via `sync_world`, plus music coverage tests across all 20 maps.
 
-**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (409/409 passed across all 20 test suites), `npm run verify-slim-cache` (verified 3,529 groups), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (411/411 passed across all 21 test suites), `npm run verify-slim-cache` (verified 3,529 groups), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
 
 ---
 
