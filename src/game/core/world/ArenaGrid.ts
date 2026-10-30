@@ -51,6 +51,8 @@ export class ArenaGrid {
     // What blocks on each solid tile: a box, x0, y0, x1, y1 in tiles from the
     // tile's south-west corner
     private readonly boxes: Float32Array;
+    // Connected walkable component id per tile (-1 for solid tiles)
+    private readonly pieces: Int32Array;
 
     constructor(readonly data: RegionData) {
         this.baseX = data.baseX;
@@ -94,6 +96,7 @@ export class ArenaGrid {
                 }
             }
         }
+        this.pieces = this.findOpenPieces();
     }
 
     // The whole tile, but for objects a little less on each side that has open
@@ -302,6 +305,15 @@ export class ArenaGrid {
 
     isSolid(tileX: number, tileY: number): boolean {
         return (this.getFlags(tileX, tileY) & SOLID_FLAGS) !== 0;
+    }
+
+    getPiece(tileX: number, tileY: number): number {
+        const x = tileX - this.baseX;
+        const y = tileY - this.baseY;
+        if (x < 0 || y < 0 || x >= this.sizeX || y >= this.sizeY) {
+            return -1;
+        }
+        return this.pieces[x + y * this.sizeX];
     }
 
     // The box that blocks on a solid tile, in world tiles: a signpost's post,

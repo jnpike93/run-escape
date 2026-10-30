@@ -1332,7 +1332,7 @@ describe("enemy mechanics", () => {
     test("pickups dropped on unreachable or solid tiles slide onto the nearest reachable tile toward the player", () => {
         const sim = createSim();
         sim.weapons = [];
-        // openField() has a vertical wall at x = 1030, y = 1021..1049; player is at (1036.5, 1036.5)
+        // 1. Solid object/tree/rock tile: openField() has a vertical wall at x = 1030, y = 1021..1049; player is at (1036.5, 1036.5)
         expect(sim.grid.isSolid(1030, 1036)).toBe(true);
         sim.dropCasket(1030.5, 1036.5, false);
         const casket = sim.pickups[sim.pickups.length - 1];
@@ -1341,12 +1341,30 @@ describe("enemy mechanics", () => {
         expect(sim.grid.isSolid(Math.floor(casket.targetX!), Math.floor(casket.targetY!))).toBe(
             false,
         );
-        // After stepping, the casket glides out of the wall onto the reachable tile toward the player
+        // 2. Sub-tile edge clipping into adjacent obstacle (x = 1031.05 is within PLAYER_RADIUS = 0.35 of inset solid box at x = 1030.8)
+        sim.dropCasket(1031.05, 1036.5, false);
+        const edgeCasket = sim.pickups[sim.pickups.length - 1];
+        expect(edgeCasket.targetX).toBe(1031.5);
+        // 3. Stationary blocker (e.g. portal) at (1040.5, 1036.5)
+        const portalDef = variant("goblin", {
+            id: "test_portal",
+            stationary: true,
+            radius: 1.2,
+        });
+        sim.spawnEnemy(portalDef, "normal", { x: 1040.5, y: 1036.5 });
+        sim.dropCasket(1040.5, 1036.5, false);
+        const portalCasket = sim.pickups[sim.pickups.length - 1];
+        expect(portalCasket.targetX).toBeDefined();
+        expect(Math.hypot(portalCasket.targetX! - 1040.5, portalCasket.targetY! - 1036.5)).toBeGreaterThan(
+            1.2 + sim.player.radius,
+        );
+        // After stepping, all pickups glide onto reachable walkable positions
         play(sim, 1);
         expect(casket.targetX).toBeUndefined();
         expect(Math.floor(casket.x)).toBe(1031);
-        expect(sim.grid.isSolid(Math.floor(casket.x), Math.floor(casket.y))).toBe(false);
-        expect(sim.flowField.isReachable(Math.floor(casket.x), Math.floor(casket.y))).toBe(true);
+        expect(edgeCasket.targetX).toBeUndefined();
+        expect(edgeCasket.x).toBe(1031.5);
+        expect(portalCasket.targetX).toBeUndefined();
     });
 
     test("each faction's army comes from its own side", () => {

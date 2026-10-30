@@ -4674,20 +4674,52 @@ export class Sim {
         this.events.push({ type: "casketDropped", tier, x, y });
     }
 
-    private isTileReachableForPickup(tileX: number, tileY: number): boolean {
+    private isBlockedByStationaryEnemy(x: number, y: number): boolean {
+        for (const enemy of this.enemies) {
+            if (
+                !enemy.dead &&
+                enemy.def.stationary &&
+                Math.hypot(x - enemy.x, y - enemy.y) < enemy.radius + PLAYER_RADIUS
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private isPickupSpotReachable(x: number, y: number): boolean {
+        const tileX = Math.floor(x);
+        const tileY = Math.floor(y);
         if (!this.grid.contains(tileX, tileY) || this.grid.isSolid(tileX, tileY)) {
             return false;
         }
-        return !this.flowField.contains(tileX, tileY) || this.flowField.isReachable(tileX, tileY);
+        const playerPiece = this.grid.getPiece(this.flowField.targetX, this.flowField.targetY);
+        if (playerPiece >= 0 && this.grid.getPiece(tileX, tileY) !== playerPiece) {
+            return false;
+        }
+        if (this.flowField.contains(tileX, tileY) && !this.flowField.isReachable(tileX, tileY)) {
+            return false;
+        }
+        if (!isCircleFree(this.grid, x, y, PLAYER_RADIUS)) {
+            return false;
+        }
+        if (this.isBlockedByStationaryEnemy(x, y)) {
+            return false;
+        }
+        return true;
     }
 
-    // Finds the nearest reachable walkable spot for a pickup dropped over water,
-    // lava, chasms, or walls, preferring tiles closer to the player.
+    // Finds the nearest reachable walkable spot for a pickup dropped over trees,
+    // rocks, water, lava, chasms, walls, ditches, or stationary obstacles,
+    // preferring tiles closer to the player.
     private findReachablePickupSpot(x: number, y: number): { x: number; y: number } {
+        if (this.isPickupSpotReachable(x, y)) {
+            return { x, y };
+        }
         const startX = Math.floor(x);
         const startY = Math.floor(y);
-        if (this.isTileReachableForPickup(startX, startY)) {
-            return { x, y };
+        if (this.isPickupSpotReachable(startX + 0.5, startY + 0.5)) {
+            return { x: startX + 0.5, y: startY + 0.5 };
         }
         const player = this.player;
         const offsetX = (x - startX - 0.5) * 0.5;
@@ -4695,7 +4727,7 @@ export class Sim {
         let bestX = player.x;
         let bestY = player.y;
         let bestScore = Infinity;
-        for (let r = 1; r <= 16; r++) {
+        for (let r = 1; r <= 32; r++) {
             for (let dy = -r; dy <= r; dy++) {
                 for (let dx = -r; dx <= r; dx++) {
                     if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) {
@@ -4703,11 +4735,15 @@ export class Sim {
                     }
                     const tx = startX + dx;
                     const ty = startY + dy;
-                    if (!this.isTileReachableForPickup(tx, ty)) {
-                        continue;
+                    let cx = tx + 0.5 + offsetX;
+                    let cy = ty + 0.5 + offsetY;
+                    if (!this.isPickupSpotReachable(cx, cy)) {
+                        cx = tx + 0.5;
+                        cy = ty + 0.5;
+                        if (!this.isPickupSpotReachable(cx, cy)) {
+                            continue;
+                        }
                     }
-                    const cx = tx + 0.5 + offsetX;
-                    const cy = ty + 0.5 + offsetY;
                     const distDrop = Math.hypot(cx - x, cy - y);
                     const distPlayer = Math.hypot(cx - player.x, cy - player.y);
                     const score = distDrop + distPlayer * 0.25;
@@ -4837,7 +4873,7 @@ export class Sim {
             } else {
                 if (
                     pickup.targetX === undefined &&
-                    !this.isTileReachableForPickup(Math.floor(pickup.x), Math.floor(pickup.y))
+                    !this.isPickupSpotReachable(pickup.x, pickup.y)
                 ) {
                     const safe = this.findReachablePickupSpot(pickup.x, pickup.y);
                     pickup.targetX = safe.x;
