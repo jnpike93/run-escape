@@ -504,16 +504,67 @@ function getStartingWeaponIcon(character: CharacterDef): number {
     return weapon.levels[0].objId ?? weapon.iconObjId;
 }
 
-// Adventurers on the left and maps on the right, so the adventurer picked
-// stands in view between them
+// Step 1: Pick an adventurer (left panel: adventurer grid, right panel:
+// adventurer & starting weapon details). Step 2: Pick a map (left panel:
+// campaign & fun maps list, right panel: map details & unlock tasks), with the
+// 3D character standing in view between the panels on both screens.
 function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
+    const [step, setStep] = useState<"adventurer" | "map">("adventurer");
+    const [peekChar, setPeekChar] = useState<string>();
+    const [peekMap, setPeekMap] = useState<string>();
+    const activeChar = getCharacter(peekChar ?? ui.characterId);
+    const activeMap = getMap(peekMap ?? ui.mapId);
+    const selectedChar = getCharacter(ui.characterId);
+
+    if (step === "adventurer") {
+        return (
+            <div className="ui-fill ui-select">
+                <AdventurerPanel
+                    ui={ui}
+                    client={client}
+                    onPeek={setPeekChar}
+                />
+                <AdventurerDetailsPanel save={ui.save} character={activeChar} />
+                <div className="ui-panel rs-border rs-background ui-select-bar">
+                    <button className="ui-button" onClick={() => client.showScreen("title")}>
+                        Back
+                    </button>
+                    <Coins amount={ui.save.coins} />
+                    <button
+                        className="ui-button ui-button-go ui-select-go"
+                        onClick={() => {
+                            setPeekChar(undefined);
+                            setStep("map");
+                        }}
+                    >
+                        Select Map: {selectedChar.name} &rarr;
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
-            <MapPanel ui={ui} client={client} />
+            <MapPanel ui={ui} client={client} onPeek={setPeekMap} />
+            <MapDetailsPanel
+                save={ui.save}
+                map={activeMap}
+                character={selectedChar}
+                onBackToAdventurer={() => {
+                    setPeekMap(undefined);
+                    setStep("adventurer");
+                }}
+            />
             <div className="ui-panel rs-border rs-background ui-select-bar">
-                <button className="ui-button" onClick={() => client.showScreen("title")}>
-                    Back
+                <button
+                    className="ui-button"
+                    onClick={() => {
+                        setPeekMap(undefined);
+                        setStep("adventurer");
+                    }}
+                >
+                    &larr; Adventurer ({selectedChar.name})
                 </button>
                 <Coins amount={ui.save.coins} />
                 <EndlessSwitch ui={ui} client={client} />
@@ -569,9 +620,12 @@ function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
 // pointed at (or tapped, so a locked one can say what it takes) until the
 // pointer leaves the panel, then the one picked. Only moving the pointer
 // changes it: the list scrolling under a still pointer doesn't.
-function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
+function AdventurerPanel({
+    ui,
+    client,
+    onPeek,
+}: ScreenProps & { onPeek: (id: string | undefined) => void }): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
-    const [peek, setPeek] = useState<string>();
     const vChars = CHARACTERS.filter(
         (c) => !isSpecialCharacter(c.id) || unlocked.includes(c.id),
     );
@@ -590,9 +644,9 @@ function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                 }
                 aria-label={character.name}
                 aria-pressed={selected}
-                onMouseMove={() => setPeek(character.id)}
-                onFocus={() => setPeek(character.id)}
-                onBlur={() => setPeek(undefined)}
+                onMouseMove={() => onPeek(character.id)}
+                onFocus={() => onPeek(character.id)}
+                onBlur={() => onPeek(undefined)}
                 onClick={() => client.selectCharacter(character.id)}
             >
                 <ItemIcon
@@ -614,7 +668,7 @@ function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
     return (
         <div
             className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
-            onMouseLeave={() => setPeek(undefined)}
+            onMouseLeave={() => onPeek(undefined)}
         >
             <h2 className="ui-select-heading">
                 Adventurer
@@ -653,12 +707,11 @@ function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                     </div>
                 )}
             </div>
-            <AdventurerDetails save={ui.save} character={getCharacter(peek ?? ui.characterId)} />
         </div>
     );
 }
 
-function AdventurerDetails({
+function AdventurerDetailsPanel({
     save,
     character,
 }: {
@@ -666,35 +719,62 @@ function AdventurerDetails({
     character: CharacterDef;
 }): JSX.Element {
     const unlocked = save.unlockedCharacters.includes(character.id);
+    const weapon = getWeapon(character.startingWeapon);
     return (
-        <div className="ui-select-details">
-            <div className="ui-select-details-head">
-                <ItemIcon
-                    objId={(character as any).iconObjId ?? getStartingWeaponIcon(character)}
-                    size={36}
-                />
-                <div>
-                    <div className="ui-card-title">{character.name}</div>
-                    <div className="ui-card-style">
-                        {isSpecialCharacter(character.id)
-                            ? "Special"
-                            : STYLE_NAMES[character.style]}
+        <div className="ui-panel rs-border rs-background ui-select-panel ui-select-details-panel">
+            <h2 className="ui-select-heading">
+                Details
+                <span className="ui-select-count">
+                    {isSpecialCharacter(character.id) ? "Special" : STYLE_NAMES[character.style]}
+                </span>
+            </h2>
+            <div className="ui-select-details">
+                <div className="ui-select-details-head">
+                    <ItemIcon
+                        objId={(character as any).iconObjId ?? getStartingWeaponIcon(character)}
+                        size={36}
+                    />
+                    <div>
+                        <div className="ui-card-title">{character.name}</div>
+                        <div className="ui-card-style">
+                            {isSpecialCharacter(character.id)
+                                ? "Special"
+                                : STYLE_NAMES[character.style]}
+                        </div>
                     </div>
                 </div>
+                <div className="ui-card-text">{character.description}</div>
+                {!unlocked && character.unlock && (
+                    <div className="ui-card-cost">
+                        {describeUnlockTask(character.unlock)} to unlock
+                    </div>
+                )}
             </div>
-            <div className="ui-card-text">{character.description}</div>
-            {!unlocked && character.unlock && (
-                <div className="ui-card-cost">{describeUnlockTask(character.unlock)} to unlock</div>
-            )}
+            <div className="ui-select-details">
+                <div className="ui-select-details-head">
+                    <ItemIcon objId={getStartingWeaponIcon(character)} size={32} />
+                    <div>
+                        <div className="ui-card-title">
+                            {weapon.levels[0].name ?? weapon.name}
+                        </div>
+                        <div className="ui-card-style">Starting weapon</div>
+                    </div>
+                </div>
+                <div className="ui-card-text">{weapon.description}</div>
+            </div>
         </div>
     );
 }
 
 // The maps in the order they open, two to a row, the campaign's and then the
-// fun ones, with details pinned below like the adventurers'
-function MapPanel({ ui, client }: ScreenProps): JSX.Element {
+// fun ones, with details shown in the right-hand panel so the map list height
+// never changes when hovering different maps.
+function MapPanel({
+    ui,
+    client,
+    onPeek,
+}: ScreenProps & { onPeek: (id: string | undefined) => void }): JSX.Element {
     const save = ui.save;
-    const [peek, setPeek] = useState<string>();
     const beaten = MAPS.filter((m) => (save.mapVictories[m.id] ?? 0) > 0).length;
     const tile = (map: MapDef) => {
         const selected = map.id === ui.mapId;
@@ -707,9 +787,9 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                     (isMapUnlocked(save, map.id) ? "" : " ui-card-locked")
                 }
                 aria-pressed={selected}
-                onMouseMove={() => setPeek(map.id)}
-                onFocus={() => setPeek(map.id)}
-                onBlur={() => setPeek(undefined)}
+                onMouseMove={() => onPeek(map.id)}
+                onFocus={() => onPeek(map.id)}
+                onBlur={() => onPeek(undefined)}
                 onClick={() => client.selectMap(map.id)}
             >
                 <ItemIcon objId={map.iconObjId} size={20} />
@@ -722,8 +802,8 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
     };
     return (
         <div
-            className="ui-panel rs-border rs-background ui-select-panel ui-select-maps"
-            onMouseLeave={() => setPeek(undefined)}
+            className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
+            onMouseLeave={() => onPeek(undefined)}
         >
             <h2 className="ui-select-heading">
                 Map
@@ -744,7 +824,44 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                     <div className="ui-map-list">{FUN_MAPS.map(tile)}</div>
                 </div>
             </div>
-            <MapDetails save={save} map={getMap(peek ?? ui.mapId)} />
+        </div>
+    );
+}
+
+function MapDetailsPanel({
+    save,
+    map,
+    character,
+    onBackToAdventurer,
+}: {
+    save: SaveData;
+    map: MapDef;
+    character: CharacterDef;
+    onBackToAdventurer: () => void;
+}): JSX.Element {
+    return (
+        <div className="ui-panel rs-border rs-background ui-select-panel ui-select-details-panel">
+            <h2 className="ui-select-heading">
+                Map Info
+                <button
+                    type="button"
+                    className="ui-select-count"
+                    style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        color: "#ff981f",
+                        fontFamily: "inherit",
+                    }}
+                    onClick={onBackToAdventurer}
+                >
+                    Adventurer: {character.name} (change)
+                </button>
+            </h2>
+            <div className="ui-select-scroll">
+                <MapDetails save={save} map={map} />
+            </div>
         </div>
     );
 }

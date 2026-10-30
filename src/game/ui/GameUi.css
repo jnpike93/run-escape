@@ -504,13 +504,15 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 .ui-select-panel > .ui-select-details {
     flex-shrink: 0;
 }
 
-.ui-select-maps {
+.ui-select-maps,
+.ui-select-details-panel {
     grid-column: 3;
 }
 

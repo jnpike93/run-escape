@@ -6,7 +6,7 @@ export const CUSTOM_CHARACTERS: CharacterDef[] = [
         id: "penance_fighter",
         name: "Penance fighter",
         description:
-            "A Barbarian Assault veteran in a Fighter torso, Berserker helm, and Penance gear. Starts with a bronze battleaxe. +15% melee damage, +10% attack speed, +0.5 flat damage reduction, and +5% movement speed.",
+            "A Barbarian Assault veteran in a Fighter torso, Berserker helm, and Penance gear. Starts with a bronze battleaxe. +10% melee damage, +10% attack speed, +0.5 flat damage reduction, and +5% movement speed.",
         style: "melee",
         startingWeapon: "battleaxe",
         equipment: {
@@ -16,7 +16,7 @@ export const CUSTOM_CHARACTERS: CharacterDef[] = [
             [EquipSlot.HANDS]: 10553,
             [EquipSlot.FEET]: 10552,
         },
-        bonus: { meleeMight: 0.15, cooldown: 0.1, armor: 0.5, moveSpeed: 0.05 },
+        bonus: { meleeMight: 0.1, cooldown: 0.1, armor: 0.5, moveSpeed: 0.05 },
         unlock: { kind: "beatMap", mapId: "barbarian_village" },
     },
     {
