@@ -187,6 +187,9 @@ export class GameSounds {
                 case "revive":
                     audio.play(SOUNDS.revive, { volume: 1 });
                     break;
+                case "evolved":
+                    audio.play(SOUNDS.evolve, { volume: 1 });
+                    break;
             }
         }
     }

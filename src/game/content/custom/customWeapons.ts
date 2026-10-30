@@ -11,6 +11,16 @@ function levels(
     return result;
 }
 
+function evolvedLevels(
+    first: Omit<WeaponLevel, "description"> & { description: string },
+): WeaponLevel[] {
+    return levels(
+        first,
+        { damage: Math.round(first.damage * 1.15), description: "+15% damage." },
+        { damage: Math.round(first.damage * 1.3), description: "+15% damage." },
+    );
+}
+
 const BATTLEAXES = [1375, 1363, 1365, 1367, 1369, 1371, 1373, 1377];
 
 export const CUSTOM_WEAPONS: WeaponDef[] = [
@@ -117,7 +127,7 @@ export const CUSTOM_WEAPONS: WeaponDef[] = [
             spotAnim: 1292,
             effect: { kind: "drain", amount: 0.3, seconds: 8 },
         },
-        levels: levels({
+        levels: evolvedLevels({
             name: "Leaf-bladed battleaxe",
             damage: 35,
             cooldown: 1.2,
@@ -127,7 +137,7 @@ export const CUSTOM_WEAPONS: WeaponDef[] = [
             pierce: 0,
             speed: 0,
             duration: 0,
-            knockback: 1.1,
+            knockback: 1.3,
             objId: 20727,
             description: "Evolved from the dragon battleaxe with Protect from Melee.",
         }),

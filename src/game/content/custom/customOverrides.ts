@@ -213,6 +213,10 @@ export function applyCustomGear(casketGear: GearDef[]): void {
 }
 
 const PASSIVE_OVERRIDES: Record<string, Partial<PassiveDef>> = {
+    chivalry: {
+        // Slim cache only includes Piety sprite 946, so use Holy symbol iconObjId 1718
+        iconSpriteId: undefined,
+    },
     piety: {
         description: "Increases all weapon damage.",
     },
@@ -406,6 +410,18 @@ const WEAPON_OVERRIDES: Record<string, WeaponOverride> = {
                 knockback: 0.35,
                 description:
                     "Evolved from Blood Burst. Massive crimson barrage that drains up to 2 HP per hit.",
+            },
+            1: {
+                damage: 44,
+                cooldown: 1.1,
+                knockback: 0.35,
+                description: "+15% damage.",
+            },
+            2: {
+                damage: 49,
+                cooldown: 1.1,
+                knockback: 0.35,
+                description: "+15% damage.",
             },
         },
     },

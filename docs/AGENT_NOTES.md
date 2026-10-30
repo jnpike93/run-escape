@@ -8,6 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Merge Upstream `0.15.0` - `0.17.0` (`efc49f6`) & Add Slim-Cache Overrides for New Weapons, Evolutions & Sequences
+
+**Model**: Gemini (Antigravity)
+**Commit**: (pending - see git log)
+**Bundle**: `index-DSKGIPvH.js` (`?v=8.5`, MapViewer `MapViewerApp-8YMVHdhe.js`, Worker `RenderDataWorker-CfhowBko.js`, WASM loader `module-Dy8rI3c4.js`, styles `index-C3aiJD4m.css`)
+
+**Scope**: Merged upstream `main` (`b29f532..efc49f6`, releases `0.15.0`, `0.16.0`, and `0.17.0`) into `main`, integrating the new Collection Log screen, 9 new weapon evolutions (3-level evolved weapons), Thunder khopesh, Dinh's bulwark, Chivalry passive, Smithing/Crafting/Woodcutting skills, level-up Skip button (`X`), post-run weapon Damage/Kills/DPS breakdown, and weapon stat lines, while preserving all custom maps (`barbarian_village`, `fight_caves`), adventurers (`penance_fighter`, `dipper`, `elias`), 2-step Adventurer/Map selection UI, Co-Op Multiplayer, Leaderboard/Top Score system, and slim-cache compatibility.
+
+**Changes implemented**:
+- **Upstream Conflict Resolution (`CLAUDE.md`, `package.json`, `src/game/client/GameClient.ts`, `src/game/client/GameStore.ts`, `src/game/core/Sim.ts`, `src/game/core/save.ts`, `src/game/ui/GameUi.tsx`)**:
+  - Updated `package.json` version to `0.17.0` while retaining custom `build` (`vite build && node scripts/sync_dist.cjs`) and `sync-upstream` scripts.
+  - Merged `Screen` (`"leaderboard" | "collectionLog"`), `SlotView` (`desc`, `stats`, `evolution`), and `GameStore` audio/display defaults in `GameStore.ts` and `GameClient.ts`.
+  - Merged `this.damageTaken += amount;` with `slot: player.slot` in `Sim.stepPoison()`, and retained `MAX_CASKETS` clamping alongside `evolutionsMade` migration in `save.ts` (`SAVE_VERSION = 7`).
+  - Merged `CollectionLogScreen`, `SkipButton`, `.ui-slot-tip` rich weapon/evolution tooltips, and the 2-column `ResultModal` (with Bosses and Damage/Kills/DPS tables alongside `Run points`, `CoopDamageLeaderboardTable`, and `CoopGameOverButtons`) in `GameUi.tsx`, and added `<ChoiceStats stats={weaponStats(weapon, weapon.levels[0])} />` to `AdventurerDetailsPanel`.
+- **3-Level Evolved Weapons & Knockback Alignment (`src/game/content/custom/customWeapons.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Updated `leaf_bladed_battleaxe` (`knockback: 1.3`, 3 levels via `evolvedLevels`: `35 -> 40 -> 46` damage) and `blood_barrage` (`38 -> 44 -> 49` damage) to match upstream `0.17.0`'s 3-level evolved weapon standard and knockback progression invariant.
+- **Slim-Cache Compatibility for Upstream `0.16.0` - `0.17.0` Assets (`src/rs/config/objtype/ObjType.ts`, `src/rs/config/spotanimtype/SpotAnimType.ts`, `src/rs/config/seqtype/SeqType.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Added `ObjType.post()` slim-cache model & recolor mappings for all 11 new `0.16.0` - `0.17.0` weapons/evolutions (`25739` Sanguine Scythe of Vitur, `26233` Ancient godsword, `29577` Burning claws, `21003` Elder maul, `21015` Dinh's bulwark, `28682` Dinh's blazing bulwark, `30388` Thunder khopesh, `28540` Corrupted twisted bow, `28547` Corrupted tumeken's shadow, `24425` Eldritch Nightmare staff, `25731` Holy sanguinesti staff).
+  - Added `SpotAnimType.post()` slim-cache model & sequence mappings for `1171` (Burning claws special), `559` (Thunder khopesh special), and `1197` (Kree'arra ranged projectile).
+  - Added `SeqType.post()` slim-cache frame mappings for new player attack sequences `9171`, `7514`, `7511`, `7516`, and `3157`, and set `chivalry.iconSpriteId = undefined` in `PASSIVE_OVERRIDES` (falling back to Holy symbol `iconObjId: 1718`) so `RenderDataWorker` loads with zero missing-archive errors on `osrs-241_2026-09-30-slim-74e0d2b3`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-10-30] Add Barbarian Village Campaign Map, 5 Bosses, Penance Fighter Adventurer, Boss Weapons, Slim-Cache Model Overrides & 2-Step Adventurer/Map Select
 
 **Model**: Gemini (Antigravity)

@@ -130,6 +130,8 @@ export type Enemy = {
     venom: number;
     venomNext: number;
     venomEnd: number;
+    // What envenomed it, for the run's stats
+    venomSource?: DamageSource;
     flash: number;
     dead: boolean;
     // Tick it died, for the death animation and fade
@@ -356,6 +358,24 @@ export type ActivePowerUp = {
     endTick: number;
 };
 
+// What dealt some damage, for the run's stats: a weapon, a utility item or a
+// power-up by id, the Ring of recoil, or something else
+export type DamageSource =
+    | `weapon:${string}`
+    | `item:${string}`
+    | `powerUp:${string}`
+    | "recoil"
+    | "other";
+
+// A projectile's weapon, or else the power-up that fired it: a cannon's
+// cannonballs, or a thrall's
+export function projectileSource(projectile: Projectile): DamageSource {
+    if (projectile.weapon) {
+        return `weapon:${projectile.weapon.id}`;
+    }
+    return projectile.kind === "cannonball" ? "powerUp:cannon" : "powerUp:thrall";
+}
+
 export type WeaponState = {
     def: WeaponDef;
     // 1-based
@@ -371,6 +391,8 @@ export type WeaponState = {
 // often until endTick
 export type GroundFire = {
     uid: number;
+    // The weapon that left it, for the run's stats
+    source: DamageSource;
     x: number;
     y: number;
     radius: number;
@@ -484,6 +506,7 @@ export type SimEvent =
     // Something the player should know about, on screen for a moment (a
     // shield dropping, a boss's big attack coming)
     | { type: "notice"; message: string }
+    | { type: "evolved"; weaponId: string }
     | { type: "revive" }
     | { type: "casketDropped"; tier: CasketTier; x: number; y: number }
     // A casket was picked up and opened; the run waits for a decision

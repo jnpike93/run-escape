@@ -571,6 +571,72 @@ export class ObjType extends Type {
                 this.recolorFrom = [55180, 28];
                 this.recolorTo = [924, 8390];
                 break;
+            case 25739: // Sanguine Scythe of Vitur
+                this.maleModel = 35371;
+                this.model = 35742;
+                this.recolorFrom = [16, 24, 536, 28, 78, 790, 796, 784];
+                this.recolorTo = [924, 920, 933, 916, 943, 924, 933, 916];
+                break;
+            case 26233: // Ancient godsword
+                this.maleModel = 27653;
+                this.model = 28060;
+                this.recolorFrom = [26, 920, 35, 30, 43059, 43092];
+                this.recolorTo = [49189, 47275, 51111, 49189, 43117, 10388];
+                break;
+            case 29577: // Burning claws
+                this.maleModel = 29191;
+                this.model = 32784;
+                this.recolorFrom = [929, 922, 918, 914];
+                this.recolorTo = [6080, 5056, 7104, 8128];
+                break;
+            case 21003: // Elder maul
+                this.maleModel = 9344;
+                this.model = 9351;
+                this.recolorFrom = [24, 8, 33];
+                this.recolorTo = [10318, 924, 10334];
+                break;
+            case 21015: // Dinh's bulwark
+                this.maleModel = 26423;
+                this.model = 26457;
+                this.recolorFrom = [74, 41, 37, 49, 33, 57];
+                this.recolorTo = [10398, 10518, 8128, 10398, 10518, 7104];
+                break;
+            case 28682: // Dinh's blazing bulwark
+                this.maleModel = 26423;
+                this.model = 26457;
+                this.recolorFrom = [74, 41, 37, 49, 33, 57];
+                this.recolorTo = [6080, 924, 7104, 5056, 920, 8128];
+                break;
+            case 30388: // Thunder khopesh
+                this.maleModel = 6031;
+                this.model = 6033;
+                this.recolorFrom = [37, 933, 935];
+                this.recolorTo = [8128, 37999, 43129];
+                break;
+            case 28540: // Corrupted twisted bow
+                this.maleModel = 32674;
+                this.model = 32799;
+                this.recolorFrom = [24, 16, 8, 33, 13223, 10318, 10334, 14236];
+                this.recolorTo = [924, 920, 912, 933, 960, 10398, 10518, 943];
+                break;
+            case 28547: // Corrupted tumeken's shadow
+                this.maleModel = 45281;
+                this.model = 46465;
+                this.recolorFrom = [7116, 4044, 7099, 941, 3001, 6082, 908, 8152];
+                this.recolorTo = [924, 920, 933, 49189, 916, 47275, 960, 51111];
+                break;
+            case 24425: // Eldritch Nightmare staff
+                this.maleModel = 39058;
+                this.model = 39070;
+                this.recolorFrom = [61718, 61838, 61598];
+                this.recolorTo = [22424, 22416, 21526];
+                break;
+            case 25731: // Holy sanguinesti staff
+                this.maleModel = 35372;
+                this.model = 35744;
+                this.recolorFrom = [3127, 24, 28, 156, 20, 3140, 49, 142];
+                this.recolorTo = [8128, 10351, 11177, 37999, 10351, 7104, 127, 37999];
+                break;
         }
     }
 }

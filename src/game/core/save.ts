@@ -12,6 +12,7 @@ import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
 import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
+import { WEAPONS } from "../content/weapons";
 import {
     LevelPointsBreakdown,
     MapBestRecord,
@@ -48,7 +49,8 @@ export {
 // 4: endless records
 // 5: gear found, and the Armoury's upgrades
 // 6: quests, and the kills and caskets they count
-export const SAVE_VERSION = 6;
+// 7: evolutions made, for the Collection log
+export const SAVE_VERSION = 7;
 
 // Characters taken out of the game for now; saves keep them unlocked for when
 // they're back
@@ -87,6 +89,8 @@ export type SaveData = {
     casketsOpened: number;
     // Ids of the quests done (and paid out)
     questsDone: string[];
+    // The weapons evolved into at least once
+    evolutionsMade: string[];
 };
 
 // The round reached, and how long the run lasted
@@ -115,6 +119,7 @@ export function createSave(): SaveData {
         enemyKills: {},
         casketsOpened: 0,
         questsDone: [],
+        evolutionsMade: [],
     };
 }
 
@@ -203,6 +208,13 @@ export function migrateSave(raw: unknown): SaveData {
     }
     const MAX_CASKETS = 100000;
     save.casketsOpened = Math.min(MAX_CASKETS, Math.max(0, Math.floor(num(data.casketsOpened, 0))));
+    if (Array.isArray(data.evolutionsMade)) {
+        for (const id of data.evolutionsMade) {
+            if (WEAPONS.some((w) => w.id === id) && !save.evolutionsMade.includes(id)) {
+                save.evolutionsMade.push(id);
+            }
+        }
+    }
     if (Array.isArray(data.questsDone)) {
         for (const id of data.questsDone) {
             if (QUEST_BY_ID.has(id) && !save.questsDone.includes(id)) {
@@ -297,6 +309,7 @@ export type RunSummary = {
     bossesKilled: string[];
     // The gear that came out of caskets, as found
     gearFound?: string[];
+    evolutionsMade?: string[];
     // For quests: enemy id -> times killed, and reward caskets opened
     enemyKills?: Record<string, number>;
     caskets?: number;
@@ -322,6 +335,11 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
     for (const id of run.gearFound ?? []) {
         if (isCasketGear(id) && !save.foundGear.includes(id)) {
             save.foundGear.push(id);
+        }
+    }
+    for (const id of run.evolutionsMade ?? []) {
+        if (!save.evolutionsMade.includes(id)) {
+            save.evolutionsMade.push(id);
         }
     }
     const tallies = getQuestTallies(run);

@@ -33,7 +33,12 @@ export type StatKey =
     | "bossMight"
     // Damage multiplier bonus for each level gained in the run (so it grows
     // as the run goes on), on top of might
-    | "levelMight";
+    | "levelMight"
+    // Melee weapons' knockback multiplier bonus
+    | "meleeKnockback"
+    // Slots on top of the usual ones, bought in the shop
+    | "weaponSlots"
+    | "passiveSlots";
 
 export type Stats = Record<StatKey, number>;
 
@@ -63,6 +68,9 @@ export function emptyStats(): Stats {
         auraArea: 0,
         bossMight: 0,
         levelMight: 0,
+        meleeKnockback: 0,
+        weaponSlots: 0,
+        passiveSlots: 0,
     };
 }
 
@@ -561,13 +569,19 @@ export type SpecialAttackDef = {
     spotAnim: number;
     // Cache sound effect, the weapon's when unset
     sound?: number;
+    // Hits everything within this many tiles all round the player (more with
+    // area), not just what the swing reaches, with impactSpotAnim on each
+    aoe?: { radius: number; impactSpotAnim?: number };
     effect?: // What it hits can't move for a while (bosses shrug it off)
         | { kind: "freeze"; seconds: number }
         // Heals the player by this fraction of the damage dealt, up to max
         | { kind: "heal"; fraction: number; max: number }
         // What it hits takes this much more damage from everything for a while
         // (0.25 = +25%)
-        | { kind: "drain"; amount: number; seconds: number };
+        | { kind: "drain"; amount: number; seconds: number }
+        // Sets what it hits burning: this fraction of the hit's damage every
+        // second for seconds
+        | { kind: "burn"; damage: number; seconds: number };
 };
 
 export type PassiveDef = {
