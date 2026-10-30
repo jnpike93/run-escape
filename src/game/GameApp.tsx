@@ -137,11 +137,37 @@ export function GameApp(): JSX.Element {
                 }
                 created = gameClient;
                 loaded.renderer.game = gameClient;
-                (window as any).gameClient = gameClient;
-                setClient(gameClient);
+                // Bridge for multiplayer.js - minimal surface exposed in all builds.
+                // TODO(M-1): Move this to a typed globals.d.ts bridge interface and
+                //   gate `window.gameClient` behind DEV once mp-transport.js and all
+                //   mp-*.js modules are updated to read from `window._gameClientBridge`
+                //   instead of `window.gameClient` directly.
+                (window as any)._gameClientBridge = {
+                    get sim() { return gameClient.sim; },
+                    get assets() { return (gameClient as any).assets; },
+                    get store() { return gameClient.store; },
+                    get sounds() { return (gameClient as any).sounds; },
+                    get save() { return gameClient.save; },
+                    get accumulator() { return (gameClient as any).accumulator; },
+                    set accumulator(v: number) { (gameClient as any).accumulator = v; },
+                    get paused() { return (gameClient as any).paused; },
+                    set paused(v: boolean) { (gameClient as any).paused = v; },
+                    finishRun: () => (gameClient as any).finishRun(),
+                    updateHud: (v: boolean) => (gameClient as any).updateHud(v),
+                    redeemCode: (c: string) => gameClient.redeemCode(c),
+                    leaveRun: () => (gameClient as any).leaveRun(),
+                    syncOverlay: () => (gameClient as any).syncOverlay(),
+                    getSimAppearance: (sim: any) => (gameClient as any).getSimAppearance(sim),
+                };
+                // Keep window.gameClient for multiplayer.js compatibility until all
+                // mp-*.js modules migrate to _gameClientBridge.
                 if (import.meta.env.DEV) {
+                    (window as any).gameClient = gameClient;
                     (window as any).game = gameClient;
+                } else {
+                    (window as any).gameClient = gameClient;
                 }
+                setClient(gameClient);
             })
             .catch((e) => {
                 console.error(e);

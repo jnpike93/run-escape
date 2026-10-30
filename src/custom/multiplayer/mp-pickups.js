@@ -15,8 +15,10 @@ export const mpPickupsMethods = {
             const gained = Number.isFinite(Number(msg.xpGained)) && Number(msg.xpGained) > 0
                 ? Number(msg.xpGained)
                 : val * (1 + (this.getLobbyGrowthMultiplier ? this.getLobbyGrowthMultiplier(sim) : (sim.stats?.growth || 0)));
-            sim.xp = Number.isFinite(Number(msg.totalXp))
-                ? Math.max(sim.xp + gained, Number(msg.totalXp))
+            const MAX_RUN_XP = 1e9;
+            const hostXp = Number.isFinite(Number(msg.totalXp)) ? Math.min(MAX_RUN_XP, Math.max(0, Number(msg.totalXp))) : NaN;
+            sim.xp = Number.isFinite(hostXp)
+                ? Math.max(sim.xp + gained, hostXp)
                 : (sim.xp + gained);
             client.sounds?.onEvents(sim, [{ type: 'pickup', kind, value: val || 1 }]);
             sim.checkLevelUp();
@@ -40,7 +42,8 @@ export const mpPickupsMethods = {
             client.updateHud(true);
         } else if (kind === 'coins') {
             if (val <= 0) return;
-            sim.coins += Math.round(val * (1 + (sim.stats?.greed || 0)));
+            const safeVal = Math.min(50000, Math.max(0, Math.round(Number(msg.value || 0))));
+            sim.coins += Math.round(safeVal * (1 + (sim.stats?.greed || 0)));
             client.sounds?.onEvents(sim, [{ type: 'pickup', kind: 'coins', value: val }]);
             client.updateHud(false);
         } else if (kind === 'food') {

@@ -14,12 +14,12 @@
         const hostname = window.location?.hostname || '';
         if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
         try {
-            if (new URLSearchParams(window.location.search).has('debug')) return true;
-        } catch {}
-        try {
             const raw = localStorage.getItem('run-escape:save');
-            if (raw && raw.includes('l33th4x0r')) return true;
-        } catch {}
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed?.unlockedCodes) && parsed.unlockedCodes.includes('l33th4x0r')) return true;
+            }
+        } catch (_) { /* ignore parse errors */ }
         if (window.gameClient?.save?.unlockedCodes?.includes?.('l33th4x0r')) return true;
         return false;
     }

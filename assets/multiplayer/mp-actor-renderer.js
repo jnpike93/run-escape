@@ -198,7 +198,8 @@ export const mpActorRendererMethods = {
             p2.maxHp = newMaxHp;
         }
         if (Number.isFinite(Number(msg.hpDelta)) && Number(msg.hpDelta) !== 0) {
-            p2.hp = Math.max(1, Math.min(p2.maxHp, Math.round(p2.hp + Number(msg.hpDelta))));
+            const clampedDelta = Math.max(-200, Math.min(200, Math.round(Number(msg.hpDelta))));
+            p2.hp = Math.max(0, Math.min(p2.maxHp, Math.round(p2.hp + clampedDelta)));
         } else if (msg.healed && Number.isFinite(Number(msg.hp))) {
             p2.hp = Math.max(p2.hp, Math.min(p2.maxHp, Math.round(Number(msg.hp))));
         }
@@ -260,7 +261,12 @@ export const mpActorRendererMethods = {
                     if (!w || typeof w.id !== 'string') continue;
                     const cleanId = w.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
                     sim.weapons = [];
-                    sim.addWeapon(cleanId, Math.min(5, Math.max(0, Number(w.bonus) || 0)));
+                    try {
+                        sim.addWeapon(cleanId, Math.min(0.5, Math.max(0, Number(w.bonus) || 0)));
+                    } catch (addErr) {
+                        console.warn(`[Multiplayer] Unknown weapon id "${cleanId}" for slot ${senderSlot}:`, addErr);
+                        continue;
+                    }
                     if (sim.weapons.length > 0) {
                         const inst = sim.weapons[0];
                         inst.level = Math.max(1, Math.min(99, Math.round(Number(w.level) || 1)));

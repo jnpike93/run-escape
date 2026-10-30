@@ -134,7 +134,7 @@ const PEER_STAT_BOUNDS = {
     area: [-0.9, 3],
     speed: [-0.9, 3],
     amount: [0, 8],
-    duration: [-0.9, 3],
+    duration: [-0.9, 10.0],
     luck: [-0.9, 5],
     growth: [-0.9, 5],
     greed: [-0.9, 5],
@@ -142,7 +142,14 @@ const PEER_STAT_BOUNDS = {
     armor: [-10, 25],
     regen: [0, 50],
     maxHp: [-0.9, 5],
-    thorns: [0, 50]
+    thorns: [0, 50],
+    healChance: [0, 1.0],
+    healOnKill: [0, 200],
+    critChance: [0, 1.0],
+    critDamage: [0, 5.0],
+    pierce: [0, 20],
+    split: [0, 10],
+    bounces: [0, 10]
 };
 
 export function sanitizePeerStats(raw) {

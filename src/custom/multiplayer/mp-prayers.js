@@ -109,20 +109,35 @@ export function updateOsrsPrayerBarUI() {
     });
 }
 
-let _cheatKeyBuffer = '';
-window.l33th4x0r = function() {
-    const client = window.gameClient || window._client;
-    if (client && typeof client.redeemCode === 'function') {
-        const res = client.redeemCode('l33th4x0r');
-        const mp = _mpInstance || window.multiplayer;
-        if (mp) {
-            mp.hostUnlockedCharacters = mp.readLocalSaveUnlockedCharacters();
-            mp.updateLobbyUI?.();
+const _isDebugAllowed = () => {
+    const hostname = window.location?.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    try {
+        const raw = localStorage.getItem('run-escape:save');
+        if (raw) {
+            const p = JSON.parse(raw);
+            if (Array.isArray(p?.unlockedCodes) && p.unlockedCodes.includes('l33th4x0r')) return true;
         }
-        return res;
-    }
-    return false;
+    } catch (_) {}
+    return !!(window.gameClient?.save?.unlockedCodes?.includes?.('l33th4x0r'));
 };
+
+let _cheatKeyBuffer = '';
+if (_isDebugAllowed()) {
+    window.l33th4x0r = function() {
+        const client = window.gameClient || window._client;
+        if (client && typeof client.redeemCode === 'function') {
+            const res = client.redeemCode('l33th4x0r');
+            const mp = _mpInstance || window.multiplayer;
+            if (mp) {
+                mp.hostUnlockedCharacters = mp.readLocalSaveUnlockedCharacters();
+                mp.updateLobbyUI?.();
+            }
+            return res;
+        }
+        return false;
+    };
+}
 
 let _mpInstance = null;
 let _prayerKeydownInitialized = false;

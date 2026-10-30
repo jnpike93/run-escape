@@ -111,7 +111,20 @@ export class Archive {
             buffer.offset = buffer.length - 1;
             const chunks = buffer.readUnsignedByte();
 
+            const MAX_CHUNKS = 1024;
+            const MAX_FILES = 65536;
+            if (chunks > MAX_CHUNKS || fileCount > MAX_FILES) {
+                throw new Error(
+                    `Archive: implausible dimensions chunks=${chunks} fileCount=${fileCount}`,
+                );
+            }
+
             buffer.offset = buffer.length - 1 - chunks * (fileCount * 4);
+            if (buffer.offset < 0) {
+                throw new Error(
+                    `Archive: corrupt chunk table (chunks=${chunks}, fileCount=${fileCount})`,
+                );
+            }
 
             const chunkSizes = new Int32Array(chunks * fileCount);
             const fileSizes = new Int32Array(fileCount);

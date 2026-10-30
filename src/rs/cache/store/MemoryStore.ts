@@ -78,6 +78,12 @@ export class MemoryStore implements CacheStore<ApiType.SYNC> {
         );
         const sectorCluster = SectorCluster.decode(sectorClusterBuf);
 
+        const MAX_ARCHIVE_SIZE = 32 * 1024 * 1024; // 32 MB
+        if (sectorCluster.size > MAX_ARCHIVE_SIZE) {
+            throw new Error(
+                `Archive size ${sectorCluster.size} exceeds maximum ${MAX_ARCHIVE_SIZE}`,
+            );
+        }
         const data = new Int8Array(sectorCluster.size);
         let chunk = 0;
         let remaining = sectorCluster.size;

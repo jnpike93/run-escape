@@ -631,5 +631,80 @@ class TestWebSocketMasking(unittest.TestCase):
             unmasked = unmask_payload(masked, mask)
             self.assertEqual(unmasked, original)
 
+from serve import GUEST_ALLOWED_MSG_TYPES, HOST_ALLOWED_MSG_TYPES, CustomHandler
+
+class TestSecurityFixes(unittest.TestCase):
+    def test_options_returns_204(self):
+        """M-13: do_OPTIONS must return 204 No Content."""
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.client_address = ("127.0.0.1", 12345)
+        handler.requestline = "OPTIONS / HTTP/1.1"
+        handler.command = "OPTIONS"
+        handler.request_version = "HTTP/1.1"
+        handler.protocol_version = "HTTP/1.1"
+        handler.headers = {}
+        responses_sent = []
+        headers_sent = {}
+
+        def mock_send_response(code, message=None):
+            handler._response_code = code
+            responses_sent.append(code)
+
+        def mock_send_header(key, value):
+            headers_sent[key] = value
+
+        def mock_end_headers():
+            pass
+
+        handler.send_response = mock_send_response
+        handler.send_header = mock_send_header
+        handler.end_headers = mock_end_headers
+        handler.do_OPTIONS()
+        self.assertIn(204, responses_sent)
+
+    def test_x_real_ip_non_ip_falls_back(self):
+        """M-14: X-Real-IP with a non-IP value must fall back to direct connection IP."""
+        from serve import CustomHandler
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.client_address = ("127.0.0.1", 12345)
+
+        class FakeHeaders(dict):
+            def get(self, key, default=None):
+                return self[key] if key in self else default
+
+        handler.headers = FakeHeaders({"X-Real-IP": "javascript:alert(1)"})
+        ip = handler._get_client_ip()
+        self.assertEqual(ip, "127.0.0.1")
+
+    def test_x_real_ip_valid_passes_through(self):
+        """M-14: Valid X-Real-IP should be forwarded."""
+        from serve import CustomHandler
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.client_address = ("127.0.0.1", 12345)
+
+        class FakeHeaders(dict):
+            def get(self, key, default=None):
+                return self[key] if key in self else default
+
+        handler.headers = FakeHeaders({"X-Real-IP": "203.0.113.42"})
+        ip = handler._get_client_ip()
+        self.assertEqual(ip, "203.0.113.42")
+
+    def test_server_header_does_not_contain_python(self):
+        """L-6: Server header must not leak 'Python'."""
+        handler = CustomHandler.__new__(CustomHandler)
+        version_string = getattr(handler, "server_version", "") + getattr(handler, "sys_version", "")
+        self.assertNotIn("Python", version_string)
+        self.assertNotIn("python", version_string.lower())
+
+    def test_coop_debug_not_in_guest_allowed(self):
+        """H-1: GUEST_ALLOWED_MSG_TYPES must not contain 'coop_debug'."""
+        self.assertNotIn("coop_debug", GUEST_ALLOWED_MSG_TYPES)
+
+    def test_coop_debug_in_host_allowed(self):
+        """H-1: HOST_ALLOWED_MSG_TYPES must still contain 'coop_debug'."""
+        self.assertIn("coop_debug", HOST_ALLOWED_MSG_TYPES)
+
+
 if __name__ == "__main__":
     unittest.main()

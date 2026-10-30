@@ -183,7 +183,8 @@ export function migrateSave(raw: unknown): SaveData {
             }
         }
     }
-    save.casketsOpened = Math.max(Math.floor(num(data.casketsOpened, 0)), 0);
+    const MAX_CASKETS = 100000;
+    save.casketsOpened = Math.min(MAX_CASKETS, Math.max(0, Math.floor(num(data.casketsOpened, 0))));
     if (Array.isArray(data.questsDone)) {
         for (const id of data.questsDone) {
             if (QUEST_BY_ID.has(id) && !save.questsDone.includes(id)) {

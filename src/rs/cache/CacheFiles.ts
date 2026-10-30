@@ -300,7 +300,7 @@ async function fetchCachedFile(
     const headers: HeadersInit = {};
 
     if (offset > 0) {
-        headers["Range"] = `bytes=${offset}-${Number.MAX_SAFE_INTEGER}`;
+        headers["Range"] = `bytes=${offset}-`;
     }
 
     const resp = await fetch(path, {

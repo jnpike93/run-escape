@@ -49,7 +49,7 @@ HOST_ALLOWED_MSG_TYPES = {
 }
 GUEST_ALLOWED_MSG_TYPES = {
     "lobby_update", "input", "peer_leaving",
-    "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
+    "coop_pause", "coop_pickup", "coop_loadout", "coop_quest"
 }
 
 CSP_POLICY = (
@@ -445,6 +445,8 @@ def handle_ws_client(sock, room_id, client_ip):
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     timeout = SOCKET_TIMEOUT
+    server_version = "run-escape"
+    sys_version = ""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
@@ -454,8 +456,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if remote_ip in ("127.0.0.1", "::1"):
             forwarded = self.headers.get("X-Real-IP")
             if forwarded:
-                return forwarded.strip()[:64]
+                forwarded = forwarded.strip()[:64]
+                if not re.match(r'^[\d.:a-fA-F]+$', forwarded):
+                    return remote_ip
+                return forwarded
         return remote_ip
+
+    def send_response(self, code, message=None):
+        self._response_code = code
+        super().send_response(code, message)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.end_headers()
 
     def do_GET(self):
         if self.path.startswith("/ws"):
@@ -582,7 +595,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Suppress ACAO on WebSocket 101 Switching Protocols responses
+        if getattr(self, "_response_code", None) != 101:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Security-Policy", CSP_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Accept-Ranges", "bytes")

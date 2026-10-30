@@ -4,6 +4,57 @@
 
 ---
 
+---
+
+## Chronological Agent Handoff Log
+
+### [2026-10-30] Security Hardening Round 2 - Full Codebase Audit
+
+**Model**: Gemini 2.5 Pro (Antigravity)
+**Commit**: (pending - see below)
+**Bundle**: `index-CC-eTnSU.js` (`?v=8.5`)
+
+**Scope**: Full codebase audit of all previously unaudited subsystems: TypeScript engine/Sim, GameClient, secret codes/debug-mode, mapviewer/cache parsers, nginx/CSP/CI-CD infrastructure, React UI components.
+
+**All findings and fixes**:
+- H-1: Removed `coop_debug` from `GUEST_ALLOWED_MSG_TYPES` in `serve.py`
+- H-2/H-3: Removed `debug-mode.js` `<script>` from `index.html`; removed `?debug=1` URL param gate from `isDebugAllowed()`
+- H-4: Added HSTS `max-age=31536000` to `nginx.conf`
+- H-5: Scoped `Access-Control-Allow-Origin` away from global `*`
+- H-6: Pinned `actions/checkout` and `actions/setup-node` to full SHAs in `sync-upstream.yaml`
+- H-7: Added `--ignore-scripts` to production `npm install` in `deploy.yaml`
+- M-1: `window.gameClient` now DEV-only; `_gameClientBridge` exposes minimal multiplayer surface
+- M-2: `hpDelta` from peers clamped to +-200 per packet
+- M-3: Peer `weapon.bonus` clamped to 0.5 (was 5)
+- M-4: `PEER_STAT_BOUNDS` expanded to cover 7 additional combat stats
+- M-5: `unlockedItems` filtered by character allowlist in `mp-transport.js`
+- M-6: `window.l33th4x0r` gated behind `isDebugAllowed()`
+- M-7: `charName` fallback now uses `sanitizeName()` in `mp-sync-engine.js`
+- M-8: Removed `unsafe-eval` from CSP `script-src`
+- M-9/M-10/M-11/M-12: Added `X-Frame-Options`, `Referrer-Policy`, rate limiting, `server_tokens off` to nginx
+- M-13/M-14: Added `do_OPTIONS` to `serve.py`; `X-Real-IP` validated as IP format
+- M-15/L-16: Added `user: 'run-escape'` and `NODE_ENV: 'production'` to `ecosystem.config.cjs`
+- M-16: `appleboy/ssh-action` SHA-pinned in `deploy.yaml`
+- M-17/M-18/M-19: `caches.json` name validated; `fetchXteas` checks `resp.ok`; `fetchCacheList` re-throws
+- M-20/M-21: `sectorCluster.size` bounded at 32 MB; `Range` header uses open-ended `bytes=X-`
+- L-1: `game_over` always enforces `senderSlot` host check
+- L-2/L-3: `totalXp` capped at 1e9; coin `val` capped at 50,000
+- L-4/L-5: `Math.random()` removed from RNG seed fallback; ring-ambush target uses `sim.rng`
+- L-6/L-7/L-8/L-9: Python version hidden; `connect-src` narrowed; `casketsOpened` bounded; localStorage check structured
+- L-10/L-11/L-12: `ByteBuffer.readString` loop bounded; `DatTypeLoader.load` bounds-checked; `Archive.decode` underflow caught
+- L-13/L-14/L-15: nginx `/caches/` extension allowlist; WS upgrade guard; ACAO suppressed on 101
+- L-17: `--ignore-scripts` added to `sync-upstream.yaml` npm install
+
+**Tests**: 48 Vitest (12 multiplayer + 36 save), 49 Python - all pass. `npx tsc --noEmit` clean. `npm run build` clean.
+
+**Open items**:
+- SRI (`integrity=`) on `<script>`/`<link>` tags: tracked for future sprint (needs Vite plugin)
+- `window.gameClient` bridge: `_gameClientBridge` added; full migration of mp-*.js references to bridge is a future refactor
+- `fight_caves` always unlocked: intentional design decision - document if gating is desired
+- PM2 `user: 'run-escape'` requires ops to create the user on the production server
+
+---
+
 ## 1. Active Bundle & Hook Registry
 
 ### Current Active Asset Files (Version `?v=8.5` - Source-Built `0.14.0`)
@@ -11,7 +62,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-BRo3grs5.js`](../assets/index-BRo3grs5.js) | `index.html`, `MapViewerApp-CARmEJbT.js`, `module-B73_pgVO.js` |
+| **Main Engine Bundle** | [`assets/index-CC-eTnSU.js`](../assets/index-CC-eTnSU.js) | `index.html`, `MapViewerApp-DHjUTKJ4.js`, `module-NaptSLjl.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -19,12 +70,12 @@
 | **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](../scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
 | **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](../assets/cooks-assistant.js) | `index.html` (`?v=8.5`, synced from `src/custom/cooks-assistant.js`) |
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | NOT loaded from `index.html` (security fix - load manually in dev only) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-CARmEJbT.js`](../assets/MapViewerApp-CARmEJbT.js) | `assets/index-BRo3grs5.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DcR-K3gg.js`](../assets/RenderDataWorker-DcR-K3gg.js) | `assets/index-BRo3grs5.js` |
-| **Worker WASM Loader** | [`assets/module-BDqjycDY.js`](../assets/module-BDqjycDY.js) | `assets/RenderDataWorker-DcR-K3gg.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-B73_pgVO.js`](../assets/module-B73_pgVO.js) | `assets/index-BRo3grs5.js` (`module-yzz5kVyQ.wasm`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-DHjUTKJ4.js`](../assets/MapViewerApp-DHjUTKJ4.js) | `assets/index-CC-eTnSU.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DxgxqcOM.js`](../assets/RenderDataWorker-DxgxqcOM.js) | `assets/index-CC-eTnSU.js` |
+| **Worker WASM Loader** | [`assets/module-NaptSLjl.js`](../assets/module-NaptSLjl.js) | `assets/RenderDataWorker-DxgxqcOM.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-NaptSLjl.js`](../assets/module-NaptSLjl.js) | `assets/index-CC-eTnSU.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
 ### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-BRo3grs5.js`)

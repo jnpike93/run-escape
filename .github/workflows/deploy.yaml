@@ -40,7 +40,7 @@ jobs:
           echo "All deployment secrets configured."
 
       - name: Deploy to Production Server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@4a03da89e0a912dec21b8dc5c787aec75c59c01e  # v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -60,7 +60,7 @@ jobs:
               cd /opt/run-escape
             fi
             git remote get-url upstream > /dev/null 2>&1 && git remote set-url upstream https://github.com/Dynrothe/Run-Escape.git || git remote add upstream https://github.com/Dynrothe/Run-Escape.git
-            npm install --no-audit --no-fund
+            npm install --no-audit --no-fund --ignore-scripts
             node /opt/run-escape/scripts/auto_sync_upstream.cjs
 
             echo "=== 2. Configuring Hourly Upstream Auto-Sync Cron Job ==="

@@ -9,9 +9,11 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '500M',
+      user: 'run-escape',
       env: {
         PORT: 8085,
-        HOST: '127.0.0.1'
+        HOST: '127.0.0.1',
+        NODE_ENV: 'production'
       }
     }
   ]

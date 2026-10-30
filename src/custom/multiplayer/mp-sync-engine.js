@@ -30,7 +30,7 @@ export const mpSyncEngineMethods = {
                 slot,
                 name: sanitizeName(name) || `Player ${slot}`,
                 characterId,
-                charName: charObj ? charObj.name : String(characterId || 'Warrior'),
+                charName: charObj ? charObj.name : (sanitizeName(String(characterId || '')) || 'Warrior'),
                 level: 1,
                 damage: 0,
                 kills: 0
@@ -116,11 +116,8 @@ export const mpSyncEngineMethods = {
         // Independent random entropy for casket rolls and rerolls
         const mixRandomSeed = () => {
             const arr = new Uint32Array(1);
-            if (window.crypto && window.crypto.getRandomValues) {
-                window.crypto.getRandomValues(arr);
-            } else {
-                arr[0] = (Math.random() * 0x100000000) >>> 0;
-            }
+            if (!window.crypto?.getRandomValues) throw new Error('crypto.getRandomValues not available');
+            window.crypto.getRandomValues(arr);
             if (sim.rng) {
                 const slotSalt = ((this.localSlot || 1) * 2654435761) >>> 0;
                 sim.rng.state = ((sim.rng.state ^ arr[0] ^ slotSalt) >>> 0) || 1;
@@ -304,7 +301,7 @@ export const mpSyncEngineMethods = {
                             livingTargets.push(peer.entity);
                         }
                     }
-                    const chosenTarget = livingTargets[Math.floor(Math.random() * livingTargets.length)] || sim.player;
+                    const chosenTarget = livingTargets[sim.rng?.nextInt?.(livingTargets.length) ?? Math.floor(Math.random() * livingTargets.length)] || sim.player;
                     const savedPlayer = sim.player;
                     sim.player = chosenTarget;
                     try {

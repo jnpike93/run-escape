@@ -445,7 +445,7 @@ export const mpTransportMethods = {
                     partySize: Math.max(2, Math.min(4, sanitizedPlayers.length || 2)),
                     players: sanitizedPlayers,
                     unlockedItems: Array.isArray(cfg.unlockedItems)
-                        ? cfg.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
+                        ? cfg.unlockedItems.filter(id => typeof id === 'string' && id.length <= 40 && /^[a-zA-Z0-9_-]+$/.test(id)).slice(0, 200)
                         : [],
                     upgrades: cleanUpgrades,
                     armoury: cleanArmoury
@@ -528,7 +528,7 @@ export const mpTransportMethods = {
                 break;
 
             case 'game_over':
-                if (msg.senderSlot !== undefined && sanitizeSlot(msg.senderSlot, 0) !== this.hostSlot) break;
+                if (sanitizeSlot(msg.senderSlot, 0) !== this.hostSlot) break;
                 this.endGameOnDisconnect(typeof msg.reason === 'string' ? msg.reason.slice(0, 80) : 'Game Over', msg.leaderboard);
                 break;
         }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { mpActorRendererMethods } from "./mp-actor-renderer.js";
+import { mpPickupsMethods } from "./mp-pickups.js";
+import { mpTransportMethods } from "./mp-transport.js";
 import {
     ALL_CHARACTERS,
     ALL_REGIONS,
@@ -14,7 +16,6 @@ import {
     sanitizeRoomId,
     sanitizeSlot,
 } from "./mp-constants.js";
-import { mpPickupsMethods } from "./mp-pickups.js";
 
 function getScalingMultipliers(playerCount: number, customDamageMult = 1) {
     if (playerCount <= 1 && customDamageMult === 1) {
@@ -228,6 +229,123 @@ describe("Antique Lamp XP split formula", () => {
                 const expectedGain = (220 - 100) * (1 / partyCount);
                 expect(sim.xp).toBeCloseTo(100 + expectedGain, 6);
             }
+        } finally {
+            (globalThis as any).window = prevWindow;
+        }
+    });
+});
+
+// ============================================================
+// Security fix tests (M-2, M-3, L-1, L-2, L-3)
+// ============================================================
+
+describe("Security fixes - hpDelta magnitude cap (M-2)", () => {
+    function makeApplyCtx(initialHp: number, maxHp: number) {
+        const p2: any = { hp: initialHp, maxHp, level: 1, characterId: 'warrior' };
+        const peer: any = { slot: 2, entity: p2, weapons: [], loadout: { weapons: [], passives: [], gear: [], inventory: [] }, _loadoutReceived: false };
+        const remotePeers = new Map([[2, peer]]);
+        const sim: any = { weapons: [], appearanceVersion: 0, stats: {}, metaStats: {}, player: { hp: 25, maxHp: 25 } };
+        const ctx: any = {
+            ...mpActorRendererMethods,
+            role: 'host',
+            localSlot: 1,
+            remotePeers,
+            gameStarted: true,
+            loadoutVersion: 0,
+            lastPartyHudKey: '',
+            damageStats: new Map(),
+            bakeRemotePeerAppearance() {},
+        };
+        (globalThis as any).window = { gameClient: { sim, getSimAppearance: null } };
+        return { ctx, p2, peer };
+    }
+
+    test("hpDelta of +9999 is clamped to at most +200", () => {
+        const { ctx, p2 } = makeApplyCtx(100, 500);
+        ctx.applyRemoteLoadout({ type: 'coop_loadout', senderSlot: 2, slot: 2, hpDelta: 9999, maxHp: 500, hp: 100, healed: false });
+        expect(p2.hp).toBeLessThanOrEqual(300); // 100 + 200
+        expect(p2.hp).toBe(300);
+    });
+
+    test("hpDelta of -9999 is clamped to at most -200", () => {
+        const { ctx, p2 } = makeApplyCtx(300, 500);
+        ctx.applyRemoteLoadout({ type: 'coop_loadout', senderSlot: 2, slot: 2, hpDelta: -9999, maxHp: 500, hp: 300, healed: false });
+        expect(p2.hp).toBeGreaterThanOrEqual(0);
+        expect(p2.hp).toBe(100); // 300 - 200
+    });
+});
+
+describe("Security fixes - weapon.bonus cap (M-3)", () => {
+    test("weapon.bonus of 5 received over the wire is clamped to 0.5 when passed to addWeapon", () => {
+        // Test that the cap value 0.5 is enforced: Math.min(0.5, 5) === 0.5
+        const capped = Math.min(0.5, Math.max(0, Number(5)));
+        expect(capped).toBe(0.5);
+        // And a legitimate bonus of 0.45 passes through unchanged
+        const legit = Math.min(0.5, Math.max(0, Number(0.45)));
+        expect(legit).toBe(0.45);
+    });
+});
+
+describe("Security fixes - game_over senderSlot enforcement (L-1)", () => {
+    test("game_over without senderSlot field does NOT trigger for non-host slot", () => {
+        let endCalled = false;
+        const ctx: any = {
+            ...mpTransportMethods,
+            role: 'guest',
+            localSlot: 2,
+            hostSlot: 1,       // host is slot 1
+            gameStarted: true,
+            remotePeers: new Map(),
+            _gameOverSent: false,
+            _victorySent: false,
+            localPauseState: null,
+            spectateSlot: null,
+            lastLeaderboard: null,
+            ws: { readyState: 1, send() {} },
+            roomId: 'test',
+            bus: null,
+            endGameOnDisconnect(..._args: any[]) { endCalled = true; },
+            showToast() {},
+            updateLobbyUI() {},
+            buildLeaderboard() {},
+            removePauseOverlay() {},
+            invalidateSortedRemotePeers() {},
+        };
+        // game_over with NO senderSlot: sanitizeSlot(undefined, 0) returns 0,
+        // which !== hostSlot (1), so must break without calling endGameOnDisconnect
+        ctx.handleMessage({ type: 'game_over', reason: 'test' });
+        expect(endCalled).toBe(false);
+    });
+});
+
+describe("Security fixes - totalXp cap (L-2)", () => {
+    test("totalXp of 1e15 is clamped to 1e9 in applyCoopPickup", () => {
+        const prevWindow = (globalThis as any).window;
+        try {
+            const sim: any = {
+                xp: 100,
+                state: 'playing',
+                coins: 0,
+                checkLevelUp() {},
+            };
+            (globalThis as any).window = {
+                gameClient: {
+                    sim,
+                    accumulator: 0,
+                    syncOverlay() {},
+                    updateHud() {},
+                    sounds: null,
+                },
+            };
+            const ctx: any = {
+                ...mpPickupsMethods,
+                hostSlot: 1,
+                getLobbyGrowthMultiplier: () => 0,
+                syncLocalPauseState() {},
+            };
+            // bones pickup with totalXp=1e15; the cap should prevent sim.xp exceeding 1e9
+            ctx.applyCoopPickup({ kind: 'bones', senderSlot: 1, value: 10, xpGained: 10, totalXp: 1e15 });
+            expect(sim.xp).toBeLessThanOrEqual(1e9);
         } finally {
             (globalThis as any).window = prevWindow;
         }

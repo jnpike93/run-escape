@@ -581,4 +581,9 @@ describe("quests", () => {
         );
         expect(save.enemyKills).toEqual({ goblin: 5 });
     });
+
+    test("casketsOpened is clamped to 100000 on migrateSave", () => {
+        const migrated = migrateSave({ casketsOpened: 1e15 });
+        expect(migrated.casketsOpened).toBe(100000);
+    });
 });

@@ -123,10 +123,12 @@ export class ByteBuffer {
 
     readString(endValue: number = 0): string {
         let str = "";
-        while (this.getByte(this.offset) !== endValue) {
+        while (this.offset < this._data.length && this.getByte(this.offset) !== endValue) {
             str += String.fromCharCode(this.readUnsignedByte());
         }
-        this.readByte();
+        if (this.offset < this._data.length) {
+            this.readByte(); // consume terminator
+        }
         return str;
     }
 

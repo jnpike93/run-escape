@@ -154,6 +154,9 @@ export class DatTypeLoader<T extends Type> implements TypeLoader<T> {
     constructor(readonly types: T[]) {}
 
     load(id: number): T {
+        if (id < 0 || id >= this.types.length) {
+            throw new Error(`Type ID ${id} out of range [0, ${this.types.length})`);
+        }
         return this.types[id];
     }
 

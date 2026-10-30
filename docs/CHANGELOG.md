@@ -5,6 +5,22 @@ the version in the corner), so it's written for players.
 
 ## Custom Edition Updates (v8.5)
 
+### Security Hardening - Round 2 (Full Codebase Audit)
+
+- **Debug Mode Removed from Production**: Removed `debug-mode.js` from `index.html`; it is no longer loaded for any player. The `?debug=1` URL bypass and `localStorage` substring gate are also eliminated.
+- **Co-Op God-Mode Fix**: Guests can no longer send `coop_debug` messages through the relay to trigger god-mode on the host's simulation.
+- **Multiplayer Stat Clamp Expansion**: Peer-supplied `hpDelta` is now capped at +-200 per packet; `weapon.bonus` from peers is capped at 0.5 (legitimate max); 7 additional combat stats (`critChance`, `critDamage`, `pierce`, `split`, `bounces`, `healChance`, `healOnKill`) are now bounded in `sanitizePeerStats`.
+- **Coin/XP Caps**: Host-broadcast `totalXp` is capped at 1 billion and coin pickup values at 50,000 per pickup to prevent run-state inflation.
+- **Console API Locked Down**: `window.gameClient` is DEV-only; `window.l33th4x0r` is gated behind `isDebugAllowed()`; `window.game` alias is DEV-only.
+- **HSTS Enabled**: Added `Strict-Transport-Security` with a 1-year max-age to prevent SSL-stripping on first request.
+- **CSP Hardened**: Removed `unsafe-eval` from `script-src`; narrowed `connect-src` from open `ws:/wss:` wildcards to specific hostname; `Access-Control-Allow-Origin` scoped away from global `*`.
+- **Cache Parser Hardening**: `caches.json` name field is now validated against an allowlist pattern; `fetchXteas` checks HTTP status and validates XTEA key schema; `sectorCluster.size` allocation is bounded at 32 MB; `ByteBuffer.readString` no longer infinite-loops on unterminated null strings; `Archive.decode` chunk-table underflow is caught.
+- **CI/CD Hardening**: GitHub Actions `checkout` and `setup-node` pinned to full SHAs; `appleboy/ssh-action` SHA-pinned; `npm install --ignore-scripts` enforced on both production server and CI runner.
+- **nginx Hardened**: Added `X-Frame-Options: DENY`, `Referrer-Policy`, rate limiting (`30 req/s`), `server_tokens off`, WebSocket-only guard on `/ws`, extension allowlist on `/caches/`.
+- **serve.py Hardened**: Added `do_OPTIONS` returning 204; `X-Real-IP` validated as IP format before use; Python version suppressed from `Server:` header; ACAO suppressed on WebSocket 101 responses.
+
+
+
 ### Co-Op Multiplayer, Combat & Balance Updates
 
 - **Player Level on Infograph & Leaderboard**: Added live player levels (`Lv.X`) to each player's Co-Op party infograph card and the post-run Co-Op Damage Leaderboard.
