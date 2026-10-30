@@ -33,6 +33,9 @@ const OBSOLETE_HASHED_RE =
 function copyCustomDirSync(srcDir, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
     for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        if (/\.test\.(js|ts|tsx)$/.test(entry.name)) {
+            continue;
+        }
         const srcPath = path.join(srcDir, entry.name);
         const destPath = path.join(destDir, entry.name);
         if (entry.isDirectory()) {

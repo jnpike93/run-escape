@@ -9,6 +9,21 @@
 // from both allowlists in serve.py.
 // =====================================================================
 (() => {
+    function isDebugAllowed() {
+        if (typeof window === 'undefined') return false;
+        const hostname = window.location?.hostname || '';
+        if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+        try {
+            if (new URLSearchParams(window.location.search).has('debug')) return true;
+        } catch {}
+        try {
+            const raw = localStorage.getItem('run-escape:save');
+            if (raw && raw.includes('l33th4x0r')) return true;
+        } catch {}
+        if (window.gameClient?.save?.unlockedCodes?.includes?.('l33th4x0r')) return true;
+        return false;
+    }
+
     const CODE_ON = 'debugmode';
     const CODE_OFF = 'bugmode';
     const PANEL_KEY = 'Backslash';
@@ -127,8 +142,10 @@
         const origRedeem = client.redeemCode.bind(client);
         client.redeemCode = (value) => {
             const code = String(value ?? '').trim().toLowerCase();
-            if (code === CODE_ON) return setEnabled(client, true);
-            if (code === CODE_OFF) return setEnabled(client, false);
+            if (isDebugAllowed()) {
+                if (code === CODE_ON) return setEnabled(client, true);
+                if (code === CODE_OFF) return setEnabled(client, false);
+            }
             return origRedeem(value);
         };
     }
@@ -336,12 +353,13 @@
         }
     }
 
-    function openPanel() { const el = document.getElementById(PANEL_ID) || buildPanel(); el.style.display = 'block'; syncPanel(); }
+    function openPanel() { if (!isDebugAllowed()) return; const el = document.getElementById(PANEL_ID) || buildPanel(); el.style.display = 'block'; syncPanel(); }
     function closePanel() { const el = document.getElementById(PANEL_ID); if (el) el.style.display = 'none'; }
     function panelOpen() { const el = document.getElementById(PANEL_ID); return !!el && el.style.display !== 'none'; }
 
     window.addEventListener('keydown', (e) => {
         if (e.code !== PANEL_KEY || e.repeat) return;
+        if (!isDebugAllowed()) return;
         const t = e.target;
         if (t && (t.tagName === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox' || t.tagName === 'TEXTAREA')) return;
         if (!enabled) return;
@@ -353,6 +371,11 @@
     // ------------------------------------------------------------------ main loop
 
     function watch() {
+        if (!isDebugAllowed()) {
+            if (panelOpen()) closePanel();
+            requestAnimationFrame(watch);
+            return;
+        }
         const client = window.gameClient;
         if (client && client !== hookedClient && typeof client.redeemCode === 'function') hookClient(client);
         if (client?.sim) hookSim(client.sim);
@@ -369,8 +392,9 @@
 
     window.runEscapeDebug = {
         get enabled() { return enabled; },
+        get allowed() { return isDebugAllowed(); },
         get settings() { return { ...settings, invulnerable }; },
-        open: () => enabled && openPanel(),
+        open: () => enabled && isDebugAllowed() && openPanel(),
         close: closePanel
     };
 })();

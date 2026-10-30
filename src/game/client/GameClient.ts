@@ -6,6 +6,7 @@ import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
 import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { CHARACTERS, getCharacter } from "../content/characters";
+import { redeemSecretCode } from "../content/custom/secretCodes";
 import { upgradedName } from "../content/endless";
 import { getEnemy } from "../content/enemies";
 import { CASKETS, getItem } from "../content/items";
@@ -391,91 +392,7 @@ export class GameClient implements GameFrameHandler {
     }
 
     redeemCode(code: string): { ok: boolean; message: string } {
-        const cleaned = String(code ?? "")
-            .trim()
-            .toLowerCase();
-        if (cleaned === "l33th4x0r") {
-            if (!Array.isArray(this.save.unlockedCodes)) {
-                this.save.unlockedCodes = [];
-            }
-            if (!this.save.unlockedCodes.includes("dipperthedog")) {
-                this.save.unlockedCodes.push("dipperthedog");
-            }
-            if (!this.save.unlockedCodes.includes("barkelly")) {
-                this.save.unlockedCodes.push("barkelly");
-            }
-            if (!this.save.unlockedCodes.includes("l33th4x0r")) {
-                this.save.unlockedCodes.push("l33th4x0r");
-            }
-            for (const c of CHARACTERS) {
-                if (!this.save.unlockedCharacters.includes(c.id)) {
-                    this.save.unlockedCharacters.push(c.id);
-                }
-            }
-            this.save.coins = 999999999;
-            if (this.sim) {
-                this.sim.coins = 999999999;
-            }
-            this.persist();
-            (window as any).multiplayer?.sendLobbyUpdate?.();
-            (window as any).multiplayer?.updateLobbyUI?.();
-            this.sounds.taskDone();
-            this.store.toast?.(
-                "l33th4x0r activated: All characters & levels unlocked + 999,999,999 gold!",
-            );
-            return {
-                ok: true,
-                message: "All characters & levels unlocked + 999,999,999 gold granted!",
-            };
-        }
-        if (cleaned === "dipperthedog") {
-            if (!Array.isArray(this.save.unlockedCodes)) {
-                this.save.unlockedCodes = [];
-            }
-            if (!this.save.unlockedCodes.includes("dipperthedog")) {
-                this.save.unlockedCodes.push("dipperthedog");
-            }
-            const newlyUnlocked = !this.save.unlockedCharacters.includes("dipper");
-            if (newlyUnlocked) {
-                this.save.unlockedCharacters.push("dipper");
-            }
-            this.persist();
-            this.selectCharacter("dipper");
-            (window as any).multiplayer?.sendLobbyUpdate?.();
-            (window as any).multiplayer?.updateLobbyUI?.();
-            this.sounds.taskDone();
-            return {
-                ok: true,
-                message: newlyUnlocked
-                    ? "Dipper the Corgi unlocked!"
-                    : "Dipper is already unlocked and selected!",
-            };
-        }
-        if (cleaned === "barkelly") {
-            if (!Array.isArray(this.save.unlockedCodes)) {
-                this.save.unlockedCodes = [];
-            }
-            if (!this.save.unlockedCodes.includes("barkelly")) {
-                this.save.unlockedCodes.push("barkelly");
-            }
-            const newlyUnlocked = !this.save.unlockedCharacters.includes("elias");
-            if (newlyUnlocked) {
-                this.save.unlockedCharacters.push("elias");
-            }
-            this.persist();
-            this.selectCharacter("elias");
-            (window as any).multiplayer?.sendLobbyUpdate?.();
-            (window as any).multiplayer?.updateLobbyUI?.();
-            this.sounds.taskDone();
-            return {
-                ok: true,
-                message: newlyUnlocked
-                    ? "Elias the Chihuahua unlocked!"
-                    : "Elias is already unlocked and selected!",
-            };
-        }
-        this.sounds.denied();
-        return { ok: false, message: "Invalid secret code." };
+        return redeemSecretCode(this, code);
     }
 
     // Downloads the save as a file
@@ -507,7 +424,7 @@ export class GameClient implements GameFrameHandler {
         this.persist();
     }
 
-    private persist(): void {
+    persist(): void {
         this.saveStore.save(this.save);
         // A fresh object so React sees the change
         this.store.set({ save: structuredClone(this.save) });
@@ -531,7 +448,7 @@ export class GameClient implements GameFrameHandler {
 
     async startRun(): Promise<void> {
         const { mapId } = this.store.getSnapshot();
-        const mp = (window as any).multiplayer;
+        const mp = window.multiplayer;
         if (!mp?.gameStarted && !isMapUnlocked(this.save, mapId)) {
             return;
         }
@@ -708,7 +625,7 @@ export class GameClient implements GameFrameHandler {
 
     // Back to the title screen after the results
     leaveRun(): void {
-        (window as any)._hideOsrsPrayerBar?.();
+        window._hideOsrsPrayerBar?.();
         this.sim = undefined;
         this.paused = false;
         this.audio.stopMusic();
@@ -875,7 +792,7 @@ export class GameClient implements GameFrameHandler {
 
         const sim = this.sim;
         if (!sim) {
-            (window as any)._hideOsrsPrayerBar?.();
+            window._hideOsrsPrayerBar?.();
             this.updateAttract(deltaTimeMs, camera);
             return;
         }
@@ -1141,7 +1058,7 @@ export class GameClient implements GameFrameHandler {
                 this.minimap.draw(this.minimapCanvas, sim, this.getAlpha());
             }
         } else {
-            (window as any)._hideOsrsPrayerBar?.();
+            window._hideOsrsPrayerBar?.();
         }
         if (this.store.getSnapshot().debug) {
             this.drawDebug(sim);
