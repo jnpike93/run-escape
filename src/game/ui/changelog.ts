@@ -1,4 +1,5 @@
-import changelogText from "../../../docs/CHANGELOG.md?raw";
+import upstreamChangelogText from "../../../CHANGELOG.md?raw";
+import customChangelogText from "../../../docs/CHANGELOG.md?raw";
 
 export const GAME_VERSION = __APP_VERSION__;
 
@@ -34,4 +35,4 @@ export function parseChangelog(text: string): ChangelogVersion[] {
     return versions;
 }
 
-export const CHANGELOG = parseChangelog(changelogText);
+export const CHANGELOG = parseChangelog(customChangelogText + "\n" + upstreamChangelogText);

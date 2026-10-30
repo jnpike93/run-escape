@@ -11,22 +11,23 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-4meYiBAc.js`](../assets/index-4meYiBAc.js) | `index.html`, `MapViewerApp-Dwa6qfoP.js`, `module-C4vb_P1Y.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
-| **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
+| **Main Engine Bundle** | [`assets/index-CEwB6lxo.js`](../assets/index-CEwB6lxo.js) | `index.html`, `MapViewerApp-DsDS0Jt1.js`, `module-1Oh8_OSL.js` |
+| **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
+| **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
 | **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
 | **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](../scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](../assets/cooks-assistant.js) | `index.html` (`?v=8.5`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](../assets/cooks-assistant.js) | `index.html` (`?v=8.5`, synced from `src/custom/cooks-assistant.js`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-Dwa6qfoP.js`](../assets/MapViewerApp-Dwa6qfoP.js) | `assets/index-4meYiBAc.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-4meYiBAc.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-DsDS0Jt1.js`](../assets/MapViewerApp-DsDS0Jt1.js) | `assets/index-CEwB6lxo.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-CEwB6lxo.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-C4vb_P1Y.js`](../assets/module-C4vb_P1Y.js) | `assets/index-4meYiBAc.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-1Oh8_OSL.js`](../assets/module-1Oh8_OSL.js) | `assets/index-CEwB6lxo.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-4meYiBAc.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-CEwB6lxo.js`)
 When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
 1. **Client Instance Export (`window.gameClient`)**:
    - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](../assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
@@ -58,6 +59,20 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Implement 5 Upstream-Compatible Repository Structure Improvements
+- **Commit / PR**: 5 structural improvements for upstream merge compatibility (`?v=8.5`)
+- **Files Modified**: `.gitattributes`, `CHANGELOG.md`, `docs/CHANGELOG.md`, `docs/DEVELOPMENT.md`, `src/game/ui/changelog.ts`, `src/game/ui/LeaderboardScreen.tsx`, `src/game/ui/GameUi.tsx`, `src/game/content/custom/customCharacters.ts`, `src/game/content/custom/customMaps.ts`, `src/game/content/custom/customEnemies.ts`, `src/game/content/characters.ts`, `src/game/content/maps.ts`, `src/game/content/enemies.ts`, `src/custom/**`, `scripts/sync_dist.cjs`, `scripts/auto_sync_upstream.cjs`, `docs/AGENT_NOTES.md`, `index.html`, `assets/index-CEwB6lxo.js`, `assets/MapViewerApp-DsDS0Jt1.js`, `assets/module-1Oh8_OSL.js`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-CEwB6lxo.js`, `assets/MapViewerApp-DsDS0Jt1.js`, `assets/module-1Oh8_OSL.js`)
+- **What Changed**:
+  1. Added `.gitattributes` and normalized line endings across all 421 tracked files, restoring all 18 untouched upstream files (`LICENSE`, `.prettierignore`, `public/.htaccess`, `src/mapviewer/data/**`, shader files) to match `upstream/main` with zero diffs.
+  2. Restored root `CHANGELOG.md` and `docs/DEVELOPMENT.md` to match `upstream/main` and updated `src/game/ui/changelog.ts` to combine `docs/CHANGELOG.md` (custom edition updates) + `CHANGELOG.md` (upstream releases).
+  3. Extracted custom characters (`dipper`, `elias`), maps (`fight_caves`), and enemies (`tzkal_zuk`) into `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`) and spread them into `characters.ts`, `maps.ts`, and `enemies.ts`.
+  4. Copied all hand-authored runtime scripts and assets (`multiplayer.js`, `multiplayer/mp-*.js`, `prayer/*.png`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`, `quest-complete.ogg`) into `src/custom/` as the canonical source of truth and updated `scripts/sync_dist.cjs` and `scripts/auto_sync_upstream.cjs` to sync `src/custom/` into `assets/` on build.
+  5. Extracted `LeaderboardScreen` from `src/game/ui/GameUi.tsx` into `src/game/ui/LeaderboardScreen.tsx`.
+- **Notes / Invariants for Future Agents**:
+  - Edit hand-authored runtime scripts in `src/custom/` (or edit both `src/custom/` and `assets/`); running `npm run build` automatically copies `src/custom/*` into `assets/*` via `scripts/sync_dist.cjs`.
+  - Add new custom characters/maps/enemies to `src/game/content/custom/` and custom changelog entries to `docs/CHANGELOG.md` (leave root `CHANGELOG.md` untouched for clean upstream fast-forwards).
 
 ### 2026-10-29 - Antigravity - Add Armoury Refund Option
 - **Commit / PR**: Add `Refund all` button to Armoury screen (`?v=8.5`)

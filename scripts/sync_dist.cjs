@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * sync_dist.cjs - Synchronizes Vite build output from dist/ into the root
- * static-served assets/ directory and updates index.html while preserving
- * custom scripts, subdirectories, cache-busting query strings, and CSP headers.
+ * sync_dist.cjs - Synchronizes Vite build output from dist/ and canonical
+ * hand-authored scripts from src/custom/ into the root static-served assets/
+ * directory and updates index.html while preserving custom scripts,
+ * subdirectories, cache-busting query strings, and CSP headers.
  */
 
 const fs = require("node:fs");
@@ -12,6 +13,7 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const DIST_DIR = path.join(ROOT_DIR, "dist");
 const DIST_ASSETS_DIR = path.join(DIST_DIR, "assets");
 const ROOT_ASSETS_DIR = path.join(ROOT_DIR, "assets");
+const CUSTOM_SRC_DIR = path.join(ROOT_DIR, "src", "custom");
 const DIST_INDEX = path.join(DIST_DIR, "index.html");
 const ROOT_INDEX = path.join(ROOT_DIR, "index.html");
 
@@ -27,6 +29,19 @@ const PRESERVED_ASSETS = new Set([
 
 const OBSOLETE_HASHED_RE =
     /^(index|MapViewerApp|RenderDataWorker|module|favicon)-.*\.(js|css|wasm|ico)(\.map)?$/;
+
+function copyCustomDirSync(srcDir, destDir) {
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = path.join(srcDir, entry.name);
+        const destPath = path.join(destDir, entry.name);
+        if (entry.isDirectory()) {
+            copyCustomDirSync(srcPath, destPath);
+        } else if (entry.isFile()) {
+            fs.copyFileSync(srcPath, destPath);
+        }
+    }
+}
 
 function main() {
     if (!fs.existsSync(DIST_ASSETS_DIR)) {
@@ -65,7 +80,12 @@ function main() {
         }
     }
 
-    // 2. Copy all built files (excluding .map sourcemaps and hashed favicons) from dist/assets/ into root assets/
+    // 2. Copy canonical hand-authored custom runtime scripts and assets from src/custom/ into root assets/
+    if (fs.existsSync(CUSTOM_SRC_DIR)) {
+        copyCustomDirSync(CUSTOM_SRC_DIR, ROOT_ASSETS_DIR);
+    }
+
+    // 3. Copy all built files (excluding .map sourcemaps and hashed favicons) from dist/assets/ into root assets/
     const distEntries = fs
         .readdirSync(DIST_ASSETS_DIR)
         .filter((e) => !e.endsWith(".map") && !/^favicon-.*\.ico$/.test(e));
@@ -102,7 +122,7 @@ function main() {
         process.exit(1);
     }
 
-    // 3. Inject cache-busting query string into cross-bundle imports in built JS files
+    // 4. Inject cache-busting query string into cross-bundle imports in built JS files
     for (const entry of distEntries) {
         if (!entry.endsWith(".js")) continue;
         const jsPath = path.join(ROOT_ASSETS_DIR, entry);
@@ -120,7 +140,7 @@ function main() {
         fs.writeFileSync(jsPath, code, "utf8");
     }
 
-    // 4. Update root index.html and assets/multiplayer.js with versionQuery
+    // 5. Update root index.html, src/custom/multiplayer.js, and assets/multiplayer.js with versionQuery
     if (fs.existsSync(ROOT_INDEX)) {
         let html = fs.readFileSync(ROOT_INDEX, "utf8");
         html = html
@@ -136,19 +156,21 @@ function main() {
         fs.writeFileSync(ROOT_INDEX, html, "utf8");
     }
 
-    const mpPath = path.join(ROOT_ASSETS_DIR, "multiplayer.js");
-    if (fs.existsSync(mpPath)) {
-        const mpCode = fs.readFileSync(mpPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
-        fs.writeFileSync(mpPath, mpCode, "utf8");
-    }
+    for (const baseDir of [CUSTOM_SRC_DIR, ROOT_ASSETS_DIR]) {
+        const mpPath = path.join(baseDir, "multiplayer.js");
+        if (fs.existsSync(mpPath)) {
+            const mpCode = fs.readFileSync(mpPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
+            fs.writeFileSync(mpPath, mpCode, "utf8");
+        }
 
-    const mpDir = path.join(ROOT_ASSETS_DIR, "multiplayer");
-    if (fs.existsSync(mpDir)) {
-        for (const entry of fs.readdirSync(mpDir)) {
-            if (!entry.endsWith(".js")) continue;
-            const subPath = path.join(mpDir, entry);
-            const subCode = fs.readFileSync(subPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
-            fs.writeFileSync(subPath, subCode, "utf8");
+        const mpDir = path.join(baseDir, "multiplayer");
+        if (fs.existsSync(mpDir)) {
+            for (const entry of fs.readdirSync(mpDir)) {
+                if (!entry.endsWith(".js")) continue;
+                const subPath = path.join(mpDir, entry);
+                const subCode = fs.readFileSync(subPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
+                fs.writeFileSync(subPath, subCode, "utf8");
+            }
         }
     }
 

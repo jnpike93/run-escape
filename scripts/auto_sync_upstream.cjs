@@ -20,6 +20,7 @@ const INDEX_HTML = path.join(ROOT_DIR, "index.html");
 const CHANGELOG_MD = path.join(ROOT_DIR, "docs", "CHANGELOG.md");
 const AGENT_NOTES_MD = path.join(ROOT_DIR, "docs", "AGENT_NOTES.md");
 const ASSETS_DIR = path.join(ROOT_DIR, "assets");
+const CUSTOM_SRC_DIR = path.join(ROOT_DIR, "src", "custom");
 
 function log(msg) {
     const ts = new Date().toISOString();
@@ -96,6 +97,14 @@ function readNextVersion() {
 
 function updateChangelogAndNotes(oldVer, newVer, upstreamCommits, upstreamSha) {
     const today = new Date().toISOString().slice(0, 10);
+
+    for (const baseDir of [CUSTOM_SRC_DIR, ASSETS_DIR]) {
+        const mpPath = path.join(baseDir, "multiplayer.js");
+        if (fs.existsSync(mpPath)) {
+            const mpCode = fs.readFileSync(mpPath, "utf8").replace(/\?v=[0-9.]+/g, `?v=${newVer}`);
+            fs.writeFileSync(mpPath, mpCode, "utf8");
+        }
+    }
 
     if (fs.existsSync(CHANGELOG_MD)) {
         let cl = fs.readFileSync(CHANGELOG_MD, "utf8");
@@ -325,7 +334,7 @@ function main() {
         rollback(prevHead, `Python server unit tests failed:\n${pyRes.out}`);
     }
 
-    const mpCheck = tryRun("node --check assets/multiplayer.js");
+    const mpCheck = tryRun("node --check src/custom/multiplayer.js && node --check assets/multiplayer.js");
     if (!mpCheck.ok) {
         rollback(prevHead, `multiplayer.js syntax check failed:\n${mpCheck.out}`);
     }
