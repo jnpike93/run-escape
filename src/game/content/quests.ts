@@ -2,55 +2,55 @@ import { getEnemy } from "./enemies";
 import { getMap } from "./maps";
 import { QuestDef, QuestObjective } from "./types";
 
-// Quests: goals that take as many runs as they take, each paying coins once
-// when the run that finishes it ends. Named for the OSRS quest they're
-// closest to. In map order, with the ones done all over last.
+// Slayer Tasks: goals that take as many runs as they take, each paying coins once
+// when the run that finishes it ends. In map/Slayer Master order, with the ones
+// done across Gielinor last.
 export const QUESTS: QuestDef[] = [
     {
         id: "ernest_the_chicken",
-        name: "Ernest the Chicken",
+        name: "Birds of a Feather",
         mapId: "lumbridge",
         objective: { kind: "kill", enemyIds: ["chicken"], count: 75, what: "chickens" },
         coins: 100,
     },
     {
         id: "goblin_diplomacy",
-        name: "Goblin Diplomacy",
+        name: "Lumbridge Goblin Cull",
         mapId: "lumbridge",
         objective: { kind: "kill", enemyIds: ["goblin"], count: 300, what: "goblins" },
         coins: 150,
     },
     {
         id: "imp_catcher",
-        name: "Imp Catcher",
+        name: "Lesser Imp Assignment",
         mapId: "lumbridge",
         objective: { kind: "kill", enemyIds: ["imp"], count: 200, what: "imps" },
         coins: 150,
     },
     {
         id: "the_restless_ghost",
-        name: "The Restless Ghost",
+        name: "Graveyard Spectres",
         mapId: "lumbridge",
         objective: { kind: "kill", enemyIds: ["ghost"], count: 500, what: "ghosts" },
         coins: 200,
     },
     {
         id: "vampyre_slayer",
-        name: "Vampyre Slayer",
+        name: "Count of Draynor Manor",
         mapId: "lumbridge",
         objective: { kind: "kill", enemyIds: ["count_draynor"], count: 1 },
         coins: 300,
     },
     {
         id: "shades_of_mortton",
-        name: "Shades of Mort'ton",
+        name: "Mort'ton Shade Purge",
         mapId: "barrows",
         objective: { kind: "kill", enemyIds: ["shade"], count: 1000, what: "Loar Shades" },
         coins: 400,
     },
     {
         id: "sins_of_the_father",
-        name: "Sins of the Father",
+        name: "Feral Vampyre Hunt",
         mapId: "barrows",
         objective: {
             kind: "kill",
@@ -62,7 +62,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "the_dig_site",
-        name: "The Dig Site",
+        name: "Wilderness Demi-Boss: Ruins",
         mapId: "wilderness",
         objective: {
             kind: "kill",
@@ -74,14 +74,14 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "desert_treasure",
-        name: "Desert Treasure I",
+        name: "Mahjarrat Shadow Lords",
         mapId: "desert",
         objective: { kind: "killEach", enemyIds: ["fareed", "dessous", "damis_risen"] },
         coins: 1000,
     },
     {
         id: "contact",
-        name: "Contact!",
+        name: "Kharidian Scarab Swarms",
         mapId: "desert",
         objective: {
             kind: "kill",
@@ -93,14 +93,14 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "horror_from_the_deep",
-        name: "Horror from the Deep",
+        name: "Lighthouse Dagannoths",
         mapId: "fremennik",
         objective: { kind: "kill", enemyIds: ["dagannoth"], count: 1000, what: "dagannoths" },
         coins: 500,
     },
     {
         id: "troll_stronghold",
-        name: "Troll Stronghold",
+        name: "Fremennik Troll Task",
         mapId: "fremennik",
         objective: {
             kind: "kill",
@@ -112,7 +112,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "royal_trouble",
-        name: "Royal Trouble",
+        name: "Kings of Waterbirth Island",
         mapId: "fremennik",
         objective: {
             kind: "killEach",
@@ -123,35 +123,35 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "dragon_slayer_ii",
-        name: "Dragon Slayer II",
+        name: "Ungael Blue Dragon Boss",
         mapId: "fremennik",
         objective: { kind: "kill", enemyIds: ["vorkath"], count: 1 },
         coins: 1500,
     },
     {
         id: "monkey_madness",
-        name: "Monkey Madness I",
+        name: "Karamja Jungle Monkeys",
         mapId: "karamja",
         objective: { kind: "kill", enemyIds: ["monkey"], count: 300, what: "monkeys" },
         coins: 500,
     },
     {
         id: "dragon_slayer",
-        name: "Dragon Slayer I",
+        name: "Crandor Green Dragon",
         mapId: "karamja",
         objective: { kind: "kill", enemyIds: ["elvarg"], count: 1 },
         coins: 1000,
     },
     {
         id: "legends_quest",
-        name: "Legends' Quest",
+        name: "Black Demon of the Jungle",
         mapId: "karamja",
         objective: { kind: "kill", enemyIds: ["nezikchened"], count: 1 },
         coins: 1000,
     },
     {
         id: "a_kingdom_divided",
-        name: "A Kingdom Divided",
+        name: "Shayzien Lizardman Task",
         mapId: "kourend",
         objective: {
             kind: "kill",
@@ -163,7 +163,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "perilous_moons",
-        name: "Perilous Moons",
+        name: "Neypotzli Nagua Assignment",
         mapId: "varlamore",
         objective: {
             kind: "kill",
@@ -175,14 +175,14 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "nature_spirit",
-        name: "Nature Spirit",
+        name: "Mort Myre Ghast Cleansing",
         mapId: "morytania",
         objective: { kind: "kill", enemyIds: ["ghast"], count: 500, what: "ghasts" },
         coins: 700,
     },
     {
         id: "darkness_of_hallowvale",
-        name: "Darkness of Hallowvale",
+        name: "Darkmeyer Vyrewatch Task",
         mapId: "morytania",
         objective: {
             kind: "kill",
@@ -194,7 +194,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "a_night_at_the_theatre",
-        name: "A Night at the Theatre",
+        name: "Lady Verzik of Sinhaza",
         mapId: "morytania",
         // Her last form, the spider: she isn't beaten until it is
         objective: { kind: "kill", enemyIds: ["verzik_vitur_spider"], count: 1 },
@@ -202,7 +202,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "temple_of_ikov",
-        name: "Temple of Ikov",
+        name: "Armadyl's Eyrie Aviansies",
         mapId: "god_wars",
         objective: {
             kind: "kill",
@@ -214,7 +214,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "the_frozen_door",
-        name: "The Frozen Door",
+        name: "God Wars Generals",
         mapId: "god_wars",
         objective: {
             kind: "killEach",
@@ -225,7 +225,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "secrets_of_the_north",
-        name: "Secrets of the North",
+        name: "The Fifth General: Nex",
         mapId: "god_wars",
         // Her last form, ice
         objective: { kind: "kill", enemyIds: ["nex_ice"], count: 1 },
@@ -233,7 +233,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "roving_elves",
-        name: "Roving Elves",
+        name: "Iorwerth Clan Elves",
         mapId: "prifddinas",
         objective: {
             kind: "kill",
@@ -245,7 +245,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "regicide",
-        name: "Regicide",
+        name: "Serpent of Zul-Andra",
         mapId: "prifddinas",
         // Its last form, the blue one
         objective: { kind: "kill", enemyIds: ["zulrah_tanzanite"], count: 1 },
@@ -253,7 +253,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "song_of_the_elves",
-        name: "Song of the Elves",
+        name: "The Red Prison's Hunllef",
         mapId: "prifddinas",
         objective: { kind: "kill", enemyIds: ["corrupted_hunllef"], count: 1 },
         coins: 2000,
@@ -276,14 +276,14 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "the_inferno",
-        name: "The Inferno",
+        name: "TzKal-Zuk's Crucible",
         mapId: "inferno",
         objective: { kind: "beatMap", mapId: "inferno" },
         coins: 2500,
     },
     {
         id: "ratcatchers",
-        name: "Ratcatchers",
+        name: "Gielinor Vermin Extermination",
         objective: {
             kind: "kill",
             enemyIds: ["rat", "giant_rat", "crypt_rat", "giant_crypt_rat", "crystalline_rat"],
@@ -294,7 +294,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "demon_slayer",
-        name: "Demon Slayer",
+        name: "Lesser Demon Assignment",
         objective: {
             kind: "kill",
             enemyIds: ["revenant_demon", "lesser_demon", "reanimated_demon"],
@@ -305,7 +305,7 @@ export const QUESTS: QuestDef[] = [
     },
     {
         id: "pirates_treasure",
-        name: "Pirate's Treasure",
+        name: "Clue Hunter's Casket Bounty",
         objective: { kind: "caskets", count: 30 },
         coins: 500,
     },

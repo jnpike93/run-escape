@@ -7,11 +7,33 @@ import { SaveData, getQuestProgress, isMapUnlocked } from "../core/save";
 import { Coins } from "./Coins";
 import "./QuestScreen.css";
 
-// The quest list, map by map like the client's quest tab: red until started,
-// yellow while under way, green once done. Each shows how far it's got and
-// what it pays.
+// The slayer task list, grouped by OSRS Slayer Master and region: red until
+// started, yellow while under way, green once done. Each shows how far it's
+// got and what it pays.
 
 type Props = { ui: UiSnapshot; client: GameClient };
+
+const SLAYER_MASTER_BY_MAP: Record<string, string> = {
+    lumbridge: "Turael (Lumbridge)",
+    barrows: "Mazchna (Barrows)",
+    wilderness: "Krystilia (Wilderness)",
+    desert: "Sumona (Kharidian Desert)",
+    fremennik: "Vannaka (Fremennik Province)",
+    karamja: "Duradel (Karamja)",
+    kourend: "Konar quo Maten (Kourend)",
+    varlamore: "Chaeldar (Varlamore)",
+    morytania: "Aya (Morytania)",
+    god_wars: "Nieve (God Wars Dungeon)",
+    prifddinas: "Steve (Prifddinas)",
+    inferno: "TzHaar-Ket-Keh (The Inferno)",
+};
+
+function getSlayerGroupTitle(mapId?: string): string {
+    if (!mapId) {
+        return "Spria (Across Gielinor)";
+    }
+    return SLAYER_MASTER_BY_MAP[mapId] ?? getMap(mapId).name;
+}
 
 // The quests in their maps' order, the ones done all over last
 function getQuestGroups(): { mapId?: string; quests: QuestDef[] }[] {
@@ -41,7 +63,7 @@ export function QuestScreen({ ui, client }: Props): JSX.Element {
                     {getQuestGroups().map(({ mapId, quests }) => (
                         <section key={mapId ?? ""} className="ui-quest-group">
                             <h3 className="ui-quest-group-name">
-                                {mapId ? getMap(mapId).name : "All over"}
+                                {getSlayerGroupTitle(mapId)}
                                 {mapId && !isMapUnlocked(save, mapId) && (
                                     <span className="ui-quest-group-note">not open yet</span>
                                 )}
