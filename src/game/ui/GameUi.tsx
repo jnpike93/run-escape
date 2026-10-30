@@ -25,6 +25,7 @@ import {
 } from "../client/GameStore";
 import { formatTime } from "../client/GameView";
 import { CHARACTERS, getCharacter } from "../content/characters";
+import { isSpecialCharacter } from "../content/custom/customCharacters";
 import { FUN_MAPS, MAPS, getMap } from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
@@ -572,9 +573,44 @@ function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
     const [peek, setPeek] = useState<string>();
     const vChars = CHARACTERS.filter(
-        (c) => (c.id !== "dipper" && c.id !== "elias") || unlocked.includes(c.id),
+        (c) => !isSpecialCharacter(c.id) || unlocked.includes(c.id),
     );
+    const specialChars = vChars.filter((c) => isSpecialCharacter(c.id));
     const opened = vChars.filter((c) => unlocked.includes(c.id)).length;
+    const renderTile = (character: CharacterDef) => {
+        const selected = character.id === ui.characterId;
+        const iconObjId = (character as any).iconObjId;
+        return (
+            <button
+                key={character.id}
+                className={
+                    "ui-card ui-tile" +
+                    (selected ? " ui-card-selected" : "") +
+                    (unlocked.includes(character.id) ? "" : " ui-card-locked")
+                }
+                aria-label={character.name}
+                aria-pressed={selected}
+                onMouseMove={() => setPeek(character.id)}
+                onFocus={() => setPeek(character.id)}
+                onBlur={() => setPeek(undefined)}
+                onClick={() => client.selectCharacter(character.id)}
+            >
+                <ItemIcon
+                    objId={
+                        iconObjId ??
+                        character.equipment[EquipSlot.TORSO] ??
+                        getStartingWeaponIcon(character)
+                    }
+                    size={34}
+                />
+                {!iconObjId && (
+                    <span className="ui-tile-badge">
+                        <ItemIcon objId={getStartingWeaponIcon(character)} size={18} />
+                    </span>
+                )}
+            </button>
+        );
+    };
     return (
         <div
             className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
@@ -604,50 +640,18 @@ function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                             </div>
                             <div className="ui-tiles">
                                 {vChars
-                                    .filter((c) => c.style === style)
-                                    .map((character) => {
-                                        const selected = character.id === ui.characterId;
-                                        const iconObjId = (character as any).iconObjId;
-                                        return (
-                                            <button
-                                                key={character.id}
-                                                className={
-                                                    "ui-card ui-tile" +
-                                                    (selected ? " ui-card-selected" : "") +
-                                                    (unlocked.includes(character.id)
-                                                        ? ""
-                                                        : " ui-card-locked")
-                                                }
-                                                aria-label={character.name}
-                                                aria-pressed={selected}
-                                                onMouseMove={() => setPeek(character.id)}
-                                                onFocus={() => setPeek(character.id)}
-                                                onBlur={() => setPeek(undefined)}
-                                                onClick={() => client.selectCharacter(character.id)}
-                                            >
-                                                <ItemIcon
-                                                    objId={
-                                                        iconObjId ??
-                                                        character.equipment[EquipSlot.TORSO] ??
-                                                        getStartingWeaponIcon(character)
-                                                    }
-                                                    size={34}
-                                                />
-                                                {!iconObjId && (
-                                                    <span className="ui-tile-badge">
-                                                        <ItemIcon
-                                                            objId={getStartingWeaponIcon(character)}
-                                                            size={18}
-                                                        />
-                                                    </span>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
+                                    .filter((c) => c.style === style && !isSpecialCharacter(c.id))
+                                    .map(renderTile)}
                             </div>
                         </div>
                     );
                 })}
+                {specialChars.length > 0 && (
+                    <div key="special" className="ui-style-group">
+                        <div className="ui-style-name">Special</div>
+                        <div className="ui-tiles">{specialChars.map(renderTile)}</div>
+                    </div>
+                )}
             </div>
             <AdventurerDetails save={ui.save} character={getCharacter(peek ?? ui.characterId)} />
         </div>
@@ -671,7 +675,11 @@ function AdventurerDetails({
                 />
                 <div>
                     <div className="ui-card-title">{character.name}</div>
-                    <div className="ui-card-style">{STYLE_NAMES[character.style]}</div>
+                    <div className="ui-card-style">
+                        {isSpecialCharacter(character.id)
+                            ? "Special"
+                            : STYLE_NAMES[character.style]}
+                    </div>
                 </div>
             </div>
             <div className="ui-card-text">{character.description}</div>

@@ -44,3 +44,9 @@ export const CUSTOM_CHARACTERS: CharacterDef[] = [
         unlock: { kind: "code", code: "barkelly" } as CharacterDef["unlock"],
     },
 ];
+
+const SPECIAL_CHARACTER_IDS = new Set(["dipper", "elias"]);
+
+export function isSpecialCharacter(characterId: string): boolean {
+    return SPECIAL_CHARACTER_IDS.has(characterId);
+}

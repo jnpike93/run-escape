@@ -53,7 +53,16 @@ export function applyCustomCharacters(characters: CharacterDef[]): void {
             character.description = desc;
         }
     }
-    characters.unshift(...CUSTOM_CHARACTERS);
+    const barbarianIdx = characters.findIndex((c) => c.id === "barbarian");
+    const penanceFighter = CUSTOM_CHARACTERS.find((c) => c.id === "penance_fighter");
+    if (penanceFighter) {
+        characters.splice(barbarianIdx >= 0 ? barbarianIdx + 1 : 0, 0, penanceFighter);
+    }
+    for (const customChar of CUSTOM_CHARACTERS) {
+        if (customChar.id !== "penance_fighter") {
+            characters.push(customChar);
+        }
+    }
 }
 
 export function applyCustomEnemies(enemies: EnemyDef[]): void {
