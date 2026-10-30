@@ -265,6 +265,8 @@ export type EnemyProjectile = {
     // A normal enemy's shot rather than a boss attack: it only lands when a
     // crowd's hit could (not just after the player was hit)
     crowd?: boolean;
+    faction?: string;
+    targetEnemyUid?: number;
 };
 
 export type PickupKind = "bones" | "coins" | "food" | "casket" | "powerUp";

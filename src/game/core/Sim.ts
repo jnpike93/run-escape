@@ -213,8 +213,8 @@ const FACTION_TURN = 0.02;
 // An enemy of a faction goes for one of another faction this close (tiles),
 // rather than the player, unless the player's closer than this to it; it
 // looks round for one every so often
-const FOE_RANGE = 8;
-const FOE_IGNORE_PLAYER = 2.5;
+const FOE_RANGE = 14;
+const FOE_IGNORE_PLAYER = 1.8;
 const FOE_LOOK_TICKS = TICKS_PER_SECOND / 2;
 // Revivers bring back what died lately: the last this many deaths, no older
 // than this
@@ -1632,11 +1632,13 @@ export class Sim {
                     stationary || healTarget || fleeing ? undefined : this.findFoe(enemy, distance);
                 if (fighting) {
                     // Off to fight another god's army, stopping once it's in
-                    // reach (the hit itself is the touch below)
+                    // reach (the hit itself is the touch or shot below)
                     const fx = fighting.x - enemy.x;
                     const fy = fighting.y - enemy.y;
                     const length = Math.hypot(fx, fy);
-                    const reach = enemy.radius + fighting.radius + 0.05;
+                    const reach = enemy.def.shot
+                        ? enemy.def.shot.range * SHOOTER_KEEP
+                        : enemy.radius + fighting.radius + 0.05;
                     dirX = length > reach ? fx / length : 0;
                     dirY = length > reach ? fy / length : 0;
                 }
@@ -1661,7 +1663,7 @@ export class Sim {
                 // their caskets; nor does one after the player)
                 let sepX = 0;
                 let sepY = 0;
-                const faction = enemy.boss || enemy.aggro ? undefined : enemy.def.faction;
+                const faction = enemy.boss ? undefined : enemy.def.faction;
                 let foe: Enemy | undefined;
                 this.enemyHash.query(enemy.x, enemy.y, 1, (other) => {
                     if (other === enemy) {
@@ -1713,6 +1715,14 @@ export class Sim {
                     this.enemyAttack(enemy);
                 } else if (foe && canHit && !enemy.boss) {
                     this.enemyHitsEnemy(enemy, foe);
+                } else if (
+                    enemy.def.shot &&
+                    !bossState &&
+                    enemy.attackCooldown === 0 &&
+                    fighting &&
+                    Math.hypot(fighting.x - enemy.x, fighting.y - enemy.y) <= enemy.def.shot.range
+                ) {
+                    this.enemyShoot(enemy, enemy.def.shot, fighting);
                 } else if (
                     enemy.def.shot &&
                     !bossState &&
@@ -1857,9 +1867,9 @@ export class Sim {
         this.recoil(enemy);
     }
 
-    // A ranger's or mage's shot: a projectile at where the player is now, for
-    // the enemy's own damage
-    private enemyShoot(enemy: Enemy, shot: EnemyShotDef): void {
+    // A ranger's or mage's shot: a projectile at a rival faction foe or where
+    // the player is now, for the enemy's own damage
+    private enemyShoot(enemy: Enemy, shot: EnemyShotDef, targetEnemy?: Enemy): void {
         enemy.attackCooldown = Math.round(shot.interval * TICKS_PER_SECOND);
         enemy.anim = "attack";
         enemy.animStart = this.tick;
@@ -1874,7 +1884,7 @@ export class Sim {
             x: enemy.x,
             y: enemy.y,
         });
-        this.launchProjectiles(enemy, shotAttack(shot), enemy.damage, true);
+        this.launchProjectiles(enemy, shotAttack(shot), enemy.damage, true, targetEnemy);
     }
 
     // A hit on the player; armour takes some off (unless it hits through it).
@@ -2572,15 +2582,16 @@ export class Sim {
         this.launchProjectiles(enemy, attack, this.getBossDamage(enemy, attack), false);
     }
 
-    // At where the player is now: keep moving and it misses
+    // At where the player (or rival faction foe) is now: keep moving and it misses
     private launchProjectiles(
         enemy: Enemy,
         attack: BossAttackDef,
         damage: number,
         crowd: boolean,
+        targetEnemy?: Enemy,
     ): void {
-        const player = this.player;
-        const base = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+        const target = targetEnemy ?? this.player;
+        const base = Math.atan2(target.y - enemy.y, target.x - enemy.x);
         const count = attack.count ?? 1;
         const speed = (attack.speed ?? 10) / TICKS_PER_SECOND;
         for (let i = 0; i < count; i++) {
@@ -2606,6 +2617,8 @@ export class Sim {
                 yaw: yawFromVector(vx, vy),
                 startTick: this.tick,
                 crowd,
+                faction: enemy.boss ? undefined : enemy.def.faction,
+                targetEnemyUid: targetEnemy?.uid,
             });
         }
     }
@@ -2743,10 +2756,15 @@ export class Sim {
             projectile.prevX = projectile.x;
             projectile.prevY = projectile.y;
             projectile.life--;
-            const dx = player.x - projectile.x;
-            const dy = player.y - projectile.y;
+            const targetFoe =
+                projectile.targetEnemyUid !== undefined
+                    ? this.enemies.find((e) => e.uid === projectile.targetEnemyUid && !e.dead)
+                    : undefined;
+            const homeTarget = targetFoe ?? player;
+            const dx = homeTarget.x - projectile.x;
+            const dy = homeTarget.y - projectile.y;
             if (projectile.homing > 0) {
-                // Turn towards the player, a little each tick
+                // Turn towards the target, a little each tick
                 const heading = Math.atan2(projectile.vy, projectile.vx);
                 let turn = Math.atan2(dy, dx) - heading;
                 turn = Math.atan2(Math.sin(turn), Math.cos(turn));
@@ -2761,6 +2779,64 @@ export class Sim {
             if (projectile.attack.blockable && this.hitsGlyph(projectile)) {
                 projectile.life = 0;
                 continue;
+            }
+            if (projectile.life > 0 && projectile.faction !== undefined) {
+                let hitFoe: Enemy | undefined;
+                this.enemyHash.query(projectile.x, projectile.y, projectile.radius + 1.5, (other) => {
+                    if (
+                        hitFoe ||
+                        other.uid === projectile.enemyUid ||
+                        other.dead ||
+                        other.boss ||
+                        other.elite ||
+                        other.def.faction === undefined ||
+                        other.def.faction === projectile.faction
+                    ) {
+                        return;
+                    }
+                    if (
+                        Math.hypot(other.x - projectile.x, other.y - projectile.y) <=
+                        projectile.radius + other.radius
+                    ) {
+                        hitFoe = other;
+                    }
+                });
+                if (hitFoe) {
+                    projectile.life = 0;
+                    if (projectile.attack.impactSpotAnim !== undefined) {
+                        this.addEffect(projectile.attack.impactSpotAnim, hitFoe.x, hitFoe.y, 0, 30);
+                    }
+                    if (hitFoe.shieldEnd > this.tick) {
+                        this.showBlocked(hitFoe);
+                        continue;
+                    }
+                    const amount = Math.max(
+                        1,
+                        Math.round(projectile.damage * FACTION_DAMAGE * this.rng.range(0.85, 1.15)),
+                    );
+                    hitFoe.hp -= amount;
+                    hitFoe.flash = 5;
+                    if (!hitFoe.aggro) {
+                        const shooter = this.enemies.find(
+                            (e) => e.uid === projectile.enemyUid && !e.dead,
+                        );
+                        if (shooter) {
+                            hitFoe.foe ??= shooter;
+                        }
+                    }
+                    this.events.push({
+                        type: "damage",
+                        x: hitFoe.x,
+                        y: hitFoe.y,
+                        amount,
+                        enemyUid: hitFoe.uid,
+                        enemyId: hitFoe.def.id,
+                    });
+                    if (hitFoe.hp <= 0) {
+                        this.killEnemy(hitFoe, "enemy");
+                    }
+                    continue;
+                }
             }
             const reach = projectile.radius + player.radius;
             if (
@@ -3069,6 +3145,8 @@ export class Sim {
 
         if (!byEnemy && !enemy.noDrops) {
             this.dropLoot(enemy);
+        } else if (byEnemy && !enemy.noDrops) {
+            this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
         }
         if (enemy.boss) {
             this.funBossDown(enemy);

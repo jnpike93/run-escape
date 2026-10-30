@@ -1275,7 +1275,8 @@ describe("enemy mechanics", () => {
             expect.objectContaining({ type: "kill", enemyUid: zamorak.uid, byEnemy: true }),
         );
         expect(sim.kills).toBe(kills);
-        expect(sim.pickups.length).toBe(pickups);
+        expect(sim.pickups.length).toBe(pickups + 1);
+        expect(sim.pickups[sim.pickups.length - 1].kind).toBe("bones");
     });
 
     test("enemies of different factions go for each other, not the player, when the player's off", () => {
@@ -1308,6 +1309,24 @@ describe("enemy mechanics", () => {
         player.y = bandos.y;
         play(sim, 0.5);
         expect(bandos.foe).toBeUndefined();
+    });
+
+    test("ranged enemies of different factions shoot each other from afar", () => {
+        const sim = createSim();
+        sim.weapons = [];
+        const player = sim.player;
+        const aviansie = sim.spawnEnemy(getEnemy("aviansie"), "normal", {
+            x: player.x - 3,
+            y: player.y + 10,
+        })!;
+        const zamorak = sim.spawnEnemy(getEnemy("gwd_hobgoblin"), "normal", {
+            x: player.x + 3,
+            y: player.y + 10,
+        })!;
+        aviansie.hp = aviansie.maxHp = 500;
+        zamorak.hp = zamorak.maxHp = 500;
+        play(sim, 3);
+        expect(zamorak.hp).toBeLessThan(zamorak.maxHp);
     });
 
     test("each faction's army comes from its own side", () => {

@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-DlybI6VF.js`](../assets/index-DlybI6VF.js) | `index.html`, `MapViewerApp-D91SLorV.js`, `module-Dp9wVAh7.js` |
+| **Main Engine Bundle** | [`assets/index-COMG5mx1.js`](../assets/index-COMG5mx1.js) | `index.html`, `MapViewerApp-wfx3-3oW.js`, `module-P02y7iRx.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -21,13 +21,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-D91SLorV.js`](../assets/MapViewerApp-D91SLorV.js) | `assets/index-DlybI6VF.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-DlybI6VF.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-wfx3-3oW.js`](../assets/MapViewerApp-wfx3-3oW.js) | `assets/index-COMG5mx1.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-COMG5mx1.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-Dp9wVAh7.js`](../assets/module-Dp9wVAh7.js) | `assets/index-DlybI6VF.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-P02y7iRx.js`](../assets/module-P02y7iRx.js) | `assets/index-COMG5mx1.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-DlybI6VF.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-COMG5mx1.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
    - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), and secret codes (`secretCodes.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `GameClient.ts`) via 1-line imports/spreads.
@@ -65,6 +65,18 @@ When adding new features or merging upstream changes into `src/` and rebuilding 
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Enhance God Wars Dungeon Multi-Faction Warfare
+- **Commit / PR**: Expand God Wars Dungeon faction combat (`?v=8.5`)
+- **Files Modified**: `src/game/core/Sim.ts`, `src/game/core/entities.ts`, `src/game/core/Sim.test.ts`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`, `index.html`, `assets/index-COMG5mx1.js`, `assets/MapViewerApp-wfx3-3oW.js`, `assets/module-P02y7iRx.js`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-COMG5mx1.js`, `assets/MapViewerApp-wfx3-3oW.js`, `assets/module-P02y7iRx.js`)
+- **What Changed**:
+  1. Increased `FOE_RANGE` from `8` to `14` tiles and adjusted `FOE_IGNORE_PLAYER` from `2.5` to `1.8` tiles in `src/game/core/Sim.ts` so rival God Wars armies spot and engage each other across adjacent spawn wedges.
+  2. Added ranged and magic faction attacks (`enemyShoot` / `launchProjectiles` / `stepEnemyProjectiles` in `src/game/core/Sim.ts`, `faction` and `targetEnemyUid` on `EnemyProjectile` in `src/game/core/entities.ts`) so ranged/magic faction enemies (`aviansie`, spiritual rangers, spiritual mages) keep distance and fire projectiles at rival faction monsters as well as players.
+  3. Allowed aggroed faction monsters (`enemy.aggro`) to still melee-strike rival faction monsters that physically collide with them on their way to the player.
+  4. Updated `killEnemy` in `src/game/core/Sim.ts` so monsters killed by rival factions (`byEnemy`) drop XP bones (`"bones"`).
+- **Notes / Invariants for Future Agents**:
+  - Bosses and elites remain excluded from taking faction damage so their casket drops are never lost off-screen.
 
 ### 2026-10-29 - Antigravity - Document Upstream-Friendly Feature Architecture Across All Agent Rules & Skills
 - **Commit / PR**: Codify upstream-friendly architecture in all agent instruction files (`?v=8.5`)
