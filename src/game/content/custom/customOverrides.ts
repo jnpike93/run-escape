@@ -1,8 +1,15 @@
 import { CUSTOM_CHARACTERS } from "./customCharacters";
 import { CUSTOM_ENEMIES } from "./customEnemies";
 import {
+    CUSTOM_CASKET_GEAR,
+    CUSTOM_GEAR_OVERRIDES,
+    CUSTOM_QUESTS,
+    CUSTOM_WEAPONS,
+} from "./customWeapons";
+import {
     CharacterDef,
     EnemyDef,
+    GearDef,
     PassiveDef,
     QuestDef,
     ShopUpgradeDef,
@@ -186,6 +193,16 @@ export function applyCustomItems(utility: UtilityDef[]): void {
     }
 }
 
+export function applyCustomGear(casketGear: GearDef[]): void {
+    for (const gear of casketGear) {
+        const override = CUSTOM_GEAR_OVERRIDES[gear.id];
+        if (override) {
+            Object.assign(gear, override);
+        }
+    }
+    casketGear.push(...CUSTOM_CASKET_GEAR);
+}
+
 const PASSIVE_OVERRIDES: Record<string, Partial<PassiveDef>> = {
     piety: {
         description: "Increases all weapon damage.",
@@ -290,6 +307,7 @@ export function applyCustomQuests(quests: QuestDef[]): void {
             quest.name = name;
         }
     }
+    quests.push(...CUSTOM_QUESTS);
 }
 
 type CustomWeaponLevel = WeaponLevel & { heal?: number };
@@ -561,4 +579,5 @@ export function applyCustomWeapons(weapons: WeaponDef[]): void {
             }
         }
     }
+    weapons.push(...CUSTOM_WEAPONS);
 }

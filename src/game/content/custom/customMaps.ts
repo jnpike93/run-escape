@@ -7,8 +7,8 @@ export const CUSTOM_MAPS: MapDef[] = [
         name: "Barbarian Village",
         description:
             "Gunnarsgrunn's barbarians, axe-throwers, shieldmaidens and berserkers, Ice Mountain wolves " +
-            "and Dwarven Mine scorpions, and the minotaurs, giant spiders, shades and ankou of the " +
-            "Stronghold of Security beneath the village. The Minotaur Warlord and Haakon the Champion " +
+            "and Dwarven Mine scorpions, the Stronghold of Security's minotaurs, shades and ankou, and " +
+            "Edgeville Dungeon's undead. The Minotaur Warlord, Obor, Haakon the Champion and Bryophyta " +
             "come one by one, and Chieftain Gunthor the Brave leads the charge at the end.",
         // Rune battleaxe
         iconObjId: 1373,
@@ -17,7 +17,7 @@ export const CUSTOM_MAPS: MapDef[] = [
         arena: { baseX: 47 * 64, baseY: 52 * 64, sizeX: 3 * 64, sizeY: 3 * 64 },
         // In the village courtyard, between the Stronghold entrance and the longhall
         spawn: { x: 3082.5, y: 3423.5 },
-        difficulty: { hp: 1.35, damage: 1.2 },
+        difficulty: { hp: 1.15, damage: 1.1 },
         waves: paced([
             [
                 { id: "dungeon_rat", weight: 3 },
@@ -91,16 +91,16 @@ export const CUSTOM_MAPS: MapDef[] = [
             { at: 100, kind: "elite", enemyId: "village_goblin" },
             { at: 150, kind: "elite", enemyId: "barbarian_villager" },
             { at: 200, kind: "elite", enemyId: "ice_wolf" },
-            { at: 250, kind: "elite", enemyId: "mine_scorpion" },
-            { at: 300, kind: "boss", enemyId: "minotaur_warlord", hp: 2100 },
+            { at: 225, kind: "boss", enemyId: "minotaur_warlord", hp: 2100 },
+            { at: 280, kind: "elite", enemyId: "mine_scorpion" },
             { at: 360, kind: "ring", enemyId: "stronghold_minotaur", count: 30 },
             { at: 420, kind: "elite", enemyId: "zombie" },
-            { at: 480, kind: "elite", enemyId: "skeleton" },
-            { at: 540, kind: "elite", enemyId: "barbarian_shieldmaiden" },
-            { at: 600, kind: "boss", enemyId: "haakon_the_champion", hp: 4000 },
+            { at: 450, kind: "boss", enemyId: "obor", hp: 3400 },
+            { at: 500, kind: "elite", enemyId: "skeleton" },
+            { at: 570, kind: "boss", enemyId: "haakon_the_champion", hp: 4000 },
             { at: 620, kind: "ring", enemyId: "sepulchre_ankou", count: 44 },
-            { at: 660, kind: "elite", enemyId: "pit_spider" },
-            { at: 720, kind: "elite", enemyId: "stronghold_shade" },
+            { at: 675, kind: "boss", enemyId: "bryophyta", hp: 5200 },
+            { at: 730, kind: "elite", enemyId: "stronghold_shade" },
             { at: 780, kind: "elite", enemyId: "barbarian_shieldmaiden" },
             { at: 840, kind: "ring", enemyId: "barbarian_berserker", count: 56 },
             { at: 870, kind: "elite", enemyId: "barbarian_berserker" },
@@ -145,3 +145,16 @@ export const CUSTOM_MAPS: MapDef[] = [
         victoryText: "TzKal-Zuk is slain! You have conquered the Fight Caves!",
     },
 ];
+
+export function applyCustomMaps(maps: MapDef[]): void {
+    const lumbridgeIdx = maps.findIndex((m) => m.id === "lumbridge");
+    const barbarianVillage = CUSTOM_MAPS.find((m) => m.id === "barbarian_village");
+    if (barbarianVillage) {
+        maps.splice(lumbridgeIdx >= 0 ? lumbridgeIdx + 1 : 1, 0, barbarianVillage);
+    }
+    for (const customMap of CUSTOM_MAPS) {
+        if (customMap.id !== "barbarian_village") {
+            maps.push(customMap);
+        }
+    }
+}

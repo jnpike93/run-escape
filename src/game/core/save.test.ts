@@ -720,3 +720,71 @@ describe("level and run points", () => {
         );
     });
 });
+
+describe("Barbarian Village campaign & unlocks", () => {
+    test("unlocks after Lumbridge, and beating Barbarian Village unlocks Penance Fighter, Battleaxe, Fighter torso, and Fremennik helms", () => {
+        const save = createSave();
+        expect(isMapUnlocked(save, "barbarian_village")).toBe(false);
+        expect(isEndlessUnlocked(save, "barbarian_village")).toBe(false);
+
+        // Beat Lumbridge to unlock Barbarian Village
+        recordRun(save, run("lumbridge", { victory: true, seconds: 900 }));
+        expect(isMapUnlocked(save, "barbarian_village")).toBe(true);
+        expect(isMapUnlocked(save, "barrows")).toBe(false);
+
+        // Beat Barbarian Village and kill all 5 bosses
+        const earned = recordRun(
+            save,
+            run("barbarian_village", {
+                victory: true,
+                seconds: 910,
+                bossesKilled: [
+                    "minotaur_warlord",
+                    "obor",
+                    "haakon_the_champion",
+                    "bryophyta",
+                    "gunthor_the_brave",
+                ],
+                enemyKills: {
+                    stronghold_minotaur: 200,
+                    pit_spider: 200,
+                    stronghold_shade: 200,
+                    obor: 1,
+                    bryophyta: 1,
+                    gunthor_the_brave: 1,
+                },
+            }),
+        );
+
+        expect(isEndlessUnlocked(save, "barbarian_village")).toBe(true);
+        expect(isMapUnlocked(save, "barrows")).toBe(true);
+        expect(save.unlockedCharacters).toContain("penance_fighter");
+        const penance = CHARACTERS.find((c) => c.id === "penance_fighter");
+        expect(penance?.startingWeapon).toBe("battleaxe");
+
+        // Weapons & gear unlocked by Barbarian Village campaign and bosses
+        for (const itemId of [
+            "battleaxe",
+            "zombie_axe",
+            "hill_giant_club",
+            "bryophytas_staff",
+            "skull_sceptre",
+            "fighter_torso",
+            "berserker_helm",
+            "warrior_helm",
+            "archer_helm",
+            "farseer_helm",
+        ]) {
+            expect(save.unlockedItems).toContain(itemId);
+        }
+
+        // All 3 Barbarian Village quests completed
+        expect(earned.map((q) => q.id)).toEqual(
+            expect.arrayContaining([
+                "stronghold_of_security",
+                "edgeville_dungeon_giants",
+                "gunthors_longhall",
+            ]),
+        );
+    });
+});

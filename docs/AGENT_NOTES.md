@@ -8,27 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Barbarian Village Custom Map, Wave Roster & Bosses
+### [2026-10-30] Add Barbarian Village Campaign Map, 5 Bosses, Penance Fighter Adventurer, Boss Weapons & Fremennik Helms
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
-**Bundle**: `index-Ce6nqW3s.js` (`?v=8.5`, MapViewer `MapViewerApp-CGW29I1i.js`, WASM loader `module-Dc4ixm-r.js`)
+**Bundle**: `index-Gom2pxz6.js` (`?v=8.5`, MapViewer `MapViewerApp-C0v_g00H.js`, WASM loader `module-BKVjJkIp.js`)
 
-**Scope**: Created a playable **Barbarian Village** custom map (`id: "barbarian_village"`) spanning the Barbarian Village settlement, Gunthor's longhall, the Stronghold of Security entrance, the River Lum bridge, Ice Mountain, and Edgeville, complete with 12 custom wave enemy archetypes, 3 custom bosses, automatic custom-map unlocking, and 2-4 player Co-Op Multiplayer support.
+**Scope**: Created a playable **Barbarian Village** campaign map (`id: "barbarian_village"`) placed right after **Lumbridge** in the campaign progression (`MAPS`), spanning the Barbarian Village settlement, Gunthor's longhall, the Stronghold of Security entrance, the River Lum bridge, Ice Mountain, and Edgeville, complete with 12 custom wave enemy archetypes, 5 custom bosses (including Obor and Bryophyta from Edgeville Dungeon), the **Penance Fighter** adventurer in full Barbarian Assault & Fremennik gear, 6 custom weapons (including the **Battleaxe** line, **Leaf-bladed battleaxe**, **Zombie axe**, **Hill giant club**, **Bryophyta's staff**, and **Skull sceptre**), campaign gear unlocks for the **Fighter torso** and all four **Fremennik helmets**, 3 quests, and 2-4 player Co-Op Multiplayer support.
 
 **Changes implemented**:
 - **Custom Enemies & Bosses (`src/game/content/custom/customEnemies.ts`)**:
   - Added 12 Barbarian Village wave enemies using verified slim-cache NPC and player appearance models: `dungeon_rat` (`npcId: 2865`), `village_goblin` (`npcId: 2245`), `barbarian_villager` (`npcId: 2491`), `ice_wolf` (`npcId: 3024`), `mine_scorpion` (`npcId: 12812`), `barbarian_axeman` (player appearance with iron chainbody, bronze med helm, and steel battleaxe), `stronghold_minotaur` (`npcId: 3018`), `barbarian_shieldmaiden` (`npcId: 1280`), `pit_spider` (`npcId: 2514`), `stronghold_shade` (translucent dark shadow warrior with `red_magic_missile` projectiles), `sepulchre_ankou` (translucent crimson skeletal spirit with `dark_energy_ball` projectiles), and `barbarian_berserker` (horned-helm dual-axe berserker).
-  - Added 3 Barbarian Village bosses: `minotaur_warlord` (5:00 mid-boss with `stomp` and `leap_slam`), `haakon_the_champion` (10:00 mid-boss with `cleave`, `charge`, and `ground_slam` rockfalls), and final boss `gunthor_the_brave` (15:00 Chieftain of Barbarian Village with `cleave`, `stomp`, `leap_slam`, and `summon` waves of `barbarian_berserker` and `barbarian_axeman`).
-- **Custom Map Definition (`src/game/content/custom/customMaps.ts`)**:
-  - Added `barbarian_village` (`name: "Barbarian Village"`, `iconObjId: 1373` Rune battleaxe, `arena: { baseX: 47 * 64, baseY: 52 * 64, sizeX: 3 * 64, sizeY: 3 * 64 }`, `spawn: { x: 3082.5, y: 3423.5 }`, `difficulty: { hp: 1.35, damage: 1.2 }`) with 15 waves and scheduled ambush/horde/boss events across the 15-minute run.
-- **Save Unlocking & Co-Op Registration (`src/game/core/custom/customSave.ts`, `src/game/core/save.ts`, `src/custom/multiplayer/mp-constants.js`)**:
-  - Added `isCustomMap(mapId)` in `customSave.ts` and updated `isMapUnlocked` in `save.ts` so all custom maps (`barbarian_village` and `fight_caves`) are unlocked by default without shifting the base-game map progression chain.
+  - Added 5 Barbarian Village & Edgeville Dungeon bosses: `minotaur_warlord` (3:45 Stronghold of Security boss), `obor` (7:30 Edgeville Dungeon hill giant boss, `npcId: 7416`), `haakon_the_champion` (9:30 longhall warlord), `bryophyta` (11:15 Edgeville Dungeon moss giant boss, `npcId: 8195`), and final boss `gunthor_the_brave` (15:00 Chieftain of Barbarian Village).
+- **Custom Adventurer (`src/game/content/custom/customCharacters.ts`)**:
+  - Added `penance_fighter` (`name: "Penance fighter"`, `style: "melee"`, `startingWeapon: "battleaxe"`, wearing Berserker helm `3751`, Fighter torso `10551`, Penance skirt `10555`, Penance gloves `10553`, and Runner boots `10552`, `bonus: { meleeMight: 0.15, cooldown: 0.1, armor: 0.5, moveSpeed: 0.05 }`, unlocked by beating `barbarian_village`).
+- **Custom Weapons, Gear & Quests (`src/game/content/custom/customWeapons.ts`, `src/game/content/custom/customOverrides.ts`, `src/game/content/items.ts`, `src/game/content/armoury.ts`)**:
+  - Added `CUSTOM_WEAPONS`: `battleaxe` (Common 8-level Bronze -> Dragon progression, unlocked by beating `barbarian_village`, evolves into `leaf_bladed_battleaxe` with `protect_melee`), `zombie_axe` (Rare melee weapon unlocked by beating `barbarian_village`, `+50%` vs undead and `+35%` 2nd hit vs bosses/elites), `hill_giant_club` (Rare melee weapon unlocked by killing `obor`, 3rd-swing stunning Club Crush), `bryophytas_staff` (Rare magic weapon unlocked by killing `bryophyta`, splashing poison nature bolts), and `skull_sceptre` (Rare magic weapon unlocked by killing `minotaur_warlord`, skull strikes + `+50%` vs undead, upgrades to Skull sceptre (i)).
+  - Added `CUSTOM_CASKET_GEAR` (`warrior_helm` `3753`, `archer_helm` `3749` with Armoury upgrade lines into `slayer_helmet`) and `CUSTOM_GEAR_OVERRIDES` (`fighter_torso` `10551`, `berserker_helm` `3751`, `farseer_helm` `3755`), all unlocked by beating `barbarian_village`.
+  - Added `CUSTOM_QUESTS`: `stronghold_of_security`, `edgeville_dungeon_giants`, and `gunthors_longhall`.
+- **Custom Map Definition & Progression (`src/game/content/custom/customMaps.ts`, `src/game/content/maps.ts`, `src/game/core/custom/customSave.ts`)**:
+  - Added `barbarian_village` (`name: "Barbarian Village"`, `iconObjId: 1373` Rune battleaxe, `arena: { baseX: 47 * 64, baseY: 52 * 64, sizeX: 3 * 64, sizeY: 3 * 64 }`, `spawn: { x: 3082.5, y: 3423.5 }`, `difficulty: { hp: 1.15, damage: 1.1 }`) inserted right after `lumbridge` via `applyCustomMaps(MAPS)` so it unlocks after beating Lumbridge and unlocks Barrows when beaten.
   - Registered `barbarian_village` in `ALL_REGIONS` in `src/custom/multiplayer/mp-constants.js`.
 - **Tests & Documentation (`src/game/core/Sim.test.ts`, `src/game/core/save.test.ts`, `src/custom/multiplayer/multiplayer.test.ts`, `docs/CHANGELOG.md`)**:
-  - Added unit tests for `barbarian_village` unlock status, enemy/boss definitions, and multiplayer region sanitization; updated `docs/CHANGELOG.md` and rebuilt the production bundle (`npm run build`).
+  - Added unit tests for `barbarian_village` campaign unlocks, Penance Fighter, weapons, gear, quests, and multiplayer region sanitization; updated `docs/CHANGELOG.md` and rebuilt the production bundle (`npm run build`).
 
-**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (202/202 passed across `Sim.test.ts`, `save.test.ts`, `multiplayer.test.ts`, `changelog.test.ts`), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (294/294 passed across all 14 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
 
 ---
 

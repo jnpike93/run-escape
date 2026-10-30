@@ -20,6 +20,8 @@ const LINES: string[][] = [
     ["coif", "armadyl_helmet", "masori_mask_f"],
     ["mystic_hat", "farseer_helm", "ancestral_hat", "twisted_ancestral_hat"],
     ["berserker_helm", "slayer_helmet", "black_slayer_helmet"],
+    ["warrior_helm", "slayer_helmet"],
+    ["archer_helm", "slayer_helmet"],
 
     // Cape: the TzHaar's capes, the Ardougne diary's cloaks, the god capes
     // imbued at the Mage Arena

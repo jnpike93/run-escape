@@ -1,4 +1,4 @@
-import { CUSTOM_MAPS } from "./custom/customMaps";
+import { applyCustomMaps } from "./custom/customMaps";
 import { getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
 import { MapDef } from "./types";
@@ -285,8 +285,9 @@ export const MAPS: MapDef[] = [
         finalBossWarning: "The lava churns... three JalTok-Jads are rising!",
         victoryText: "The JalTok-Jads are slain! You are the champion of the Inferno!",
     },
-    ...CUSTOM_MAPS,
 ];
+
+applyCustomMaps(MAPS);
 
 export const CAMPAIGN_MAPS: MapDef[] = MAPS;
 

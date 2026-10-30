@@ -1,5 +1,5 @@
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
-import { applyCustomItems } from "./custom/customOverrides";
+import { applyCustomGear, applyCustomItems } from "./custom/customOverrides";
 import {
     CasketDef,
     CasketTier,
@@ -500,6 +500,8 @@ export const CASKET_GEAR: GearDef[] = [
         unlock: NEX_KILL,
     },
 ];
+
+applyCustomGear(CASKET_GEAR);
 
 // A variant has this much more of each of its piece's stats (a variant of a
 // variant, like Ardougne cloak 3 from cloak 2, that much more again)
