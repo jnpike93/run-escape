@@ -8,10 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning, Movement & Attack Bug (`FlowField.update` Argument Order)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `fd2c917` (and follow-up sync/test commit - see git log)
+**Bundle**: `index-CHTowyrV.js` (`?v=8.6`, MapViewer `MapViewerApp-B6q-pfZW.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-VGKAynAb.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+
+**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players.
+
+**Changes implemented**:
+- **Root Cause & Fix (`src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
+  - `FlowField.prototype.update(grid, targetX, targetY)` (`src/game/core/world/FlowField.ts`) takes `grid` as its first argument. However, `setupInGameHooks` in `mp-sync-engine.js` called `anchor.flowField.update(Math.floor(anchor.entity.x), Math.floor(anchor.entity.y), sim.grid)` in `sim.findSpawnPoint` and `t.flowField.update(tx, ty, sim.grid)` in `sim.stepEnemies`.
+  - Passing `(tx, ty, sim.grid)` bound `grid` to the number `tx` and threw `TypeError: grid.isSolid is not a function` inside `canStep(grid, ...)` on every tick before `origStepEnemies()` or wave spawning could execute, leaving only the 5 manually spawned starter enemies frozen in place while `stepPlayer()` still let players walk through them.
+  - Added `updateEntityFlowField(flowField, entity, force)` in `setupInGameHooks` which resolves solid tiles within `d = 1..3` (matching `Sim.updateFlowField()`) and invokes `flowField.update(sim.grid, tileX, tileY)` with the correct `(grid, targetX, targetY)` argument order.
+  - Copied `peer.flowField.ditchY = sim.flowField.ditchY` when creating `peer.flowField`, initialized `poisonDamage: 0, poisonEnd: -1, lastHitTick: -999` on remote peer entities, and updated initial Host spawn `sim.flowField.update(sim.grid, ...)` after applying `SPAWN_OFFSETS`.
+- **Integration Tests (`src/custom/multiplayer/multiplayer.test.ts`)**:
+  - Added real-`Sim` Co-Op integration tests on Barrows across Regular (`1x`) and Nightmare (`3x`) difficulty verifying that wave monsters spawn continuously beyond the initial 5 rats, chase players via `FlowField`, deal contact damage, and broadcast via `sync_world`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (409/409 passed across all 20 test suites), `npm run verify-slim-cache` (verified 3,529 groups), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-10-30] Merge Upstream `0.18.0` (`3e5885c`), Rebuild Slim Cache (`64ff6328`), Fix Out-of-Bounds Map Square Worker Flood & Add Co-Op `0.18.0` Sync
 
 **Model**: Gemini (Antigravity)
-**Commit**: (pending - see git log)
+**Commit**: `2033144`
 **Bundle**: `index-CHTowyrV.js` (`?v=8.6`, MapViewer `MapViewerApp-B6q-pfZW.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-VGKAynAb.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
 
 **Scope**: Merged upstream `main` (`59b6eff..3e5885c`, release `0.18.0` and `sim-collision-snapshots`) into `main`, regenerated and verified the slim cache (`osrs-241_2026-09-30-slim-64ff6328`, 14,394 groups in full mode) for all new `0.18.0` weapon stances, power-ups (`sled`, `giant_essence`, `evil_bob`, `fairy_ring`, `drill_demon`), and Toktz-mej-tal fire loc animations, fixed `MapManager` / `WebGLMapViewerRenderer` out-of-bounds map square worker flooding and `invalidMapIds` clearing on plane changes, and integrated all `0.18.0` features into Co-Op Multiplayer.

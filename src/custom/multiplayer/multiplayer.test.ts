@@ -835,10 +835,15 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
             const { ArenaGrid } = await import("../../game/core/world/ArenaGrid");
             const { getMap } = await import("../../game/content/maps");
             const { getEnemy } = await import("../../game/content/enemies");
+            const { createSave, getMetaStats } = await import("../../game/core/save");
 
             const prevWindow = (globalThis as any).window;
-            const prevCrypto = (globalThis as any).crypto;
+            const prevImage = (globalThis as any).Image;
             try {
+                (globalThis as any).window = { ...(prevWindow || {}), addEventListener() {} };
+                (globalThis as any).Image = prevImage || class { src = ""; };
+                const { mpSyncEngineMethods } = await import("./mp-sync-engine.js");
+
                 const map = getMap("barrows");
                 const sizeX = map.arena.sizeX;
                 const sizeY = map.arena.sizeY;
@@ -847,15 +852,22 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
                     baseY: map.arena.baseY,
                     sizeX,
                     sizeY,
-                    plane: map.arena.plane ?? 0,
-                    flags: new Int32Array(sizeX * sizeY),
-                    heights: new Int16Array((sizeX + 1) * (sizeY + 1)),
+                    plane: map.plane ?? 0,
+                    collisionFlags: new Int32Array(sizeX * sizeY),
+                    collisionLocs: new Float32Array(0),
+                    tileFlags: new Uint8Array(sizeX * sizeY),
+                    overlays: new Uint16Array(sizeX * sizeY),
+                    heights: new Int32Array((sizeX + 1) * (sizeY + 1)),
+                    bridgeHeights: new Int32Array((sizeX + 1) * (sizeY + 1)),
                 });
 
                 const sim = new Sim({
                     grid,
                     mapId: "barrows",
                     characterId: "warrior",
+                    spawnX: map.spawn.x,
+                    spawnY: map.spawn.y,
+                    metaStats: getMetaStats(createSave()),
                     seed: 12345,
                 });
 
@@ -883,6 +895,7 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
                 const hostCtx: any = {
                     ...mpSyncEngineMethods,
                     ...mpPickupsMethods,
+                    clientMethodsHooked: true,
                     role: "host",
                     localSlot: 1,
                     hostSlot: 1,
@@ -941,7 +954,7 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
                 expect(syncMsgs[syncMsgs.length - 1].enemies.length).toBeGreaterThan(5);
             } finally {
                 (globalThis as any).window = prevWindow;
-                (globalThis as any).crypto = prevCrypto;
+                (globalThis as any).Image = prevImage;
             }
         },
     );
