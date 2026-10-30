@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-DE-lnfdZ.js`](../assets/index-DE-lnfdZ.js) | `index.html`, `MapViewerApp-CxxPRWXZ.js`, `module-Cyc6w5ry.js` |
+| **Main Engine Bundle** | [`assets/index-4meYiBAc.js`](../assets/index-4meYiBAc.js) | `index.html`, `MapViewerApp-Dwa6qfoP.js`, `module-C4vb_P1Y.js` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
@@ -20,13 +20,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-CxxPRWXZ.js`](../assets/MapViewerApp-CxxPRWXZ.js) | `assets/index-DE-lnfdZ.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-DE-lnfdZ.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-Dwa6qfoP.js`](../assets/MapViewerApp-Dwa6qfoP.js) | `assets/index-4meYiBAc.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-4meYiBAc.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-Cyc6w5ry.js`](../assets/module-Cyc6w5ry.js) | `assets/index-DE-lnfdZ.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-C4vb_P1Y.js`](../assets/module-C4vb_P1Y.js) | `assets/index-4meYiBAc.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-DE-lnfdZ.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-4meYiBAc.js`)
 When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
 1. **Client Instance Export (`window.gameClient`)**:
    - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](../assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
@@ -58,6 +58,17 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Add Armoury Refund Option
+- **Commit / PR**: Add `Refund all` button to Armoury screen (`?v=8.5`)
+- **Files Modified**: `src/game/core/save.ts`, `src/game/core/save.test.ts`, `src/game/client/GameClient.ts`, `src/game/ui/ArmouryScreen.tsx`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`, `index.html`, `assets/index-4meYiBAc.js`, `assets/MapViewerApp-Dwa6qfoP.js`, `assets/module-C4vb_P1Y.js`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-4meYiBAc.js`, `assets/MapViewerApp-Dwa6qfoP.js`, `assets/module-C4vb_P1Y.js`)
+- **What Changed**:
+  - Added `getArmourySpent(save)` and `refundArmoury(save)` in `src/game/core/save.ts`, computing exact coins spent across all upgrade steps in `save.armoury` via `getUpgradeLine` and `getArmouryCost`, returning them to `save.coins`, and resetting `save.armoury = {}`.
+  - Added `refundArmoury()` to `GameClient` in `src/game/client/GameClient.ts` and a `Refund all` button to the bottom row of `ArmouryScreen` in `src/game/ui/ArmouryScreen.tsx`.
+  - Added unit test coverage in `src/game/core/save.test.ts`.
+- **Notes / Invariants for Future Agents**:
+  - `getArmourySpent` derives spent coins directly from `save.armoury` and `getArmouryCost(line[i])`, so no save schema migration or extra `SaveData` field is required.
 
 ### 2026-10-29 - Antigravity - Rename Slayer Tasks Menu Sections to OSRS Slayer Masters & Task Names
 - **Commit / PR**: OSRS Slayer Master section headings and Slayer assignment names (`?v=8.5`)

@@ -8,7 +8,7 @@ import { RARITIES } from "../content/rarity";
 import { describeSetProgress, getItemSet } from "../content/sets";
 import { diffStats, formatStats } from "../content/stats";
 import { describeUnlockTask, isAvailable } from "../content/unlocks";
-import { SaveData, getArmouryStep } from "../core/save";
+import { SaveData, getArmourySpent, getArmouryStep } from "../core/save";
 import "./ArmouryScreen.css";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
@@ -61,6 +61,13 @@ export function ArmouryScreen({ ui, client }: Props): JSX.Element {
                         Found {save.foundGear.length} / {CASKET_GEAR.length}
                     </span>
                     <Coins amount={save.coins} />
+                    <button
+                        className="ui-button"
+                        disabled={getArmourySpent(save) === 0}
+                        onClick={() => client.refundArmoury()}
+                    >
+                        Refund all
+                    </button>
                 </div>
             </div>
         </div>

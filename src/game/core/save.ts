@@ -508,6 +508,27 @@ export function buyArmouryUpgrade(save: SaveData, itemId: string): boolean {
     return true;
 }
 
+export function getArmourySpent(save: SaveData): number {
+    let spent = 0;
+    for (const [itemId, count] of Object.entries(save.armoury)) {
+        const line = getUpgradeLine(itemId);
+        const steps = Math.min(count, line.length - 1);
+        for (let i = 1; i <= steps; i++) {
+            spent += getArmouryCost(line[i]);
+        }
+    }
+    return spent;
+}
+
+export function refundArmoury(save: SaveData): void {
+    const spent = getArmourySpent(save);
+    if (spent <= 0) {
+        return;
+    }
+    save.coins += spent;
+    save.armoury = {};
+}
+
 // A save as a file, to keep or to carry to another browser
 export function exportSave(save: SaveData): string {
     return JSON.stringify(save, null, 2);

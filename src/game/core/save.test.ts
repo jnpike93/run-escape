@@ -11,6 +11,7 @@ import {
     buyUpgrade,
     createSave,
     exportSave,
+    getArmourySpent,
     getArmouryStep,
     getEarnedUnlocks,
     getFinishedQuests,
@@ -23,6 +24,7 @@ import {
     isMapUnlocked,
     migrateSave,
     recordRun,
+    refundArmoury,
     refundUpgrades,
 } from "./save";
 
@@ -389,6 +391,24 @@ describe("the Armoury", () => {
         // The Coif's line is two upgrades long
         expect(migrated.armoury).toEqual({ coif: 2 });
         expect(migrateSave({ version: 4, coins: 5 }).foundGear).toEqual([]);
+    });
+
+    test("refunds all armoury upgrades and returns spent coins", () => {
+        const save = createSave();
+        save.coins = 100000;
+        recordRun(save, run("lumbridge", { gearFound: ["amulet_of_strength", "coif"] }));
+        expect(getArmourySpent(save)).toBe(0);
+        expect(buyArmouryUpgrade(save, "amulet_of_strength")).toBe(true);
+        expect(buyArmouryUpgrade(save, "amulet_of_strength")).toBe(true);
+        expect(buyArmouryUpgrade(save, "coif")).toBe(true);
+        const expectedSpent =
+            ARMOURY_COSTS.uncommon + ARMOURY_COSTS.veryRare + ARMOURY_COSTS.rare;
+        expect(getArmourySpent(save)).toBe(expectedSpent);
+        expect(save.coins).toBe(100000 - expectedSpent);
+        refundArmoury(save);
+        expect(save.coins).toBe(100000);
+        expect(save.armoury).toEqual({});
+        expect(getArmourySpent(save)).toBe(0);
     });
 });
 
