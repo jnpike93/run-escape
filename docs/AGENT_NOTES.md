@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-COMG5mx1.js`](../assets/index-COMG5mx1.js) | `index.html`, `MapViewerApp-wfx3-3oW.js`, `module-P02y7iRx.js` |
+| **Main Engine Bundle** | [`assets/index-6n0QZWUb.js`](../assets/index-6n0QZWUb.js) | `index.html`, `MapViewerApp-CMXrLrwx.js`, `module-DAP8-cqq.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -21,13 +21,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-wfx3-3oW.js`](../assets/MapViewerApp-wfx3-3oW.js) | `assets/index-COMG5mx1.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-COMG5mx1.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-CMXrLrwx.js`](../assets/MapViewerApp-CMXrLrwx.js) | `assets/index-6n0QZWUb.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-6n0QZWUb.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-P02y7iRx.js`](../assets/module-P02y7iRx.js) | `assets/index-COMG5mx1.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-DAP8-cqq.js`](../assets/module-DAP8-cqq.js) | `assets/index-6n0QZWUb.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-COMG5mx1.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-6n0QZWUb.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
    - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), and secret codes (`secretCodes.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `GameClient.ts`) via 1-line imports/spreads.
@@ -65,6 +65,17 @@ When adding new features or merging upstream changes into `src/` and rebuilding 
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Slide Unreachable Flying Monster Loot onto Walkable Ground
+- **Commit / PR**: Unreachable pickup target discovery and smooth slide (`?v=8.5`)
+- **Files Modified**: `src/game/core/Sim.ts`, `src/game/core/entities.ts`, `src/game/core/Sim.test.ts`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`, `index.html`, `assets/index-6n0QZWUb.js`, `assets/MapViewerApp-CMXrLrwx.js`, `assets/module-DAP8-cqq.js`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-6n0QZWUb.js`, `assets/MapViewerApp-CMXrLrwx.js`, `assets/module-DAP8-cqq.js`)
+- **What Changed**:
+  - Added `isTileReachableForPickup` and `findReachablePickupSpot` in `src/game/core/Sim.ts` and `targetX` / `targetY` on `Pickup` in `src/game/core/entities.ts`.
+  - When a pickup is dropped on a solid or unreachable tile (or enters the player's flow-field window on an unreachable tile), it computes the nearest reachable walkable tile (preferring tiles closer to the player) and smoothly glides out of the obstacle onto that tile in `stepPickups`.
+  - Added unit test coverage in `src/game/core/Sim.test.ts`.
+- **Notes / Invariants for Future Agents**:
+  - `gatherPiles` waits until `pickup.targetX === undefined` so bone/coin piles do not merge into a pile that is still sliding out of an obstacle.
 
 ### 2026-10-29 - Antigravity - Enhance God Wars Dungeon Multi-Faction Warfare
 - **Commit / PR**: Expand God Wars Dungeon faction combat (`?v=8.5`)

@@ -4674,6 +4674,57 @@ export class Sim {
         this.events.push({ type: "casketDropped", tier, x, y });
     }
 
+    private isTileReachableForPickup(tileX: number, tileY: number): boolean {
+        if (!this.grid.contains(tileX, tileY) || this.grid.isSolid(tileX, tileY)) {
+            return false;
+        }
+        return !this.flowField.contains(tileX, tileY) || this.flowField.isReachable(tileX, tileY);
+    }
+
+    // Finds the nearest reachable walkable spot for a pickup dropped over water,
+    // lava, chasms, or walls, preferring tiles closer to the player.
+    private findReachablePickupSpot(x: number, y: number): { x: number; y: number } {
+        const startX = Math.floor(x);
+        const startY = Math.floor(y);
+        if (this.isTileReachableForPickup(startX, startY)) {
+            return { x, y };
+        }
+        const player = this.player;
+        const offsetX = (x - startX - 0.5) * 0.5;
+        const offsetY = (y - startY - 0.5) * 0.5;
+        let bestX = player.x;
+        let bestY = player.y;
+        let bestScore = Infinity;
+        for (let r = 1; r <= 16; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) {
+                        continue;
+                    }
+                    const tx = startX + dx;
+                    const ty = startY + dy;
+                    if (!this.isTileReachableForPickup(tx, ty)) {
+                        continue;
+                    }
+                    const cx = tx + 0.5 + offsetX;
+                    const cy = ty + 0.5 + offsetY;
+                    const distDrop = Math.hypot(cx - x, cy - y);
+                    const distPlayer = Math.hypot(cx - player.x, cy - player.y);
+                    const score = distDrop + distPlayer * 0.25;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestX = cx;
+                        bestY = cy;
+                    }
+                }
+            }
+            if (bestScore < Infinity) {
+                break;
+            }
+        }
+        return { x: bestX, y: bestY };
+    }
+
     dropPickup(
         kind: PickupKind,
         x: number,
@@ -4681,6 +4732,8 @@ export class Sim {
         value: number,
         extra: Pick<Pickup, "tier" | "powerUp"> = {},
     ): void {
+        const safe = this.findReachablePickupSpot(x, y);
+        const needsSlide = Math.hypot(safe.x - x, safe.y - y) > 0.01;
         if (kind === "bones" && this.pickups.length >= MAX_PICKUPS) {
             // Too many lying around: the pile furthest from the player comes
             // here and takes these on too. Piles left behind as the player
@@ -4703,6 +4756,8 @@ export class Sim {
             if (pile) {
                 pile.x = pile.prevX = x;
                 pile.y = pile.prevY = y;
+                pile.targetX = needsSlide ? safe.x : undefined;
+                pile.targetY = needsSlide ? safe.y : undefined;
                 pile.value += value;
                 return;
             }
@@ -4719,6 +4774,7 @@ export class Sim {
             speed: 0,
             spawnTick: this.tick,
             pileUid: 0,
+            ...(needsSlide && { targetX: safe.x, targetY: safe.y }),
             ...extra,
         });
     }
@@ -4770,16 +4826,43 @@ export class Sim {
             }
             if (pickup.attracted) {
                 pickup.pileUid = 0;
+                pickup.targetX = undefined;
+                pickup.targetY = undefined;
                 if (distance > 0.001) {
                     pickup.speed = Math.min(pickup.speed + 0.02, 0.6);
                     const move = Math.min(pickup.speed, distance);
                     pickup.x += (dx / distance) * move;
                     pickup.y += (dy / distance) * move;
                 }
-            } else if (pickup.pileUid !== 0) {
-                this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
-                if (pickup.value < 0) {
-                    continue;
+            } else {
+                if (
+                    pickup.targetX === undefined &&
+                    !this.isTileReachableForPickup(Math.floor(pickup.x), Math.floor(pickup.y))
+                ) {
+                    const safe = this.findReachablePickupSpot(pickup.x, pickup.y);
+                    pickup.targetX = safe.x;
+                    pickup.targetY = safe.y;
+                }
+                if (pickup.targetX !== undefined && pickup.targetY !== undefined) {
+                    const tx = pickup.targetX - pickup.x;
+                    const ty = pickup.targetY - pickup.y;
+                    const td = Math.hypot(tx, ty);
+                    pickup.speed = Math.min(pickup.speed + 0.025, 0.35);
+                    if (td <= pickup.speed) {
+                        pickup.x = pickup.targetX;
+                        pickup.y = pickup.targetY;
+                        pickup.targetX = undefined;
+                        pickup.targetY = undefined;
+                        pickup.speed = 0;
+                    } else {
+                        pickup.x += (tx / td) * pickup.speed;
+                        pickup.y += (ty / td) * pickup.speed;
+                    }
+                } else if (pickup.pileUid !== 0) {
+                    this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
+                    if (pickup.value < 0) {
+                        continue;
+                    }
                 }
             }
             if (distance < 0.6) {
@@ -4806,7 +4889,8 @@ export class Sim {
                 (p.kind === "bones" || p.kind === "coins") &&
                 p.value >= 0 &&
                 !p.attracted &&
-                p.pileUid === 0,
+                p.pileUid === 0 &&
+                p.targetX === undefined,
         );
         // Biggest first (ties to the oldest: the sort keeps their order)
         loose.sort((a, b) => b.value - a.value);

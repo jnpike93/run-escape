@@ -288,6 +288,9 @@ export type Pickup = {
     tier?: CasketTier;
     // Power-ups only: which one
     powerUp?: string;
+    // Reachable walkable spot to slide onto when dropped over an obstacle
+    targetX?: number;
+    targetY?: number;
 };
 
 // A one-off spot animation somewhere in the world (spell impacts, strikes)

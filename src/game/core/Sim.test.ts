@@ -1329,6 +1329,26 @@ describe("enemy mechanics", () => {
         expect(zamorak.hp).toBeLessThan(zamorak.maxHp);
     });
 
+    test("pickups dropped on unreachable or solid tiles slide onto the nearest reachable tile toward the player", () => {
+        const sim = createSim();
+        sim.weapons = [];
+        // openField() has a vertical wall at x = 1030, y = 1021..1049; player is at (1036.5, 1036.5)
+        expect(sim.grid.isSolid(1030, 1036)).toBe(true);
+        sim.dropCasket(1030.5, 1036.5, false);
+        const casket = sim.pickups[sim.pickups.length - 1];
+        expect(casket.x).toBe(1030.5);
+        expect(casket.targetX).toBe(1031.5);
+        expect(sim.grid.isSolid(Math.floor(casket.targetX!), Math.floor(casket.targetY!))).toBe(
+            false,
+        );
+        // After stepping, the casket glides out of the wall onto the reachable tile toward the player
+        play(sim, 1);
+        expect(casket.targetX).toBeUndefined();
+        expect(Math.floor(casket.x)).toBe(1031);
+        expect(sim.grid.isSolid(Math.floor(casket.x), Math.floor(casket.y))).toBe(false);
+        expect(sim.flowField.isReachable(Math.floor(casket.x), Math.floor(casket.y))).toBe(true);
+    });
+
     test("each faction's army comes from its own side", () => {
         const sim = createSim();
         const player = sim.player;
