@@ -510,6 +510,20 @@ export class NpcType extends Type {
         }
     }
 
+    override post(): void {
+        if (this.id === 7416) {
+            // Obor (slim cache model mapping using Hill Giant 5-part rig + dark iron/blood accents)
+            this.modelIds = [17463, 17446, 17430, 17466, 17460];
+            this.recolorFrom = [6554, 6430, 8478, 6435];
+            this.recolorTo = [10398, 10518, 924, 933];
+        } else if (this.id === 8195) {
+            // Bryophyta (slim cache model mapping using Hill Giant 5-part rig + mossy nature palette)
+            this.modelIds = [17463, 17446, 17430, 17466, 17460];
+            this.recolorFrom = [5578, 5582, 5586, 5437, 5446, 6554, 6430, 8478, 6435];
+            this.recolorTo = [22424, 22416, 21526, 14395, 14387, 14395, 14387, 22416, 21526];
+        }
+    }
+
     getIdleSeqId(basTypeLoader: BasTypeLoader): number {
         if (this.basTypeId !== -1) {
             return basTypeLoader.load(this.basTypeId).idleSeqId;
