@@ -275,6 +275,57 @@ describe("Security fixes - hpDelta magnitude cap (M-2)", () => {
         expect(p2.hp).toBeGreaterThanOrEqual(0);
         expect(p2.hp).toBe(100); // 300 - 200
     });
+
+    test("usedItemId spoofing protection ignores item effects if sender does not possess the item", () => {
+        const { ctx, p2, peer } = makeApplyCtx(100, 500);
+        let damagedEnemy = false;
+        const enemy = { dead: false, x: 10, y: 10, radius: 0.4 };
+        p2.x = 10;
+        p2.y = 10;
+
+        (globalThis as any).window.gameClient.sim.enemies = [enemy];
+        (globalThis as any).window.gameClient.sim.damageEnemy = () => {
+            damagedEnemy = true;
+        };
+
+        // 1. Spoofed black_chinchompa without item in loadout or message -> IGNORED
+        ctx.applyRemoteLoadout({
+            type: 'coop_loadout',
+            senderSlot: 2,
+            slot: 2,
+            usedItemId: 'black_chinchompa',
+            inventory: [],
+            gear: [],
+            passives: [],
+            weapons: []
+        });
+        expect(damagedEnemy).toBe(false);
+        expect(peer._lastItemUseMs).toBeUndefined();
+
+        // 2. Unallowed item string -> IGNORED
+        ctx.applyRemoteLoadout({
+            type: 'coop_loadout',
+            senderSlot: 2,
+            slot: 2,
+            usedItemId: 'super_weapon_cheat',
+            inventory: [{ id: 'super_weapon_cheat' }]
+        });
+        expect(damagedEnemy).toBe(false);
+
+        // 3. Legitimate black_chinchompa present in inventory -> EXECUTED
+        ctx.applyRemoteLoadout({
+            type: 'coop_loadout',
+            senderSlot: 2,
+            slot: 2,
+            usedItemId: 'black_chinchompa',
+            inventory: [{ id: 'black_chinchompa', count: 1 }],
+            gear: [],
+            passives: [],
+            weapons: []
+        });
+        expect(damagedEnemy).toBe(true);
+        expect(peer._lastItemUseMs).toBeDefined();
+    });
 });
 
 describe("Security fixes - weapon.bonus cap (M-3)", () => {

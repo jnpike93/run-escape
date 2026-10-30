@@ -3,8 +3,8 @@
 // Debug mode for testing. Enter a code in Settings > Save & Codes > Secret code:
 //   "debugmode" turns it on (invulnerable, 1,000,000 HP, max armor, Shift sprints)
 //   "bugmode"   turns it off and puts the player back to normal play.
-// While it's on, press "\" in a run to open the debug panel: sliders for every
-// player stat, plus attack speed, base damage, sprint speed and invulnerability.
+// While it's on, press "\" in a run to open the debug panel: game speed, sliders for
+// every player stat, plus attack speed, base damage, sprint speed and invulnerability.
 // To remove: delete this file, its <script> tag in index.html, and "coop_debug"
 // from both allowlists in serve.py.
 // =====================================================================
@@ -38,9 +38,12 @@
     //   'add'   - added to sim.stats[stat] (value / div, so percentages become fractions)
     //   'maxhp' - overrides the player's max HP (index 0 = the game's own value)
     //   'flat'  - flat damage added to every hit the player deals
+    //   'game'  - game speed: scales how much time the game loop gets each frame
     // Every slider snaps to a notch: either evenly spaced (min/max/step) or a list of values.
     const range = (min, max, step) => { const v = []; for (let x = min; x <= max + 1e-9; x += step) v.push(Math.round(x * 100) / 100); return v; };
     const SLIDERS = [
+        { group: 'Game' },
+        { id: 'gameSpeed', label: 'Game speed', kind: 'game', normal: 1, values: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10], fmt: v => v === 1 ? `${NORMAL} (1x)` : `${v}x` },
         { group: 'Survival' },
         { id: 'maxHp', label: 'Max HP', kind: 'maxhp', values: [0, 50, 100, 250, 500, 1000, 5000, 10000, 100000, 1000000], fmt: v => v === 0 ? NORMAL : v.toLocaleString() },
         { id: 'armor', label: 'Armour (flat damage reduction)', kind: 'add', stat: 'armor', div: 1, values: [0, 1, 2, 3, 5, 10, 25, 50, 100, 1000, 1000000000], fmt: v => v >= 1e9 ? 'Max' : String(v) },
@@ -65,7 +68,8 @@
         { id: 'greed', label: 'Coin gain', kind: 'add', stat: 'greed', div: 100, values: range(0, 1000, 50), fmt: v => `+${v}%` },
     ];
     const DEFS = SLIDERS.filter(d => d.id);
-    const NEUTRAL = Object.fromEntries(DEFS.map(d => [d.id, d.values[0]]));
+    const neutralOf = d => d.normal ?? d.values[0];
+    const NEUTRAL = Object.fromEntries(DEFS.map(d => [d.id, neutralOf(d)]));
     // What "debugmode" gives you straight away (the old god mode).
     const GOD_PRESET = { ...NEUTRAL, maxHp: 1000000, armor: 1000000000, sprintMult: 3 };
 
@@ -137,8 +141,28 @@
         return { ok: true, message };
     }
 
+    // Game speed: the loop runs 50 ticks a second and takes at most 200 ms per frame. Give it more
+    // (or less) time before each frame. In co-op the host runs the world for everyone, so a guest's
+    // game speed is ignored.
+    const FRAME_CAP_MS = 200, EXTRA_CAP_MS = 1000;
+    function isCoopGuest() { const m = mp(); return !!(m && m.gameStarted && m.role === 'guest'); }
+    function hookGameSpeed(client) {
+        if (typeof client.update !== 'function' || client.__debugSpeedHooked) return;
+        client.__debugSpeedHooked = true;
+        const origUpdate = client.update.bind(client);
+        client.update = (dt, ...rest) => {
+            const sim = client.sim, speed = settings.gameSpeed;
+            if (enabled && speed !== 1 && sim && !client.paused && sim.state === 'playing' && !isCoopGuest() && Number.isFinite(dt)) {
+                const extra = Math.min(dt, FRAME_CAP_MS) * (speed - 1);
+                client.accumulator = (client.accumulator || 0) + Math.max(-FRAME_CAP_MS, Math.min(EXTRA_CAP_MS, extra));
+            }
+            return origUpdate(dt, ...rest);
+        };
+    }
+
     function hookClient(client) {
         hookedClient = client;
+        hookGameSpeed(client);
         const origRedeem = client.redeemCode.bind(client);
         client.redeemCode = (value) => {
             const code = String(value ?? '').trim().toLowerCase();
@@ -276,7 +300,7 @@
         const style = document.createElement('style');
         style.id = PANEL_ID + '-style';
         style.textContent = `
-            #${PANEL_ID} { position: fixed; top: 160px; left: 12px; z-index: 960; width: 330px; max-height: calc(100vh - 270px);
+            #${PANEL_ID} { box-sizing: border-box; position: fixed; top: 8px; left: 12px; z-index: 960; width: 330px; max-height: calc((100vh - 16px) / var(--ui-scale, 1));
                 overflow-y: auto; zoom: var(--ui-scale, 1); background: rgba(28, 22, 15, 0.95); border: 2px solid #5a4a35;
                 outline: 2px solid #0e0b07; box-shadow: 0 4px 16px rgba(0,0,0,0.85); padding: 8px 12px 10px;
                 font-family: 'OSRS Small', 'OSRS Bold', sans-serif; color: #d4c4a8; user-select: none; }
@@ -351,7 +375,7 @@
             row.querySelector('input').value = String(Math.max(0, d.values.indexOf(v)));
             const label = row.querySelector('.dp-val');
             label.textContent = d.fmt(v);
-            label.classList.toggle('dp-normal', v === d.values[0]);
+            label.classList.toggle('dp-normal', v === neutralOf(d));
         }
     }
 

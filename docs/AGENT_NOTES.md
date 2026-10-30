@@ -8,10 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Halve Dipper & Elias 3D Model Scale (`3.0` -> `1.5`)
+### [2026-10-30] Merge Upstream `0.17.1` - `0.17.2` (`59b6eff`), Sentinel `usedItemId` Spoofing Fix (`acb15a3`) & Debug Panel Game Speed Slider (`c56f7fa`)
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-DDOLshWh.js` (`?v=8.6`, MapViewer `MapViewerApp-Pk2JB77M.js`, Worker `RenderDataWorker-D4-1qx-e.js`, WASM loader `module-qsFJRNBT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Merged upstream `main` (`efc49f6..59b6eff`, releases `0.17.1` and `0.17.2`) into `main`, integrated the Jules Sentinel security fix (`acb15a3` on `origin/sentinel/fix-coop-loadout-useditemid-spoofing-12907676329992050147`) preventing Guest `usedItemId` spoofing in Co-Op loadout sync, and integrated the Debug Panel `gameSpeed` slider and top-pinned layout (`c56f7fa` on `origin/debug-panel`).
+
+**Changes implemented**:
+- **Upstream `0.17.1` & `0.17.2` Merge (`CHANGELOG.md`, `docs/GAMEPLAY.md`, `package.json`, `package-lock.json`, `src/game/content/items.ts`, `src/game/content/sets.ts`, `src/game/core/Loot.ts`, `src/game/core/Sim.ts`, `src/game/core/world/Collision.ts`, `src/mapviewer/webgl/loc/SceneLocs.ts`, and test files)**:
+  - Merged `0.17.1` casket set-piece rework (`SET_PIECE_CHANCE` lowered from `30%` to `15%`, capped at 1 rarity tier above casket roll, and tracking `declinedSets` when alching/rerolling a started set's piece), Crystal armour unlock requirement (`beatMap: "prifddinas"`), and Grand Exchange / building wall visibility fix (`isTileDrawn` in `SceneLocs.ts`).
+  - Merged `0.17.2` flow-field reachability check in `findFreeSpot` (`Collision.ts`) and `walkableSpot` (`Sim.ts`), integrating it with custom `findReachablePickupSpot` and `stepPickupSlide` in `Sim.dropPickup` so caskets/power-ups inside multi-tile solid blocks (e.g. 3x3 Pest Control portals) snap directly to the nearest reachable tile while 1-tile/edge obstacle drops smoothly slide toward the player.
+- **Sentinel Security Fix for `usedItemId` Spoofing (`.jules/sentinel.md`, `src/custom/multiplayer/mp-actor-renderer.js`, `src/custom/multiplayer/multiplayer.test.ts`, `assets/multiplayer/mp-actor-renderer.js`)**:
+  - Added allowlist validation (`ALLOWED_USED_ITEMS = new Set(['bonecrusher', 'red_chinchompa', 'black_chinchompa'])`) and inventory/loadout ownership verification (`hasItemInMsgOrPeer`) before executing `usedItemId` simulation effects on the Host, plus unit tests in `multiplayer.test.ts`.
+- **Debug Panel Game Speed Slider & Top Pinning (`src/custom/debug-mode.js`, `assets/debug-mode.js`)**:
+  - Added the `Game` slider group (`gameSpeed`, `0.25x` - `10x`, Host-authoritative in Co-Op via `hookGameSpeed`) and pinned `#debug-panel` to `top: 8px` with `box-sizing: border-box` and `max-height: calc((100vh - 16px) / var(--ui-scale, 1))`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (340/340 passed across all 17 test suites), `npm run verify-slim-cache` (verified 3,472 groups in 5.99s), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK), `node --check src/custom/debug-mode.js` (OK).
+
+---
+
+### [2026-10-30] Halve Dipper & Elias 3D Model Scale (`3.0` -> `1.5`)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `4157404`
 **Bundle**: `index-T4QWDNBf.js` (`?v=8.6`, MapViewer `MapViewerApp-BqlDYSTn.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-BtUvp74D.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
 
 **Scope**: Reduced the 3D actor model scale for **Dipper** (`dipper`, Corgi) and **Elias** (`elias`, Chihuahua) by half (`3.0` -> `1.5`, and height offset `0.22` -> `0.11`) across singleplayer gameplay, the title/character select attract screen, and Co-Op multiplayer peer rendering.

@@ -57,6 +57,7 @@ import {
     MAX_INVENTORY,
     findInventorySlot,
     getAlchValue,
+    getStartedSet,
     rollBossCasketTier,
     rollCasketItem,
     rollCasketTier,
@@ -103,7 +104,7 @@ import {
     projectileSource,
 } from "./entities";
 import { ArenaGrid } from "./world/ArenaGrid";
-import { findFreeSpot, isCircleFree, moveCircle } from "./world/Collision";
+import { Vec2, findFreeSpot, isCircleFree, moveCircle } from "./world/Collision";
 import { FlowField, canStep } from "./world/FlowField";
 import { endlessLevelForXp, endlessXpForLevel, runLevelForXp, runXpForLevel } from "./xp";
 import {
@@ -398,6 +399,8 @@ export class Sim {
     bossesKilled: string[] = [];
     // Gear out of caskets this run, rerolled away or not
     readonly gearFound = new Set<string>();
+    // Sets caskets have stopped bringing the missing pieces of
+    readonly declinedSets = new Set<string>();
     coins = 0;
     casketsOpened = 0;
     revivesLeft = 0;
@@ -791,6 +794,7 @@ export class Sim {
         if (this.state === "levelUp") {
             this.choices = this.roll();
         } else if (this.state === "chest" && chest) {
+            this.declineSetPiece(chest.itemId);
             const { itemId, upgradedFrom } = this.rollChestItem(chest.tier, chest.itemId);
             chest.itemId = itemId;
             chest.upgradedFrom = upgradedFrom;
@@ -932,6 +936,7 @@ export class Sim {
     private applyChest(chest: ChestOffer, action: ChestAction): void {
         const item = getItem(chest.itemId);
         if (action === "alch") {
+            this.declineSetPiece(item.id);
             const coins = this.alchValue(item.id, chest.upgrades);
             this.coins += coins;
             this.events.push({ type: "alch", itemId: item.id, coins });
@@ -945,6 +950,15 @@ export class Sim {
             return;
         }
         this.useUtility(item);
+    }
+
+    // A piece of a set the player has started, turned down: caskets stop
+    // bringing that set's pieces for the rest of the run
+    private declineSetPiece(itemId: string): void {
+        const set = getStartedSet(this.gear, getItem(itemId));
+        if (set) {
+            this.declinedSets.add(set.id);
+        }
     }
 
     // Wears a piece of gear (upgraded this many times); whatever was in its
@@ -4797,8 +4811,25 @@ export class Sim {
     }
 
     private dropCasketOfTier(tier: CasketTier, x: number, y: number): void {
-        this.dropPickup("casket", x, y, 1, { tier });
-        this.events.push({ type: "casketDropped", tier, x, y });
+        const spot = this.walkableSpot(x, y);
+        this.dropPickup("casket", spot.x, spot.y, 1, { tier });
+        this.events.push({ type: "casketDropped", tier, x: spot.x, y: spot.y });
+    }
+
+    // Where to put something that needs walking over: what dropped it can be
+    // somewhere the player can't get to (a portal stands on solid tiles, ghosts
+    // go through walls), and its drop can land past a wall. Beyond the flow
+    // field there's no telling, so any free spot will do.
+    private walkableSpot(x: number, y: number): Vec2 {
+        const field = this.flowField;
+        const spot = findFreeSpot(
+            this.grid,
+            x,
+            y,
+            PLAYER_RADIUS,
+            (tileX, tileY) => !field.contains(tileX, tileY) || field.isReachable(tileX, tileY),
+        );
+        return Math.hypot(spot.x - x, spot.y - y) > 1.01 ? spot : { x, y };
     }
 
     dropPickup(
@@ -5038,7 +5069,8 @@ export class Sim {
 
     dropPowerUp(id: string, x: number, y: number): void {
         this.lastPowerUpTick = this.tick;
-        this.dropPickup("powerUp", x, y, 1, { powerUp: id });
+        const spot = this.walkableSpot(x, y);
+        this.dropPickup("powerUp", spot.x, spot.y, 1, { powerUp: id });
     }
 
     // Power-ups' damage keeps up with the enemies' hitpoints
@@ -5162,6 +5194,7 @@ export class Sim {
             this.unlockedItems,
             { offered: this.gearUpgradesFound, worn: this.gearUpgrades },
             this.armoury,
+            this.declinedSets,
         );
         if (getItem(found).kind !== "gear") {
             return { itemId: found };

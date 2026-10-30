@@ -204,11 +204,22 @@ export const mpActorRendererMethods = {
             p2.hp = Math.max(p2.hp, Math.min(p2.maxHp, Math.round(Number(msg.hp))));
         }
 
-        if (this.role === 'host' && msg.usedItemId && client.sim) {
+        const cleanUsedItem = typeof msg.usedItemId === 'string' ? msg.usedItemId.trim().toLowerCase() : null;
+        const ALLOWED_USED_ITEMS = new Set(['bonecrusher', 'red_chinchompa', 'black_chinchompa']);
+        if (this.role === 'host' && cleanUsedItem && ALLOWED_USED_ITEMS.has(cleanUsedItem) && client.sim) {
+            const hasItemInMsgOrPeer = (
+                (Array.isArray(msg.inventory) && msg.inventory.some(slot => slot && slot.id === cleanUsedItem)) ||
+                (Array.isArray(msg.gear) && msg.gear.some(g => g && g.item && g.item.id === cleanUsedItem)) ||
+                (Array.isArray(msg.passives) && msg.passives.some(p => p && p.id === cleanUsedItem)) ||
+                (Array.isArray(msg.weapons) && msg.weapons.some(w => w && w.id === cleanUsedItem)) ||
+                (peer.loadout?.inventory?.some(slot => slot && slot.id === cleanUsedItem)) ||
+                (peer.loadout?.gear?.some(g => g && g.item && g.item.id === cleanUsedItem))
+            );
+
             const nowMs = Date.now();
-            if (nowMs - (peer._lastItemUseMs || 0) >= 250) {
+            if (hasItemInMsgOrPeer && (nowMs - (peer._lastItemUseMs || 0) >= 250)) {
                 peer._lastItemUseMs = nowMs;
-                if (msg.usedItemId === 'bonecrusher') {
+                if (cleanUsedItem === 'bonecrusher') {
                     const attractKey = 'attracted_s' + peer.slot;
                     const speedKey = 'speed_s' + peer.slot;
                     for (const pickup of client.sim.pickups) {
@@ -217,8 +228,8 @@ export const mpActorRendererMethods = {
                             pickup[speedKey] = Math.max(pickup[speedKey] || 0, 0.15);
                         }
                     }
-                } else if (msg.usedItemId === 'red_chinchompa' || msg.usedItemId === 'black_chinchompa') {
-                    const isBlack = msg.usedItemId === 'black_chinchompa';
+                } else if (cleanUsedItem === 'red_chinchompa' || cleanUsedItem === 'black_chinchompa') {
+                    const isBlack = cleanUsedItem === 'black_chinchompa';
                     const baseDmg = isBlack ? 85 : 40;
                     const baseRadius = isBlack ? 5.5 : 4.2;
                     const spotAnim = isBlack ? 157 : 156;
