@@ -517,6 +517,12 @@ export class GameClient implements GameFrameHandler {
             ? "normal"
             : (this.store.getSnapshot().challengeMode ?? "normal");
         const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
+        const music = map.music && MUSIC[map.music];
+        if (music) {
+            this.audio.playMusic(music);
+        } else {
+            this.audio.stopMusic();
+        }
         if (!this.grids.has(mapId)) {
             this.store.set({
                 screen: "loading",
@@ -528,6 +534,7 @@ export class GameClient implements GameFrameHandler {
             this.grid = await this.loadGrid(mapId);
         } catch (e) {
             console.error("Failed to load map", mapId, e);
+            this.audio.stopMusic();
             this.store.set({ screen: "characters" });
             this.store.toast(`Couldn't get to ${map.name}.`);
             return;
@@ -564,11 +571,8 @@ export class GameClient implements GameFrameHandler {
         this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);
         this.minimap.setMap(map);
-        const music = map.music && MUSIC[map.music];
         if (music) {
             this.audio.playMusic(music);
-        } else {
-            this.audio.stopMusic();
         }
         this.paused = false;
         this.runRecorded = false;

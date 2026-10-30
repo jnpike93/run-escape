@@ -350,7 +350,7 @@ function SettingsPanel({
             <div className="ui-settings-body">
                 <section className="ui-settings-section">
                     <h3>Sound</h3>
-                    <SoundSettings ui={ui} client={client} />
+                    <SoundSettings ui={ui} client={client} music />
                 </section>
                 <section className="ui-settings-section">
                     <h3>Game</h3>

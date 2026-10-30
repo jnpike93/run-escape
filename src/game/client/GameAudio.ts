@@ -101,6 +101,9 @@ export class GameAudio {
         if (this.context.state === "suspended") {
             this.context.resume();
         }
+        if (this.music && this.music.element.paused && !this.settings.muted) {
+            this.music.element.play().catch(() => {});
+        }
     };
 
     private applyVolume(): void {
@@ -139,6 +142,9 @@ export class GameAudio {
     setSettings(settings: Partial<AudioSettings>): void {
         this.settings = { ...this.settings, ...settings };
         this.applyVolume();
+        if (this.music && this.music.element.paused && !this.settings.muted) {
+            this.music.element.play().catch(() => {});
+        }
         try {
             window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
         } catch (e) {}

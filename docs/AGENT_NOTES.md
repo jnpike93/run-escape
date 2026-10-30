@@ -8,13 +8,13 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning, Movement & Attack Bug (`FlowField.update` Argument Order)
+### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning (`FlowField.update`) & Async/Co-Op Music Autoplay Unlock
 
 **Model**: Gemini (Antigravity)
-**Commit**: `fd2c917` (and follow-up sync/test commit - see git log)
-**Bundle**: `index-CHTowyrV.js` (`?v=8.6`, MapViewer `MapViewerApp-B6q-pfZW.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-VGKAynAb.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+**Commit**: `fd2c917` / `66dd60d` (and follow-up music fix commit - see git log)
+**Bundle**: `index-CwNzga-c.js` (`?v=8.6`, MapViewer `MapViewerApp-C1rwywj8.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-BCBypTwr.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
 
-**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players.
+**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players, and fixed `GameAudio` music playback failing when started after async `loadGrid` or Co-Op WebSocket `start_run`.
 
 **Changes implemented**:
 - **Root Cause & Fix (`src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
@@ -22,6 +22,10 @@
   - Passing `(tx, ty, sim.grid)` bound `grid` to the number `tx` and threw `TypeError: grid.isSolid is not a function` inside `canStep(grid, ...)` on every tick before `origStepEnemies()` or wave spawning could execute, leaving only the 5 manually spawned starter enemies frozen in place while `stepPlayer()` still let players walk through them.
   - Added `updateEntityFlowField(flowField, entity, force)` in `setupInGameHooks` which resolves solid tiles within `d = 1..3` (matching `Sim.updateFlowField()`) and invokes `flowField.update(sim.grid, tileX, tileY)` with the correct `(grid, targetX, targetY)` argument order.
   - Copied `peer.flowField.ditchY = sim.flowField.ditchY` when creating `peer.flowField`, initialized `poisonDamage: 0, poisonEnd: -1, lastHitTick: -999` on remote peer entities, and updated initial Host spawn `sim.flowField.update(sim.grid, ...)` after applying `SPAWN_OFFSETS`.
+- **Music Playback & Settings Slider Fix (`src/game/client/GameAudio.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `server/serve.py`)**:
+  - Started `this.audio.playMusic(music)` synchronously at the beginning of `GameClient.startRun()` before `await this.loadGrid(mapId)` so the browser's user-gesture activation is preserved on first-time map loads.
+  - Updated `GameAudio.unlock` and `GameAudio.setSettings` to resume `this.music.element.play()` if `this.music.element.paused && !this.settings.muted` (e.g., when a Co-Op run starts asynchronously via WebSocket `start_run`).
+  - Enabled the `Music` volume slider on the main `Settings` screen (`<SoundSettings ui={ui} client={client} music />`) and added explicit `audio/ogg` MIME mapping in `server/serve.py`.
 - **Integration Tests (`src/custom/multiplayer/multiplayer.test.ts`)**:
   - Added real-`Sim` Co-Op integration tests on Barrows across Regular (`1x`) and Nightmare (`3x`) difficulty verifying that wave monsters spawn continuously beyond the initial 5 rats, chase players via `FlowField`, deal contact damage, and broadcast via `sync_world`.
 
