@@ -274,7 +274,8 @@ export const mpTransportMethods = {
             }
 
             case 'lobby_update': {
-                const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, this.role === 'host' ? 2 : 1);
+                const sSlot = sanitizeSlot(msg.senderSlot || msg.slot, 2);
+                const senderSlot = sSlot;
                 const incomingName = sanitizeName(msg.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(senderSlot)) || `Player ${senderSlot}`;
                 const hostUnlocked = this.getUnlockedCharacters();
 
@@ -287,13 +288,6 @@ export const mpTransportMethods = {
                     if (activePeer && incomingName) {
                         activePeer.name = incomingName;
                         this.lastPartyHudFastKey = '';
-                    }
-                }
-
-                if (msg.difficultyMult !== undefined) {
-                    const dm = Number(msg.difficultyMult);
-                    if (Number.isFinite(dm) && dm >= 0.5 && dm <= 10) {
-                        this.difficultyMult = dm;
                     }
                 }
 
@@ -315,25 +309,34 @@ export const mpTransportMethods = {
                         this.broadcastPartyRoster();
                     }
                 } else {
-                    if (Array.isArray(msg.unlockedCharacters)) {
-                        const validUnlocked = msg.unlockedCharacters
-                            .filter(c => typeof c === 'string' && ALLOWED_CHARACTERS.has(c.trim().toLowerCase()))
-                            .map(c => c.trim().toLowerCase());
-                        const merged = new Set([...DEFAULT_UNLOCKED_CHARACTERS, ...validUnlocked]);
-                        this.hostUnlockedCharacters = ALL_CHARACTERS.filter(c => merged.has(c.id)).map(c => c.id);
-                        if (!this.hostUnlockedCharacters.includes(this.localCharacter)) {
-                            this.localCharacter = this.hostUnlockedCharacters[0] || 'warrior';
-                            this.syncLocalToLobbyPlayers();
-                            this.sendLobbyUpdate();
+                    const isFromHost = !msg.senderSlot || sanitizeSlot(msg.senderSlot, 0) === this.hostSlot;
+                    if (isFromHost) {
+                        if (msg.difficultyMult !== undefined) {
+                            const dm = Number(msg.difficultyMult);
+                            if (Number.isFinite(dm) && dm >= 0.5 && dm <= 10) {
+                                this.difficultyMult = dm;
+                            }
+                        }
+                        if (Array.isArray(msg.unlockedCharacters)) {
+                            const validUnlocked = msg.unlockedCharacters
+                                .filter(c => typeof c === 'string' && ALLOWED_CHARACTERS.has(c.trim().toLowerCase()))
+                                .map(c => c.trim().toLowerCase());
+                            const merged = new Set([...DEFAULT_UNLOCKED_CHARACTERS, ...validUnlocked]);
+                            this.hostUnlockedCharacters = ALL_CHARACTERS.filter(c => merged.has(c.id)).map(c => c.id);
+                            if (!this.hostUnlockedCharacters.includes(this.localCharacter)) {
+                                this.localCharacter = this.hostUnlockedCharacters[0] || 'warrior';
+                                this.syncLocalToLobbyPlayers();
+                                this.sendLobbyUpdate();
+                            }
+                        }
+                        if (msg.mapId) {
+                            this.selectedMapId = sanitizeMapId(msg.mapId, this.selectedMapId);
+                        }
+                        if (typeof msg.endless === 'boolean') {
+                            this.selectedEndless = msg.endless;
                         }
                     }
-                    if (msg.mapId) {
-                        this.selectedMapId = sanitizeMapId(msg.mapId, this.selectedMapId);
-                    }
-                    if (typeof msg.endless === 'boolean') {
-                        this.selectedEndless = msg.endless;
-                    }
-                    if (Array.isArray(msg.party)) {
+                    if (isFromHost && Array.isArray(msg.party)) {
                         const nextSlots = new Set([this.localSlot]);
                         for (const p of msg.party) {
                             if (!p || typeof p !== 'object') continue;
@@ -525,6 +528,7 @@ export const mpTransportMethods = {
                 break;
 
             case 'game_over':
+                if (msg.senderSlot !== undefined && sanitizeSlot(msg.senderSlot, 0) !== this.hostSlot) break;
                 this.endGameOnDisconnect(typeof msg.reason === 'string' ? msg.reason.slice(0, 80) : 'Game Over', msg.leaderboard);
                 break;
         }

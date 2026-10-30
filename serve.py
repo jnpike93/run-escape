@@ -11,6 +11,7 @@ import json
 import re
 import os
 import sys
+import time
 import itertools
 
 def _get_default_port():
@@ -31,6 +32,7 @@ PORT = _get_default_port()
 BIND_HOST = os.environ.get("HOST", "127.0.0.1")
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 MAX_FRAME_SIZE = 65536       # 64 KB max frame payload
+MAX_FRAMES_PER_SEC = 120     # Maximum WebSocket frames per second per connection
 MAX_ROOMS = 1000             # Maximum concurrent rooms
 MAX_PEERS_PER_ROOM = 4       # 4-player co-op cap
 MAX_CONNS_PER_IP = 16        # Maximum concurrent WebSocket connections per client IP
@@ -46,7 +48,7 @@ HOST_ALLOWED_MSG_TYPES = {
     "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 GUEST_ALLOWED_MSG_TYPES = {
-    "lobby_update", "input", "game_over", "peer_leaving",
+    "lobby_update", "input", "peer_leaving",
     "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 
@@ -121,6 +123,7 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
     Registers client connection in ip_conns and rooms datastructures under rooms_lock.
     Returns (success, role, slot, host_slot, active_slots, peer_count).
     """
+    room_full = False
     with rooms_lock:
         current_ip_count = ip_conns.get(client_ip, 0)
         if current_ip_count >= MAX_CONNS_PER_IP:
@@ -134,31 +137,34 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
             rooms[room_id] = []
 
         if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
-            try:
-                err_frame = encode_ws_frame(json.dumps({
-                    "type": "error",
-                    "message": "Room is full (maximum 4 players)."
-                }))
-                sock.sendall(err_frame)
-            except Exception:
-                pass
-            safe_close(sock)
-            return False, None, None, None, None, None
+            room_full = True
+        else:
+            peer_count = len(rooms[room_id])
+            used_slots = {p[3] for p in rooms[room_id] if len(p) > 3}
+            slot = 1
+            for candidate in range(1, MAX_PEERS_PER_ROOM + 1):
+                if candidate not in used_slots:
+                    slot = candidate
+                    break
+            has_host = any(p[2] == "host" for p in rooms[room_id])
+            role = "host" if not has_host else "guest"
+            rooms[room_id].append((sock, sock_lock, role, slot))
+            active_slots = [p[3] for p in rooms[room_id]]
+            host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
+            ip_conns[client_ip] = current_ip_count + 1
+            return True, role, slot, host_slot, active_slots, peer_count
 
-        peer_count = len(rooms[room_id])
-        used_slots = {p[3] for p in rooms[room_id] if len(p) > 3}
-        slot = 1
-        for candidate in range(1, MAX_PEERS_PER_ROOM + 1):
-            if candidate not in used_slots:
-                slot = candidate
-                break
-        has_host = any(p[2] == "host" for p in rooms[room_id])
-        role = "host" if not has_host else "guest"
-        rooms[room_id].append((sock, sock_lock, role, slot))
-        active_slots = [p[3] for p in rooms[room_id]]
-        host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
-        ip_conns[client_ip] = current_ip_count + 1
-        return True, role, slot, host_slot, active_slots, peer_count
+    if room_full:
+        try:
+            err_frame = encode_ws_frame(json.dumps({
+                "type": "error",
+                "message": "Room is full (maximum 4 players)."
+            }))
+            sock.sendall(err_frame)
+        except Exception:
+            pass
+        safe_close(sock)
+        return False, None, None, None, None, None
 
 
 def _send_ws_welcome_and_notify_joined(sock, sock_lock, room_id, role, slot, host_slot, active_slots, peer_count):
@@ -197,7 +203,7 @@ def _send_ws_welcome_and_notify_joined(sock, sock_lock, room_id, role, slot, hos
                     with peer_lock:
                         peer_sock.sendall(joined_msg)
                 except Exception:
-                    pass
+                    safe_close(peer_sock)
     return True
 
 
@@ -281,9 +287,17 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
     if msg_type not in allowed_types:
         return True
 
+    if current_role != "host":
+        if msg_type == "coop_pickup" and parsed_msg.get("kind") != "lamp_xp":
+            return True
+        if msg_type == "lobby_update":
+            for host_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter"):
+                parsed_msg.pop(host_key, None)
+
     if msg_type == "peer_leaving":
         return False
     parsed_msg["senderSlot"] = current_slot
+    parsed_msg["slot"] = current_slot
     relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
     relay = encode_ws_frame(relay_payload, opcode=1)
     for peer_sock, peer_lock, _, _ in room_entries:
@@ -292,7 +306,7 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
                 with peer_lock:
                     peer_sock.sendall(relay)
             except Exception:
-                pass
+                safe_close(peer_sock)
     return True
 
 
@@ -300,6 +314,8 @@ def _run_ws_message_loop(sock, sock_lock, room_id, role, slot):
     """
     Main loop reading frames and dispatching based on WebSocket opcode.
     """
+    window_start = time.monotonic()
+    frame_count = 0
     while True:
         opcode, payload, err = _read_ws_frame(sock)
         if err == "TOO_LARGE":
@@ -313,6 +329,21 @@ def _run_ws_message_loop(sock, sock_lock, room_id, role, slot):
 
         if err or opcode is None:
             break
+
+        now = time.monotonic()
+        if now - window_start >= 1.0:
+            window_start = now
+            frame_count = 1
+        else:
+            frame_count += 1
+            if frame_count > MAX_FRAMES_PER_SEC:
+                close_payload = struct.pack("!H", 1008) + b"Rate limit exceeded"
+                try:
+                    with sock_lock:
+                        sock.sendall(encode_ws_frame(close_payload, opcode=8))
+                except Exception:
+                    pass
+                break
 
         if opcode == 8:  # close
             break
@@ -385,7 +416,7 @@ def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
                 with peer_lock:
                     peer_sock.sendall(left_msg)
             except Exception:
-                pass
+                safe_close(peer_sock)
 
     safe_close(sock)
 
@@ -413,6 +444,8 @@ def handle_ws_client(sock, room_id, client_ip):
         _unregister_ws_client(sock, room_id, client_ip, registered, role, slot)
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
+    timeout = SOCKET_TIMEOUT
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
@@ -592,6 +625,7 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
     bind_host = sys.argv[2] if len(sys.argv) > 2 else BIND_HOST
     http.server.ThreadingHTTPServer.request_queue_size = 128
+    http.server.ThreadingHTTPServer.daemon_threads = True
     with http.server.ThreadingHTTPServer((bind_host, port), CustomHandler) as httpd:
         print(f"Serving Run Escape + WebSocket Relay on http://{bind_host}:{port} with COOP/COEP enabled...")
         httpd.serve_forever()

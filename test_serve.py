@@ -126,11 +126,13 @@ from serve import (
     _unregister_ws_client,
     _read_ws_frame,
     _process_ws_text_message,
+    _run_ws_message_loop,
     handle_ws_client,
     rooms,
     ip_conns,
     rooms_lock,
     MAX_CONNS_PER_IP,
+    MAX_FRAMES_PER_SEC,
     MAX_PEERS_PER_ROOM,
     MAX_ROOMS
 )
@@ -453,6 +455,91 @@ class TestWebSocketHelpers(unittest.TestCase):
         self.assertTrue(res)
         self.assertIn(b"game_start", guest_sock.sent_data)
         self.assertIn(b'"senderSlot":1', guest_sock.sent_data)
+        self.assertIn(b'"slot":1', guest_sock.sent_data)
+
+    def test_guest_coop_pickup_restrictions(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+
+        with rooms_lock:
+            rooms["room"] = [
+                (host_sock, threading.Lock(), "host", 1),
+                (guest_sock, threading.Lock(), "guest", 2)
+            ]
+
+        for forbidden_kind in ("victory", "coins"):
+            host_sock.sent_data.clear()
+            msg = json.dumps({"type": "coop_pickup", "kind": forbidden_kind, "amount": 999}).encode("utf-8")
+            res = _process_ws_text_message(guest_sock, threading.Lock(), "room", "guest", 2, msg)
+            self.assertTrue(res)
+            self.assertEqual(bytes(host_sock.sent_data), b"")
+
+        host_sock.sent_data.clear()
+        lamp_msg = json.dumps({"type": "coop_pickup", "kind": "lamp_xp", "xp": 50}).encode("utf-8")
+        res = _process_ws_text_message(guest_sock, threading.Lock(), "room", "guest", 2, lamp_msg)
+        self.assertTrue(res)
+        self.assertIn(b'"kind":"lamp_xp"', host_sock.sent_data)
+        self.assertIn(b'"senderSlot":2', host_sock.sent_data)
+        self.assertIn(b'"slot":2', host_sock.sent_data)
+
+    def test_guest_lobby_update_strips_host_keys_and_enforces_slot(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+
+        with rooms_lock:
+            rooms["room"] = [
+                (host_sock, threading.Lock(), "host", 1),
+                (guest_sock, threading.Lock(), "guest", 2)
+            ]
+
+        spoofed_lobby = json.dumps({
+            "type": "lobby_update",
+            "slot": 1,
+            "character": "ranger",
+            "party": [{"slot": 1}],
+            "unlockedCharacters": ["all"],
+            "mapId": "inferno",
+            "endless": True,
+            "difficultyMult": 10.0,
+            "hostCharacter": "mage"
+        }).encode("utf-8")
+        res = _process_ws_text_message(guest_sock, threading.Lock(), "room", "guest", 2, spoofed_lobby)
+        self.assertTrue(res)
+        _, payload, err = _read_ws_frame(MockSocket(bytes(host_sock.sent_data)))
+        self.assertIsNone(err)
+        relayed = json.loads(payload.decode("utf-8"))
+        self.assertEqual(relayed.get("type"), "lobby_update")
+        self.assertEqual(relayed.get("character"), "ranger")
+        self.assertEqual(relayed.get("slot"), 2)
+        self.assertEqual(relayed.get("senderSlot"), 2)
+        for stripped_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter"):
+            self.assertNotIn(stripped_key, relayed)
+
+    def test_guest_game_over_rejected(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+
+        with rooms_lock:
+            rooms["room"] = [
+                (host_sock, threading.Lock(), "host", 1),
+                (guest_sock, threading.Lock(), "guest", 2)
+            ]
+
+        msg = json.dumps({"type": "game_over", "victory": True}).encode("utf-8")
+        res = _process_ws_text_message(guest_sock, threading.Lock(), "room", "guest", 2, msg)
+        self.assertTrue(res)
+        self.assertEqual(bytes(host_sock.sent_data), b"")
+
+    def test_ws_frame_rate_limiting(self):
+        ping_frame = encode_ws_frame(b"p", opcode=9)
+        burst_stream = ping_frame * (MAX_FRAMES_PER_SEC + 5)
+        sock = MockSocket(burst_stream)
+        sock_lock = threading.Lock()
+        with patch("serve.time.monotonic", return_value=100.0):
+            _run_ws_message_loop(sock, sock_lock, "room", "guest", 2)
+
+        expected_close_prefix = struct.pack("!BBH", 0x88, len(b"\x03\xf0Rate limit exceeded"), 1008)
+        self.assertIn(struct.pack("!H", 1008), bytes(sock.sent_data))
 
     def test_short_payload_bytes(self):
         msg = b"world"

@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer HUD, Spectator, Pause Overlay & Leaderboard Methods
-import { ALL_CHARACTERS, sanitizeSlot, escapeHtml } from './mp-constants.js?v=8.5';
+import { ALL_CHARACTERS, sanitizeSlot, escapeHtml, sanitizeHexColor, sanitizePeerStats } from './mp-constants.js?v=8.5';
 
 export const mpHudLeaderboardMethods = {
     getSpectatedPeer() {
@@ -315,7 +315,7 @@ export const mpHudLeaderboardMethods = {
         const smallSlotSize = isCompact ? 20 : 25;
 
         const renderMiniSlot = (entry, iconUrl, size = 26, badgeText = '', emptyLabel = '') => {
-            const border = entry ? escapeHtml(entry.rarityColor || '#8a7558') : '#3d3123';
+            const border = sanitizeHexColor(entry && entry.rarityColor, '#3d3123');
             const title = entry ? escapeHtml(`${entry.name}${badgeText ? ` (${badgeText})` : ''}`) : escapeHtml(emptyLabel);
             return `
                 <div title="${title}" style="

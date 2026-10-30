@@ -536,4 +536,49 @@ describe("quests", () => {
         expect(migrated.questsDone).toEqual(["imp_catcher"]);
         expect(migrateSave({ version: 5, coins: 5 }).questsDone).toEqual([]);
     });
+
+    test("clamps out-of-range/NaN upgrade ranks, filters unknown unlockedCodes, and ignores unknown enemyKills keys", () => {
+        const save = createSave();
+        save.upgrades = {
+            strength: 999,
+            hitpoints: -5,
+            agility: NaN,
+            unknown: 10,
+        };
+        const stats = getMetaStats(save);
+        expect(stats.might).toBeCloseTo(0.25);
+        expect(stats.maxHp).toBe(0);
+        expect(stats.moveSpeed).toBe(0);
+
+        const migrated = migrateSave({
+            unlockedCodes: ["dipperthedog", "unknown_code", "l33th4x0r", "dipperthedog"],
+            mapBest: {
+                lumbridge: {
+                    seconds: 500,
+                    winSeconds: 0,
+                    kills: 100,
+                    level: 10,
+                    characterId: "invalid_char",
+                },
+                barrows: {
+                    seconds: 600,
+                    winSeconds: 0,
+                    kills: 200,
+                    level: 15,
+                    characterId: "warrior",
+                },
+            },
+        });
+        expect(migrated.unlockedCodes).toEqual(["dipperthedog", "l33th4x0r"]);
+        expect(migrated.mapBest.lumbridge.characterId).toBeUndefined();
+        expect(migrated.mapBest.barrows.characterId).toBe("warrior");
+
+        recordRun(
+            save,
+            run("lumbridge", {
+                enemyKills: { goblin: 5, toString: 10, unknown_enemy: 20, rat: -3 },
+            }),
+        );
+        expect(save.enemyKills).toEqual({ goblin: 5 });
+    });
 });

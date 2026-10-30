@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-_XaPOUDC.js`](../assets/index-_XaPOUDC.js) | `index.html`, `MapViewerApp-BmOUVpXD.js`, `module-CgKfmabq.js` |
+| **Main Engine Bundle** | [`assets/index-BRo3grs5.js`](../assets/index-BRo3grs5.js) | `index.html`, `MapViewerApp-CARmEJbT.js`, `module-B73_pgVO.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -21,13 +21,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-BmOUVpXD.js`](../assets/MapViewerApp-BmOUVpXD.js) | `assets/index-_XaPOUDC.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DcR-K3gg.js`](../assets/RenderDataWorker-DcR-K3gg.js) | `assets/index-_XaPOUDC.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-CARmEJbT.js`](../assets/MapViewerApp-CARmEJbT.js) | `assets/index-BRo3grs5.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DcR-K3gg.js`](../assets/RenderDataWorker-DcR-K3gg.js) | `assets/index-BRo3grs5.js` |
 | **Worker WASM Loader** | [`assets/module-BDqjycDY.js`](../assets/module-BDqjycDY.js) | `assets/RenderDataWorker-DcR-K3gg.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-CgKfmabq.js`](../assets/module-CgKfmabq.js) | `assets/index-_XaPOUDC.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-B73_pgVO.js`](../assets/module-B73_pgVO.js) | `assets/index-BRo3grs5.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-_XaPOUDC.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-BRo3grs5.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
    - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), secret codes (`secretCodes.ts`), and in-place content array overrides (`customOverrides.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, `weapons.ts`, `GameClient.ts`) via 1-line `applyCustom*(...)` calls or spreads.
@@ -67,6 +67,17 @@ When adding new features or merging upstream changes into `src/` and rebuilding 
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Co-Op WebSocket, Server, CI/CD, and Save Security Hardening
+- **Commit / PR**: Security audit fixes across `serve.py`, `src/custom/`, `scripts/auto_sync_upstream.cjs`, `.github/workflows/deploy.yaml`, and `src/game/core/` (`?v=8.5`)
+- **Files Modified**: `serve.py`, `test_serve.py`, `.jules/sentinel.md`, `src/custom/multiplayer/mp-constants.js`, `src/custom/multiplayer/mp-pickups.js`, `src/custom/multiplayer/mp-actor-renderer.js`, `src/custom/multiplayer/mp-hud-leaderboard.js`, `src/custom/multiplayer/mp-transport.js`, `src/custom/cooks-assistant.js`, `src/custom/debug-mode.js`, `src/custom/multiplayer/multiplayer.test.ts`, `scripts/auto_sync_upstream.cjs`, `.github/workflows/deploy.yaml`, `src/game/core/save.ts`, `src/game/core/custom/customSave.ts`, `src/game/core/save.test.ts`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`, `index.html`, `assets/*`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-BRo3grs5.js`, `assets/MapViewerApp-CARmEJbT.js`, `assets/module-B73_pgVO.js`)
+- **What Changed**:
+  1. **WebSocket Role/Slot Enforcement & DoS Protection (`serve.py`, `test_serve.py`)**: Removed `"game_over"` from `GUEST_ALLOWED_MSG_TYPES`, restricted Guest `coop_pickup` broadcasts to `kind == "lamp_xp"`, stripped Host-only keys from Guest `lobby_update` frames, stamped `parsed_msg["slot"] = current_slot` alongside `senderSlot`, released `rooms_lock` prior to room-full `sendall`, closed dead peer sockets on `sendall` failure, added per-connection frame rate limiting (`MAX_FRAMES_PER_SEC = 120`), and set `CustomHandler.timeout = SOCKET_TIMEOUT`.
+  2. **Client Multiplayer, Quest & Debug Hardening (`src/custom/`)**: Added `sanitizeHexColor` (preventing inline CSS injection via `rarityColor`) and `sanitizePeerStats` (clamping Guest combat stats, `itemGrowth`, `w.bonus`, and rate-limiting `usedItemId` in `coop_loadout`), required `senderSlot === this.hostSlot` on Host-authoritative `coop_pickup`, `lobby_update`, and `game_over` messages, required `st.status === "held" && st.holder === slot` before Cook's Assistant ingredient delivery, and gated `applyHostGodSlots` / `setHostGodSlot` behind `if (!enabled) return;` in `debug-mode.js`.
+  3. **CI/CD, Upstream Sync & Save Clamping (`auto_sync_upstream.cjs`, `deploy.yaml`, `save.ts`, `customSave.ts`)**: Replaced shell-interpolated git commands with `spawnSync("git", [...])` (`tryRunArgs`), added `--ignore-scripts` to `npm install`, bound secrets via `env:` in `deploy.yaml`, clamped `getMetaStats` upgrade ranks, and allowlisted `unlockedCodes`, `mapBest.characterId`, and `recordRun` `enemyKills`.
+- **Notes / Invariants for Future Agents**:
+  - Any new Host-authoritative WebSocket event type or field MUST be excluded from `GUEST_ALLOWED_MSG_TYPES` in `serve.py` and verified via `msg.senderSlot === this.hostSlot` on the client.
 
 ### 2026-10-29 - Antigravity - Extract Core, Content, Client, UI, and Worker Custom Modules for Conflict-Free Upstream Merges
 - **Commit / PR**: Modularize `src/game/core/custom/`, `customOverrides.ts`, `dogActors.ts`, `CustomSettingsControls.tsx`, and `customNpcIcon.ts` (`?v=8.5`)

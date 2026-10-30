@@ -7,8 +7,10 @@ import {
     escapeHtml,
     getCoopDifficultyWeights,
     sanitizeCharacter,
+    sanitizeHexColor,
     sanitizeMapId,
     sanitizeName,
+    sanitizePeerStats,
     sanitizeRoomId,
     sanitizeSlot,
 } from "./mp-constants.js";
@@ -117,6 +119,41 @@ describe("Multiplayer difficulty scaling & sanitization (mp-constants)", () => {
         expect(escapeHtml('<img src="x" onerror="alert(1)">')).toBe(
             "&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;",
         );
+    });
+
+    test("sanitizeHexColor accepts valid hex colors and rejects CSS injection payloads", () => {
+        expect(sanitizeHexColor("#ff981f")).toBe("#ff981f");
+        expect(sanitizeHexColor(" #abc ")).toBe("#abc");
+        expect(sanitizeHexColor("#11223344")).toBe("#11223344");
+        expect(sanitizeHexColor("#000; position: fixed; inset: 0; background: red", "#3d3123")).toBe("#3d3123");
+        expect(sanitizeHexColor("javascript:alert(1)", "#ff981f")).toBe("#ff981f");
+        expect(sanitizeHexColor(null as any, "#3d3123")).toBe("#3d3123");
+    });
+
+    test("sanitizePeerStats clamps out-of-range combat stats and strips unknown keys", () => {
+        const cleaned = sanitizePeerStats({
+            might: 999,
+            cooldown: -5,
+            amount: 50,
+            armor: -999,
+            regen: 500,
+            thorns: -10,
+            growth: 1.5,
+            __proto__: { polluted: true },
+            unknownKey: "malicious",
+            extraStat: 12345,
+        });
+        expect(cleaned).toEqual({
+            might: 5,
+            cooldown: -0.9,
+            amount: 8,
+            armor: -10,
+            regen: 50,
+            thorns: 0,
+            growth: 1.5,
+        });
+        expect((cleaned as any).unknownKey).toBeUndefined();
+        expect((cleaned as any).extraStat).toBeUndefined();
     });
 });
 

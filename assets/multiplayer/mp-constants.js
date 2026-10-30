@@ -121,3 +121,40 @@ export function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+export function sanitizeHexColor(val, fallback = '#3d3123') {
+    if (typeof val !== 'string') return fallback;
+    const trimmed = val.trim();
+    return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : fallback;
+}
+
+const PEER_STAT_BOUNDS = {
+    might: [-0.9, 5],
+    cooldown: [-0.9, 3],
+    area: [-0.9, 3],
+    speed: [-0.9, 3],
+    amount: [0, 8],
+    duration: [-0.9, 3],
+    luck: [-0.9, 5],
+    growth: [-0.9, 5],
+    greed: [-0.9, 5],
+    magnet: [-0.9, 5],
+    armor: [-10, 25],
+    regen: [0, 50],
+    maxHp: [-0.9, 5],
+    thorns: [0, 50]
+};
+
+export function sanitizePeerStats(raw) {
+    const clean = {};
+    if (!raw || typeof raw !== 'object') return clean;
+    for (const [key, [minVal, maxVal]] of Object.entries(PEER_STAT_BOUNDS)) {
+        if (raw[key] !== undefined) {
+            const n = Number(raw[key]);
+            if (Number.isFinite(n)) {
+                clean[key] = Math.min(maxVal, Math.max(minVal, n));
+            }
+        }
+    }
+    return clean;
+}

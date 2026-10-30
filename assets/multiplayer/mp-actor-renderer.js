@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot } from './mp-constants.js?v=8.5';
+import { sanitizeSlot, sanitizeHexColor, sanitizePeerStats } from './mp-constants.js?v=8.5';
 
 export const mpActorRendererMethods = {
     getLobbyGrowthMultiplier(sim) {
@@ -182,12 +182,12 @@ export const mpActorRendererMethods = {
         }
 
         if (msg.stats && typeof msg.stats === 'object') {
-            peer.stats = { ...msg.stats };
+            peer.stats = sanitizePeerStats(msg.stats);
         }
         if (Number.isFinite(Number(msg.itemGrowth))) {
-            peer.itemGrowth = Math.max(0, Number(msg.itemGrowth));
+            peer.itemGrowth = Math.min(3, Math.max(0, Number(msg.itemGrowth) || 0));
         } else if (peer.stats && Number.isFinite(Number(peer.stats.growth))) {
-            peer.itemGrowth = Math.max(0, Number(peer.stats.growth) - (Number(sim.metaStats?.growth) || 0));
+            peer.itemGrowth = Math.min(3, Math.max(0, Number(peer.stats.growth) - (Number(sim.metaStats?.growth) || 0)));
         }
 
         if (Number.isFinite(Number(msg.maxHp))) {
@@ -204,44 +204,48 @@ export const mpActorRendererMethods = {
         }
 
         if (this.role === 'host' && msg.usedItemId && client.sim) {
-            if (msg.usedItemId === 'bonecrusher') {
-                const attractKey = 'attracted_s' + peer.slot;
-                const speedKey = 'speed_s' + peer.slot;
-                for (const pickup of client.sim.pickups) {
-                    if (pickup.kind === 'bones' || pickup.kind === 'big_bones') {
-                        pickup[attractKey] = true;
-                        pickup[speedKey] = Math.max(pickup[speedKey] || 0, 0.15);
-                    }
-                }
-            } else if (msg.usedItemId === 'red_chinchompa' || msg.usedItemId === 'black_chinchompa') {
-                const isBlack = msg.usedItemId === 'black_chinchompa';
-                const baseDmg = isBlack ? 85 : 40;
-                const baseRadius = isBlack ? 5.5 : 4.2;
-                const spotAnim = isBlack ? 157 : 156;
-                const areaMult = 1 + (Number(peer.stats?.area) || Number(sim.stats?.area) || 0);
-                const radius = baseRadius * areaMult;
-                const prevAttacker = this._activeAttackerSlot;
-                const savedStats = sim.stats;
-                this._activeAttackerSlot = peer.slot;
-                if (peer.stats) sim.stats = { ...savedStats, ...peer.stats };
-                try {
-                    if (typeof sim.addEffect === 'function') {
-                        sim.addEffect(spotAnim, p2.x, p2.y, 60);
-                    }
-                    let effects = 0;
-                    for (const enemy of sim.enemies) {
-                        if (enemy.dead) continue;
-                        if (Math.hypot(enemy.x - p2.x, enemy.y - p2.y) <= radius + (enemy.radius || 0.4)) {
-                            sim.damageEnemy(enemy, baseDmg, 0.35, p2.x, p2.y);
-                            if (effects < 8 && typeof sim.addEffect === 'function') {
-                                sim.addEffect(spotAnim, enemy.x, enemy.y, 60);
-                                effects++;
-                            }
+            const nowMs = Date.now();
+            if (nowMs - (peer._lastItemUseMs || 0) >= 250) {
+                peer._lastItemUseMs = nowMs;
+                if (msg.usedItemId === 'bonecrusher') {
+                    const attractKey = 'attracted_s' + peer.slot;
+                    const speedKey = 'speed_s' + peer.slot;
+                    for (const pickup of client.sim.pickups) {
+                        if (pickup.kind === 'bones' || pickup.kind === 'big_bones') {
+                            pickup[attractKey] = true;
+                            pickup[speedKey] = Math.max(pickup[speedKey] || 0, 0.15);
                         }
                     }
-                } finally {
-                    sim.stats = savedStats;
-                    this._activeAttackerSlot = prevAttacker;
+                } else if (msg.usedItemId === 'red_chinchompa' || msg.usedItemId === 'black_chinchompa') {
+                    const isBlack = msg.usedItemId === 'black_chinchompa';
+                    const baseDmg = isBlack ? 85 : 40;
+                    const baseRadius = isBlack ? 5.5 : 4.2;
+                    const spotAnim = isBlack ? 157 : 156;
+                    const areaMult = 1 + (Number(peer.stats?.area) || Number(sim.stats?.area) || 0);
+                    const radius = baseRadius * areaMult;
+                    const prevAttacker = this._activeAttackerSlot;
+                    const savedStats = sim.stats;
+                    this._activeAttackerSlot = peer.slot;
+                    if (peer.stats) sim.stats = { ...savedStats, ...peer.stats };
+                    try {
+                        if (typeof sim.addEffect === 'function') {
+                            sim.addEffect(spotAnim, p2.x, p2.y, 60);
+                        }
+                        let effects = 0;
+                        for (const enemy of sim.enemies) {
+                            if (enemy.dead) continue;
+                            if (Math.hypot(enemy.x - p2.x, enemy.y - p2.y) <= radius + (enemy.radius || 0.4)) {
+                                sim.damageEnemy(enemy, baseDmg, 0.35, p2.x, p2.y);
+                                if (effects < 8 && typeof sim.addEffect === 'function') {
+                                    sim.addEffect(spotAnim, enemy.x, enemy.y, 60);
+                                    effects++;
+                                }
+                            }
+                        }
+                    } finally {
+                        sim.stats = savedStats;
+                        this._activeAttackerSlot = prevAttacker;
+                    }
                 }
             }
         }
@@ -256,7 +260,7 @@ export const mpActorRendererMethods = {
                     if (!w || typeof w.id !== 'string') continue;
                     const cleanId = w.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
                     sim.weapons = [];
-                    sim.addWeapon(cleanId, Number.isFinite(Number(w.bonus)) ? Number(w.bonus) : 0);
+                    sim.addWeapon(cleanId, Math.min(5, Math.max(0, Number(w.bonus) || 0)));
                     if (sim.weapons.length > 0) {
                         const inst = sim.weapons[0];
                         inst.level = Math.max(1, Math.min(99, Math.round(Number(w.level) || 1)));
@@ -286,7 +290,7 @@ export const mpActorRendererMethods = {
                 level: Math.max(1, Math.round(Number(w.level) || 1)),
                 maxLevel: Math.max(1, Math.round(Number(w.maxLevel) || 8)),
                 iconObjId: Number(w.iconObjId) || 0,
-                rarityColor: String(w.rarityColor || '#ff981f')
+                rarityColor: sanitizeHexColor(w.rarityColor, '#ff981f')
             }));
         }
 
@@ -297,7 +301,7 @@ export const mpActorRendererMethods = {
                 level: Math.max(1, Math.round(Number(p?.level) || 1)),
                 maxLevel: Math.max(1, Math.round(Number(p?.maxLevel) || 5)),
                 iconObjId: Number(p?.iconObjId) || 0,
-                rarityColor: String(p?.rarityColor || '#ff981f')
+                rarityColor: sanitizeHexColor(p?.rarityColor, '#ff981f')
             }));
         }
 
@@ -309,7 +313,7 @@ export const mpActorRendererMethods = {
                     id: String(g.item.id || ''),
                     name: String(g.item.name || 'Gear'),
                     iconObjId: Number(g.item.iconObjId) || 0,
-                    rarityColor: String(g.item.rarityColor || '#ff981f')
+                    rarityColor: sanitizeHexColor(g.item.rarityColor, '#ff981f')
                 } : null
             }));
         }
@@ -323,7 +327,7 @@ export const mpActorRendererMethods = {
                     name: String(slot.name || 'Item'),
                     iconObjId: Number(slot.iconObjId) || 0,
                     count: Math.max(1, Math.round(Number(slot.count) || 1)),
-                    rarityColor: String(slot.rarityColor || '#ff981f')
+                    rarityColor: sanitizeHexColor(slot.rarityColor, '#ff981f')
                 };
             });
         }

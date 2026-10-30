@@ -1,6 +1,9 @@
 import { getArmouryCost, getUpgradeLine } from "../../content/armoury";
+import { CHARACTERS } from "../../content/characters";
 import { ALL_MAPS, MAPS } from "../../content/maps";
 import type { RunSummary, SaveData } from "../save";
+
+const VALID_SECRET_CODES = new Set(["dipperthedog", "barkelly", "l33th4x0r"]);
 
 export type MapBestRecord = {
     seconds: number;
@@ -16,7 +19,11 @@ const num = (value: unknown, fallback: number): number =>
 export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>): void {
     if (Array.isArray(data.unlockedCodes)) {
         for (const s of data.unlockedCodes) {
-            if (typeof s === "string" && !save.unlockedCodes.includes(s)) {
+            if (
+                typeof s === "string" &&
+                VALID_SECRET_CODES.has(s) &&
+                !save.unlockedCodes.includes(s)
+            ) {
                 save.unlockedCodes.push(s);
             }
         }
@@ -39,7 +46,10 @@ export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>)
                     kills: num(best.kills, 0),
                     level: num(best.level, 0),
                     characterId:
-                        typeof best.characterId === "string" ? best.characterId : undefined,
+                        typeof best.characterId === "string" &&
+                        CHARACTERS.some((c) => c.id === best.characterId)
+                            ? best.characterId
+                            : undefined,
                 };
             }
         }

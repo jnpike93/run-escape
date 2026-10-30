@@ -216,7 +216,7 @@
     function applyEvent(msg, isLocal) {
         if (!quest || msg.quest !== QUEST_ID || msg.run !== quest.run) return;
         const me = localSlot();
-        const slot = Number(msg.slot) || 0;
+        const slot = isLocal ? me : (Number(msg.senderSlot || msg.slot) || 0);
         const it = ITEM_BY_ID.get(msg.item);
 
         switch (msg.ev) {
@@ -253,7 +253,7 @@
             case 'deliver': {
                 if (!it || quest.stage !== 1) return;
                 const st = quest.items[it.id];
-                if (st.status === 'delivered') return;
+                if (st.status !== 'held' || st.holder !== slot) return;
                 if (st.holder === me && slot !== me) removeFromInventory(it.id);
                 st.status = 'delivered';
                 st.holder = null;

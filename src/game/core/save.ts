@@ -205,7 +205,11 @@ function isCasketGear(id: unknown): id is string {
 export function getMetaStats(save: SaveData): Stats {
     const stats = emptyStats();
     for (const upgrade of SHOP_UPGRADES) {
-        const rank = save.upgrades[upgrade.id] ?? 0;
+        const rawRank = save.upgrades[upgrade.id];
+        const rank =
+            typeof rawRank === "number" && isFinite(rawRank)
+                ? Math.min(Math.max(rawRank, 0), upgrade.maxRank)
+                : 0;
         stats[upgrade.stat] += upgrade.perRank * rank;
     }
     return stats;
@@ -303,7 +307,9 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
     }
     const tallies = getQuestTallies(run);
     for (const [id, kills] of Object.entries(tallies.enemyKills)) {
-        save.enemyKills[id] = (save.enemyKills[id] ?? 0) + kills;
+        if (ENEMY_BY_ID.has(id) && typeof kills === "number" && isFinite(kills) && kills > 0) {
+            save.enemyKills[id] = (save.enemyKills[id] ?? 0) + kills;
+        }
     }
     save.casketsOpened += tallies.caskets;
     for (const quest of quests) {

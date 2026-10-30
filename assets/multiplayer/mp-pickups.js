@@ -7,6 +7,7 @@ export const mpPickupsMethods = {
         if (!client || !client.sim || !msg || typeof msg !== 'object') return;
         const sim = client.sim;
         const kind = msg.kind;
+        if (kind !== 'lamp_xp' && msg.senderSlot !== undefined && sanitizeSlot(msg.senderSlot, 0) !== this.hostSlot) return;
         const val = Number.isFinite(Number(msg.value)) ? Number(msg.value) : 0;
 
         if (kind === 'bones' || kind === 'big_bones') {
@@ -26,10 +27,8 @@ export const mpPickupsMethods = {
             }
             client.updateHud(true);
         } else if (kind === 'lamp_xp') {
-            const levels = Number.isFinite(Number(msg.levels)) && Number(msg.levels) > 0
-                ? Number(msg.levels)
-                : 0;
-            if (levels <= 0) return;
+            if (!Number.isFinite(Number(msg.levels)) || Number(msg.levels) <= 0) return;
+            const levels = Math.min(1, Math.max(0.1, Number(msg.levels) || 0));
             const span = Math.max(1, (sim.xpForNextLevel || 0) - (sim.xpForThisLevel || 0));
             sim.xp += span * levels;
             sim.checkLevelUp();

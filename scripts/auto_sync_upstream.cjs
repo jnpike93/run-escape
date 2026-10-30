@@ -48,6 +48,36 @@ function tryRun(cmd, opts = {}) {
     }
 }
 
+function runArgs(cmd, args, opts = {}) {
+    const res = spawnSync(cmd, args, {
+        cwd: ROOT_DIR,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        ...opts,
+    });
+    if (res.error) throw res.error;
+    if (res.status !== 0) {
+        const err = new Error(`Command failed: ${cmd} ${args.join(" ")}`);
+        err.stdout = res.stdout;
+        err.stderr = res.stderr;
+        err.status = res.status;
+        throw err;
+    }
+    return (res.stdout || "").trim();
+}
+
+function tryRunArgs(cmd, args, opts = {}) {
+    try {
+        const out = runArgs(cmd, args, opts);
+        return { ok: true, out };
+    } catch (err) {
+        return {
+            ok: false,
+            out: (err.stdout || "") + "\n" + (err.stderr || err.message || ""),
+        };
+    }
+}
+
 function acquireLock() {
     if (!fs.existsSync(GIT_DIR)) {
         console.error(`[auto_sync] Not a git repository: ${ROOT_DIR}`);
@@ -145,7 +175,7 @@ function updateChangelogAndNotes(oldVer, newVer, upstreamCommits, upstreamSha) {
 
         const marker = "## 3. Chronological Agent Handoff Log\n\n";
         if (notes.includes(marker)) {
-            notes = notes.replace(marker, marker + entry + "\n");
+            notes = notes.replace(marker, () => marker + entry + "\n");
         }
         fs.writeFileSync(AGENT_NOTES_MD, notes, "utf8");
     }
@@ -174,7 +204,7 @@ function rollback(prevHead, reason) {
     console.error(`[auto_sync] ERROR: ${reason}`);
     console.error(`[auto_sync] Rolling back to ${prevHead} to preserve server integrity.`);
     tryRun("git merge --abort");
-    tryRun(`git reset --hard ${prevHead}`);
+    tryRunArgs("git", ["reset", "--hard", prevHead]);
     tryRun("git clean -fd");
     process.exit(1);
 }
@@ -250,7 +280,7 @@ function main() {
         const upstreamRoot = run("git rev-list --max-parents=0 upstream/main").split(/\r?\n/)[0];
         if (upstreamRoot && tryRun(`git cat-file -e ${baselineSha}^{commit}`).ok) {
             log(`Upstream history was rewritten; grafting ${upstreamRoot} onto baseline ${baselineSha} for 3-way merge...`);
-            tryRun(`git replace --graft ${upstreamRoot} ${baselineSha}`);
+            tryRunArgs("git", ["replace", "--graft", upstreamRoot, baselineSha]);
         }
     }
 
@@ -281,8 +311,8 @@ function main() {
 
     for (const f of conflictFiles) {
         if (AUTO_RESOLVABLE.has(f) || f.startsWith("assets/")) {
-            tryRun(`git checkout --ours -- "${f}"`);
-            tryRun(`git add -- "${f}"`);
+            tryRunArgs("git", ["checkout", "--ours", "--", f]);
+            tryRunArgs("git", ["add", "--", f]);
         }
     }
 
@@ -299,7 +329,7 @@ function main() {
         changedSincePrev.includes("package-lock.json")
     ) {
         log("Installing/updating npm dependencies...");
-        const npmRes = tryRun("npm install --no-audit --no-fund");
+        const npmRes = tryRun("npm install --ignore-scripts --no-audit --no-fund");
         if (!npmRes.ok) {
             rollback(prevHead, `npm install failed:\n${npmRes.out}`);
         }
@@ -342,7 +372,7 @@ function main() {
     log("All verification checks passed. Committing merged update...");
     run("git add -A");
     const commitMsg = `chore(sync): auto-merge upstream/main (${upstreamSha}, ?v=${newVer})`;
-    const commitRes = tryRun(`git commit -m "${commitMsg}"`);
+    const commitRes = tryRunArgs("git", ["commit", "-m", commitMsg]);
     if (!commitRes.ok) {
         rollback(prevHead, `git commit failed:\n${commitRes.out}`);
     }

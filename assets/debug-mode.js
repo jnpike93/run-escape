@@ -223,6 +223,7 @@
     }
 
     function applyHostGodSlots() {
+        if (!enabled) return;
         const m = mp();
         if (!m || m.role !== 'host' || !m.remotePeers) return;
         for (const [slot, st] of godSlots) {
@@ -235,6 +236,7 @@
     }
 
     function setHostGodSlot(slot, msg) {
+        if (!enabled) return;
         if (!slot) return;
         if (msg.on === true) {
             godSlots.set(slot, { hp: Math.max(0, Math.min(1000000, Number(msg.hp) || 0)), invuln: msg.invuln === true });
