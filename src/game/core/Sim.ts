@@ -72,6 +72,11 @@ import {
     rollChoices,
 } from "./Upgrades";
 import {
+    ChallengeMode,
+    getChallengeDifficultyMultiplier,
+    isChallengeMode,
+} from "./custom/customSave";
+import {
     ActivePowerUp,
     BossWindup,
     Buff,
@@ -284,6 +289,8 @@ export type SimOptions = {
     // Round after round until the player falls, rather than a win at the
     // final boss (see endless.ts)
     endless?: boolean;
+    // Challenge difficulty mode ("normal", "extreme_one_chunk", "nightmare")
+    challengeMode?: ChallengeMode;
     // The pieces upgraded in the Armoury, which caskets give as what they've
     // become (none when unset)
     armoury?: ArmouryUpgrades;
@@ -293,6 +300,7 @@ export type RunResult = {
     mapId: string;
     characterId?: string;
     endless: boolean;
+    challengeMode?: ChallengeMode;
     // The round reached (1 outside endless runs)
     round: number;
     victory: boolean;
@@ -335,6 +343,7 @@ export class Sim {
     private readonly armoury: ArmouryUpgrades | undefined;
     readonly metaStats: Stats;
     readonly endless: boolean;
+    readonly challengeMode: ChallengeMode;
 
     tick = 0;
     // Tick the run ended, -1 while it's going
@@ -461,6 +470,9 @@ export class Sim {
         this.metaStats = options.metaStats;
         // Fun maps are endless from the start
         this.endless = (options.endless ?? false) || this.map.fun !== undefined;
+        this.challengeMode = isChallengeMode(options.challengeMode)
+            ? options.challengeMode
+            : "normal";
         this.flowField.ditchY = this.map.ditch?.y;
         const fun = this.map.fun;
         if (fun) {
@@ -569,6 +581,7 @@ export class Sim {
             mapId: this.map.id,
             characterId: this.characterId,
             endless: this.endless,
+            challengeMode: this.challengeMode,
             round: this.round,
             victory: this.state === "victory",
             seconds: this.seconds,
@@ -1066,6 +1079,10 @@ export class Sim {
         return roundScale(ROUND_DAMAGE, this.round);
     }
 
+    get challengeDifficulty(): number {
+        return getChallengeDifficultyMultiplier(this.challengeMode);
+    }
+
     // What coins found in the run are worth: less in endless runs, and less
     // again in their later rounds (see endless.ts)
     get coinScale(): number {
@@ -1450,9 +1467,11 @@ export class Sim {
         // Bosses are tuned as they are (or for the map they're on); later maps
         // are tougher all round, and so are endless runs' later rounds
         const difficulty = this.map.difficulty;
-        const bossDamage = difficulty.damage * this.roundDamage;
+        const modeDiff = this.challengeDifficulty;
+        const bossDamage = difficulty.damage * modeDiff * this.roundDamage;
         let hp =
             (boss ? (bossHp ?? def.hp * difficulty.hp) : def.hp * hpScale * difficulty.hp) *
+            modeDiff *
             this.roundHp;
         // What its hits are multiplied by: its touch, a boss's attacks, its
         // explosion

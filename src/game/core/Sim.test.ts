@@ -3407,3 +3407,49 @@ describe("extra slots from the shop", () => {
         expect(offers.some((choice) => choice.kind === "newPassive")).toBe(true);
     });
 });
+
+describe("challenge modes (Extreme One Chunk Man & Nightmare Man)", () => {
+    test("Extreme One Chunk Man scales monster and boss HP and damage by 2x, and Nightmare Man scales them by 3x", () => {
+        const grid = makeGrid(openField(), 1000, 1000);
+        const makeModeSim = (challengeMode: "normal" | "extreme_one_chunk" | "nightmare") =>
+            new Sim({
+                grid,
+                mapId: "barrows",
+                characterId: "warrior",
+                metaStats: emptyStats(),
+                seed: 42,
+                spawnX: 1036.5,
+                spawnY: 1036.5,
+                challengeMode,
+            });
+
+        const normalSim = makeModeSim("normal");
+        const extremeSim = makeModeSim("extreme_one_chunk");
+        const nightmareSim = makeModeSim("nightmare");
+
+        const spot = { x: 1042.5, y: 1036.5 };
+        const normalMob = normalSim.spawnEnemy(getEnemy("skeleton"), "normal", spot)!;
+        const extremeMob = extremeSim.spawnEnemy(getEnemy("skeleton"), "normal", spot)!;
+        const nightmareMob = nightmareSim.spawnEnemy(getEnemy("skeleton"), "normal", spot)!;
+
+        const baseMobHp = getEnemy("skeleton").hp * normalSim.map.difficulty.hp;
+        expect(normalMob.maxHp).toBe(Math.round(baseMobHp));
+        expect(extremeMob.maxHp).toBe(Math.round(baseMobHp * 2));
+        expect(extremeMob.damageScale).toBeCloseTo(normalMob.damageScale * 2);
+        expect(nightmareMob.maxHp).toBe(Math.round(baseMobHp * 3));
+        expect(nightmareMob.damageScale).toBeCloseTo(normalMob.damageScale * 3);
+
+        const normalBoss = normalSim.spawnEnemy(getEnemy("dharok"), "boss", spot, 2000)!;
+        const extremeBoss = extremeSim.spawnEnemy(getEnemy("dharok"), "boss", spot, 2000)!;
+        const nightmareBoss = nightmareSim.spawnEnemy(getEnemy("dharok"), "boss", spot, 2000)!;
+
+        expect(extremeBoss.maxHp).toBe(normalBoss.maxHp * 2);
+        expect(extremeBoss.damageScale).toBeCloseTo(normalBoss.damageScale * 2);
+        expect(nightmareBoss.maxHp).toBe(normalBoss.maxHp * 3);
+        expect(nightmareBoss.damageScale).toBeCloseTo(normalBoss.damageScale * 3);
+
+        expect(normalSim.getResult().challengeMode).toBe("normal");
+        expect(extremeSim.getResult().challengeMode).toBe("extreme_one_chunk");
+        expect(nightmareSim.getResult().challengeMode).toBe("nightmare");
+    });
+});

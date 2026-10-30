@@ -8,10 +8,32 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Prevent Slim-Cache Verification Timeouts (`npm run verify-slim-cache` in 5s, 8x Faster `slim-cache`, Worker Guard)
+### [2026-10-30] Add Extreme One Chunk Man (2x Diff, 1.5x Pts) & Nightmare Man (3x Diff, 2.5x Pts) Challenge Modes
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-D6Ox1VYG.js` (`?v=8.5`, MapViewer `MapViewerApp-DXw8zrc2.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-DMrSu1Mm.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Added selectable **Extreme One Chunk Man** (`2x` map difficulty for `1.5x` points) and **Nightmare Man** (`3x` map difficulty for `2.5x` points) challenge modes alongside **Normal** mode (`1x` difficulty, `1x` points) across simulation enemy/boss scaling, run & leaderboard point calculations, singleplayer Map Selection / HUD / Result screens, and Co-Op lobbies.
+
+**Changes implemented**:
+- **Challenge Mode Definitions & Points Calculation (`src/game/core/custom/customSave.ts`, `src/game/core/save.ts`)**:
+  - Defined `ChallengeMode` (`"normal" | "extreme_one_chunk" | "nightmare"`), `CHALLENGE_MODES`, `getChallengeMode`, `getChallengeDifficultyMultiplier`, and `getChallengePointsMultiplier`.
+  - Updated `calculateRunPointsBreakdown` and `calculateLevelPointsBreakdown` to scale run points by `1.5x` in **Extreme One Chunk Man** and `2.5x` in **Nightmare Man**, and persisted `challengeMode` on `MapBestRecord` when a new high score is set.
+- **Simulation Enemy & Boss Scaling (`src/game/core/Sim.ts`)**:
+  - Added `challengeMode` to `SimOptions`, `Sim`, and `RunResult`, and scaled monster and boss HP and damage (`this.challengeDifficulty`: `2x` for `"extreme_one_chunk"`, `3x` for `"nightmare"`) in `Sim.spawnEnemy`.
+- **Client, Map Selection UI, HUD, Results & Co-Op (`src/game/client/GameStore.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `src/game/ui/LeaderboardScreen.tsx`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/mp-hud-leaderboard.js`, `assets/multiplayer/`)**:
+  - Added `selectChallengeMode` and `cycleChallengeMode` to `GameClient`, a **Challenge Mode** selector card list in `MapDetailsPanel` plus a quick-cycle `Mode` button in `.ui-select-bar`, an active mode badge in the HUD, a `Mode` row in `ResultModal`, and mode bonus lines in `LeaderboardScreen` tooltips.
+  - Updated Co-Op lobby and leaderboard scoring so `2x` (`Extreme One Chunk Man`) awards `1.5x` points and `3x` (`Nightmare Man`) awards `2.5x` points.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (325/325 passed across all 16 test suites), `npm run verify-slim-cache` (verified 3,472 groups in 5.73s), `npm run build` (`index-D6Ox1VYG.js`), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Prevent Slim-Cache Verification Timeouts (`npm run verify-slim-cache` in 5s, 8x Faster `slim-cache`, Worker Guard)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `6b78204`
 **Bundle**: `index-JOj9ctmV.js` (`?v=8.5`, MapViewer `MapViewerApp-BqlUigRJ.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-o5mm7YQ2.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
 
 **Scope**: Eliminated slim-cache verification and generation timeouts by guarding `expose(worker)` in `RenderDataWorker.ts` when imported in Node, adding a 5-second `npm run verify-slim-cache` (`--verify` / `--verify-full`) mode to `scripts/cache/slim-cache.ts`, optimizing `loadWhatTheGameLoads` in `scripts/cache/slim-cache.ts` (cutting full slim-cache generation from 389s to ~50s while reading the exact same 14,343 cache groups), and invoking `tsx` directly via `node ./node_modules/tsx/dist/cli.mjs` in `package.json`.

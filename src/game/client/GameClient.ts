@@ -26,6 +26,8 @@ import { Sim, TICKS_PER_SECOND } from "../core/Sim";
 import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import {
+    CHALLENGE_MODES,
+    ChallengeMode,
     SaveData,
     SaveStore,
     buyArmouryUpgrade,
@@ -37,6 +39,7 @@ import {
     getFinishedQuests,
     getMetaStats,
     getQuestProgress,
+    isChallengeMode,
     isEndlessRecord,
     isEndlessUnlocked,
     isMapUnlocked,
@@ -340,6 +343,19 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    selectChallengeMode(challengeMode: ChallengeMode): void {
+        if (isChallengeMode(challengeMode)) {
+            this.store.set({ challengeMode });
+        }
+    }
+
+    cycleChallengeMode(): void {
+        const current = this.store.getSnapshot().challengeMode ?? "normal";
+        const idx = CHALLENGE_MODES.findIndex((m) => m.id === current);
+        const next = CHALLENGE_MODES[(idx + 1) % CHALLENGE_MODES.length].id;
+        this.store.set({ challengeMode: next });
+    }
+
     buyUpgrade(upgradeId: string): void {
         if (buyUpgrade(this.save, upgradeId)) {
             this.sounds.buy();
@@ -492,6 +508,9 @@ export class GameClient implements GameFrameHandler {
             (mp?.gameStarted
                 ? !!mp?.gameConfig?.endless
                 : this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
+        const challengeMode: ChallengeMode = mp?.gameStarted
+            ? "normal"
+            : (this.store.getSnapshot().challengeMode ?? "normal");
         const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
         if (!this.grids.has(mapId)) {
             this.store.set({
@@ -530,6 +549,7 @@ export class GameClient implements GameFrameHandler {
             spawnY: map.spawn.y,
             unlockedItems: new Set(hostUnlockedItems),
             endless,
+            challengeMode,
             armoury: { ...hostArmoury },
         });
         for (let i = 0; i < this.options.stress; i++) {
@@ -1002,6 +1022,7 @@ export class GameClient implements GameFrameHandler {
         }
         const hud: HudView = {
             mapId: sim.map.id,
+            challengeMode: sim.challengeMode,
             round: sim.endless ? sim.round : undefined,
             bossIn: sim.timeLeftForBoss,
             hp: Math.max(0, Math.round(sim.player.hp)),

@@ -34,8 +34,11 @@ import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks
 import { WeaponStatLine, weaponStats } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
 import {
+    CHALLENGE_MODES,
+    ChallengeMode,
     SaveData,
     calculateLevelPoints,
+    getChallengeMode,
     getNextUpgradeCost,
     importSave,
     isEndlessUnlocked,
@@ -596,6 +599,8 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
                 save={ui.save}
                 map={activeMap}
                 character={selectedChar}
+                challengeMode={ui.challengeMode}
+                onSelectChallengeMode={(mode) => client.selectChallengeMode(mode)}
                 onBackToAdventurer={() => {
                     setPeekMap(undefined);
                     setStep("adventurer");
@@ -612,6 +617,7 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
                     &larr; Adventurer ({selectedChar.name})
                 </button>
                 <Coins amount={ui.save.coins} />
+                <ChallengeModeSwitch ui={ui} client={client} />
                 <EndlessSwitch ui={ui} client={client} />
                 <button
                     className="ui-button ui-button-go ui-select-go"
@@ -625,6 +631,32 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+function ChallengeModeSwitch({ ui, client }: ScreenProps): JSX.Element {
+    const mode = getChallengeMode(ui.challengeMode);
+    return (
+        <div
+            className="ui-endless"
+            style={{ marginLeft: "auto" }}
+            title={`${mode.name}: ${mode.description} Click to cycle modes.`}
+        >
+            <span className="ui-endless-name">Mode</span>
+            <button
+                type="button"
+                className="ui-button"
+                style={{
+                    color: mode.color,
+                    borderColor: mode.id !== "normal" ? mode.color : undefined,
+                    padding: "4px 10px",
+                    fontSize: "15px",
+                }}
+                onClick={() => client.cycleChallengeMode()}
+            >
+                {mode.name} ({mode.difficultyMultiplier}x Diff · {mode.pointsMultiplier}x Pts)
+            </button>
+        </div>
+    );
+}
+
 // Endless runs for the map picked, once it's been beaten (fun maps are
 // always endless)
 function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
@@ -632,6 +664,7 @@ function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
         return (
             <div
                 className="ui-endless"
+                style={{ marginLeft: 0 }}
                 title="Fun maps are endless: a new round every fifteen minutes."
             >
                 <span className="ui-endless-name">Endless</span>
@@ -643,6 +676,7 @@ function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
     return (
         <div
             className={"ui-endless" + (open ? "" : " ui-endless-locked")}
+            style={{ marginLeft: 0 }}
             title={
                 open
                     ? "Round after round, each tougher than the last, until you fall. " +
@@ -878,13 +912,18 @@ function MapDetailsPanel({
     save,
     map,
     character,
+    challengeMode,
+    onSelectChallengeMode,
     onBackToAdventurer,
 }: {
     save: SaveData;
     map: MapDef;
     character: CharacterDef;
+    challengeMode: ChallengeMode;
+    onSelectChallengeMode: (mode: ChallengeMode) => void;
     onBackToAdventurer: () => void;
 }): JSX.Element {
+    const activeMode = getChallengeMode(challengeMode);
     return (
         <div className="ui-panel rs-border rs-background ui-select-panel ui-select-details-panel">
             <h2 className="ui-select-heading">
@@ -907,6 +946,58 @@ function MapDetailsPanel({
             </h2>
             <div className="ui-select-scroll">
                 <MapDetails save={save} map={map} />
+                <div className="ui-select-details" style={{ marginTop: "8px" }}>
+                    <div className="ui-style-name" style={{ marginBottom: "4px" }}>
+                        <span>Challenge Mode</span>
+                        <span
+                            className="ui-style-treasure"
+                            style={{ color: activeMode.color }}
+                        >
+                            {activeMode.difficultyMultiplier}x difficulty ·{" "}
+                            {activeMode.pointsMultiplier}x points
+                        </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        {CHALLENGE_MODES.map((m) => {
+                            const selected = m.id === activeMode.id;
+                            return (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    className={
+                                        "ui-card" + (selected ? " ui-card-selected" : "")
+                                    }
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        padding: "5px 8px",
+                                        textAlign: "left",
+                                        borderColor: selected ? m.color : undefined,
+                                    }}
+                                    aria-pressed={selected}
+                                    onClick={() => onSelectChallengeMode(m.id)}
+                                >
+                                    <span
+                                        className="ui-card-title"
+                                        style={{ color: selected ? m.color : undefined, fontSize: "15px" }}
+                                    >
+                                        {m.name}
+                                    </span>
+                                    <span
+                                        className="ui-card-style"
+                                        style={{ color: selected ? "#ffff00" : "#b8aa8a", fontSize: "13px" }}
+                                    >
+                                        {m.difficultyMultiplier}x Diff · {m.pointsMultiplier}x Pts
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className="ui-card-text" style={{ marginTop: "2px" }}>
+                        {activeMode.description}
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -1274,6 +1365,16 @@ function Hud({
                         <span className="ui-skull">☠</span> {hud.kills.toLocaleString()}
                     </div>
                     <Coins amount={hud.coins} />
+                    {hud.challengeMode && hud.challengeMode !== "normal" && (
+                        <div
+                            className="ui-round"
+                            style={{ color: getChallengeMode(hud.challengeMode).color }}
+                            title={getChallengeMode(hud.challengeMode).description}
+                        >
+                            {getChallengeMode(hud.challengeMode).shortName} (
+                            {getChallengeMode(hud.challengeMode).difficultyMultiplier}x)
+                        </div>
+                    )}
                     {hud.round !== undefined && <div className="ui-round">Round {hud.round}</div>}
                     {hud.quests.length > 0 && (
                         <QuestTracker quests={hud.quests} open={questTracker} client={client} />
@@ -1742,6 +1843,29 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                         <td>Adventurer</td>
                                         <td>{result.characterName}</td>
                                     </tr>
+                                    {result.challengeMode && result.challengeMode !== "normal" && (
+                                        <tr>
+                                            <td>Mode</td>
+                                            <td
+                                                style={{
+                                                    color: getChallengeMode(result.challengeMode)
+                                                        .color,
+                                                }}
+                                            >
+                                                {getChallengeMode(result.challengeMode).name} (
+                                                {
+                                                    getChallengeMode(result.challengeMode)
+                                                        .difficultyMultiplier
+                                                }
+                                                x diff,{" "}
+                                                {
+                                                    getChallengeMode(result.challengeMode)
+                                                        .pointsMultiplier
+                                                }
+                                                x pts)
+                                            </td>
+                                        </tr>
+                                    )}
                                     {result.endless && (
                                         <tr>
                                             <td>Endless round</td>

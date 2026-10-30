@@ -14,6 +14,9 @@ import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../conten
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
 import { WEAPONS } from "../content/weapons";
 import {
+    CHALLENGE_MODES,
+    ChallengeMode,
+    ChallengeModeDef,
     LevelPointsBreakdown,
     MapBestRecord,
     calculateLevelPoints,
@@ -21,7 +24,11 @@ import {
     calculateRunPoints,
     calculateRunPointsBreakdown,
     getArmourySpent,
+    getChallengeDifficultyMultiplier,
+    getChallengeMode,
+    getChallengePointsMultiplier,
     getMapDifficultyMultiplier,
+    isChallengeMode,
     isCustomMap,
     migrateCustomSaveFields,
     recordCustomRunStats,
@@ -29,14 +36,21 @@ import {
 } from "./custom/customSave";
 
 export {
+    CHALLENGE_MODES,
     calculateLevelPoints,
     calculateLevelPointsBreakdown,
     calculateRunPoints,
     calculateRunPointsBreakdown,
     getArmourySpent,
+    getChallengeDifficultyMultiplier,
+    getChallengeMode,
+    getChallengePointsMultiplier,
     getMapDifficultyMultiplier,
+    isChallengeMode,
     isCustomMap,
     refundArmoury,
+    type ChallengeMode,
+    type ChallengeModeDef,
     type LevelPointsBreakdown,
     type MapBestRecord,
 };
@@ -300,6 +314,7 @@ export type RunSummary = {
     // An endless run, and the round it got to
     endless?: boolean;
     round?: number;
+    challengeMode?: ChallengeMode;
     victory: boolean;
     seconds: number;
     level: number;

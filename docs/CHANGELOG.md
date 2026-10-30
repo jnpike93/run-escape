@@ -11,6 +11,7 @@ the version in the corner), so it's written for players.
 - **Shared Progression & Casket Rolls**: Co-Op runs share the Host's shop upgrades and pool party XP bonuses. Bones, coins, and Antique Lamps split across the party, while each casket opens once to grant every player their own unique item roll.
 - **Party HUD & Leaderboards**: Live party cards with player levels, health, and active prayers, a post-run **Co-Op Run Leaderboard** with individual damage and point scores, and a **Level Points & Best Times Leaderboard** on the Title screen and Map Select panel.
 - **Level Top Score System**: Earn a run score on every level based on monsters slain, kill pace (kills/min), bosses defeated, fast boss clear speed, character level, survival time, and endless rounds, scaled by each map's difficulty multiplier (`1.00x` Lumbridge to `3.33x` The Inferno).
+- **Challenge Modes (Extreme One Chunk Man & Nightmare Man)**: Choose **Extreme One Chunk Man** (**2x** map difficulty for **1.5x** points) or **Nightmare Man** (**3x** map difficulty for **2.5x** points) on the Map Selection screen or in Co-Op lobbies to test your build against 2x or 3x monster and boss HP and damage for massive leaderboard scores.
 
 ### Maps, Bosses, Quests & Adventurers
 

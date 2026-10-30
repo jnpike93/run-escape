@@ -238,7 +238,8 @@ export const mpHudLeaderboardMethods = {
             mapDiff = Math.round((0.6 * (sim.map.difficulty.hp || 1) + 0.4 * (sim.map.difficulty.damage || 1)) * 100) / 100;
         }
         const coopMult = Math.max(0.5, Math.min(10, Number(this.gameConfig?.difficultyMult || this.difficultyMult) || 1.0));
-        const diffMult = mapDiff * (0.7 + 0.3 * coopMult);
+        const modePointsMult = coopMult >= 3 ? 2.5 : coopMult >= 2 ? 1.5 : (0.7 + 0.3 * coopMult);
+        const diffMult = mapDiff * modePointsMult;
         const runSec = Math.max(0, Number(sim?.seconds) || 0);
         const minutes = Math.max(1, runSec / 60);
         const isVictory = sim?.state === 'victory';

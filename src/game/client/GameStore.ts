@@ -3,7 +3,7 @@ import { GearSlot } from "../content/types";
 import { WeaponStatLine } from "../content/weaponStats";
 import { ChestAction } from "../core/Loot";
 import { RunResult } from "../core/Sim";
-import { SaveData } from "../core/save";
+import { ChallengeMode, SaveData } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 
@@ -97,6 +97,7 @@ export type ChestView = {
 export type HudView = {
     // The run's map
     mapId: string;
+    challengeMode?: ChallengeMode;
     // An endless run's round
     round?: number;
     // Seconds until this round's final boss
@@ -186,6 +187,7 @@ export type UiSnapshot = {
     // been beaten)
     mapId: string;
     endless: boolean;
+    challengeMode: ChallengeMode;
     hud?: HudView;
     overlay: RunOverlay;
     choices: ChoiceView[];
@@ -232,6 +234,7 @@ export class GameStore {
             characterId: save.unlockedCharacters[0] ?? "warrior",
             mapId: "lumbridge",
             endless: false,
+            challengeMode: "normal",
             overlay: "none",
             choices: [],
             toasts: [],
