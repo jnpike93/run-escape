@@ -29,21 +29,25 @@ export function applyCoopLampXp(sim: Sim, levels: number): void {
 }
 
 export function stepCustomRegen(sim: Sim, ticksPerSecond: number): void {
-    const internal = sim as unknown as SimInternal;
     const player = sim.player;
+    if (player.hp >= player.maxHp) {
+        return;
+    }
+    const internal = sim as unknown as SimInternal;
     const hitPaused =
         sim.tick < (player.regenPausedUntil ?? 0) ||
         sim.tick - player.lastHitTick < 5 * ticksPerSecond;
-    const rapidHeal = hitPaused
-        ? (sim.passives.find((p) => p.id === "rapid_heal")?.value ?? 0)
-        : 0;
+    const rapidHeal =
+        hitPaused && sim.stats.regen > 0
+            ? (sim.passives.find((p) => p.id === "rapid_heal")?.value ?? 0)
+            : 0;
     const statRegen = Math.max(0, sim.stats.regen - rapidHeal) / 60;
     let buffRegen = 0;
     for (const buff of sim.buffs) {
         buffRegen += (buff as { regenPerSec?: number }).regenPerSec ?? 0;
     }
     const totalRegen = statRegen + buffRegen;
-    if (totalRegen > 0 && player.hp < player.maxHp) {
+    if (totalRegen > 0) {
         internal.regenAccumulator += totalRegen / ticksPerSecond;
         if (internal.regenAccumulator >= 1) {
             const amount = Math.floor(internal.regenAccumulator);
@@ -75,10 +79,10 @@ export function stepFactionProjectileHit(
         ) {
             return;
         }
-        if (
-            Math.hypot(other.x - projectile.x, other.y - projectile.y) <=
-            projectile.radius + other.radius
-        ) {
+        const dx = other.x - projectile.x;
+        const dy = other.y - projectile.y;
+        const rSum = projectile.radius + other.radius;
+        if (dx * dx + dy * dy <= rSum * rSum) {
             hitFoe = other;
         }
     });
@@ -99,10 +103,10 @@ export function stepFactionProjectileHit(
     );
     hitFoe.hp -= amount;
     hitFoe.flash = 5;
-    if (!hitFoe.aggro) {
+    if (!hitFoe.aggro && !hitFoe.foe) {
         const shooter = sim.enemies.find((e) => e.uid === projectile.enemyUid && !e.dead);
         if (shooter) {
-            hitFoe.foe ??= shooter;
+            hitFoe.foe = shooter;
         }
     }
     sim.events.push({

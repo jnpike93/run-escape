@@ -34,6 +34,7 @@ export const mpHudLeaderboardMethods = {
         const nextIdx = currentIdx === -1 ? 0 : (currentIdx + dir + livingPeers.length) % livingPeers.length;
         this.spectateSlot = livingPeers[nextIdx].slot;
         this.lastPartyHudFastKey = '';
+        this.lastPartyHudStructureKey = '';
         return livingPeers[nextIdx];
     },
 
@@ -67,6 +68,7 @@ export const mpHudLeaderboardMethods = {
             this.syncLocalPauseState(client, true);
         }
         this.lastPartyHudFastKey = '';
+        this.lastPartyHudStructureKey = '';
     },
 
     hasAnyRemotePause() {
@@ -258,16 +260,24 @@ export const mpHudLeaderboardMethods = {
                 this.pendingIcons.delete(id);
                 this.loadoutVersion = (this.loadoutVersion || 0) + 1;
                 this.lastPartyHudKey = '';
+                this.lastPartyHudFastKey = '';
+                this.lastPartyHudStructureKey = '';
             });
         }
         return null;
     },
 
+    removePartyHUD() {
+        const hud = document.getElementById('coop-party-hud');
+        if (hud) hud.remove();
+        this.lastPartyHudFastKey = '';
+        this.lastPartyHudStructureKey = '';
+    },
+
     // Multi-Partner HUD widget on the bottom-right showing 1 to 3 teammates' HP, Weapons, Passives, Gear, and Inventory
     updatePartyHUD() {
         if (this.remotePeers.size === 0) {
-            const hud = document.getElementById('coop-party-hud');
-            if (hud) hud.remove();
+            this.removePartyHUD();
             return;
         }
 
@@ -278,18 +288,48 @@ export const mpHudLeaderboardMethods = {
         const isLocalSpectating = Boolean(sim?.player && (sim.player.spectating || sim.player.hp <= 0));
         const activeSpectatePeer = isLocalSpectating ? this.getSpectatedPeer() : null;
 
-        let fastKey = 'v:' + (this.loadoutVersion || 0) + '|ll:' + localLvl + '|sp:' + (isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1);
+        const baseKey = 'v:' + (this.loadoutVersion || 0) + '|ll:' + localLvl + '|sp:' + (isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1);
+        let fastKey = baseKey;
+        let structureKey = baseKey;
         for (let i = 0; i < peersList.length; i++) {
             const peer = peersList[i];
             const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
             const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
             const lvl = Math.max(1, Math.round(Number(peer.entity?.level || peer.level) || 1));
-            fastKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + hp + ':' + maxHp + ':' + lvl + ':' + (peer.entity?.spectating ? 1 : 0);
+            const spec = peer.entity?.spectating ? 1 : 0;
+            fastKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + hp + ':' + maxHp + ':' + lvl + ':' + spec;
+            structureKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + lvl + ':' + spec;
         }
         if (this.lastPartyHudFastKey === fastKey) return;
-        this.lastPartyHudFastKey = fastKey;
 
         let hud = document.getElementById('coop-party-hud');
+        if (this.lastPartyHudStructureKey === structureKey && hud && hud.children.length > 0) {
+            for (let i = 0; i < peersList.length; i++) {
+                const peer = peersList[i];
+                const p2 = peer.entity || { hp: 25, maxHp: 25 };
+                const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
+                const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
+                const isDead = hp <= 0 || Boolean(p2.spectating);
+                const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
+                const pct = Math.round(hpRatio * 100);
+                const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
+                const textEl = hud.querySelector(`[data-mp-hp-text="${peer.slot}"]`);
+                if (textEl) {
+                    textEl.textContent = isDead ? '0 / ' + maxHp + ' HP' : hp + ' / ' + maxHp + ' HP';
+                }
+                const barEl = hud.querySelector(`[data-mp-hp-bar="${peer.slot}"]`);
+                if (barEl) {
+                    barEl.style.width = pct + '%';
+                    barEl.style.background = barColor;
+                }
+            }
+            this.lastPartyHudFastKey = fastKey;
+            return;
+        }
+
+        this.lastPartyHudFastKey = fastKey;
+        this.lastPartyHudStructureKey = structureKey;
+
         if (!hud) {
             hud = document.createElement('div');
             hud.id = 'coop-party-hud';
@@ -468,9 +508,9 @@ export const mpHudLeaderboardMethods = {
                         <span style="font-size: 9px; color: #b8a890;">${charName} · Lv.${lvl}</span>
                     </div>
                     <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 8px; border-radius: 2px; overflow: hidden;">
-                        <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
+                        <div data-mp-hp-bar="${peer.slot}" style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
                     </div>
-                    <div style="font-size: 9px; color: ${statusColor}; text-align: right;">${statusText}</div>
+                    <div style="font-size: 9px; color: ${statusColor}; text-align: right;"><span data-mp-hp-text="${peer.slot}">${statusText}</span></div>
                     <div style="border-top: 1px solid #3d3123; padding-top: 3px; display: flex; flex-direction: column; gap: 2px;">
                         <div style="display: flex; gap: 2px;">${weaponsRow}</div>
                         <div style="display: flex; gap: 2px;">${passivesRow}</div>
@@ -489,6 +529,7 @@ export const mpHudLeaderboardMethods = {
                 if (peer && peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
                     this.spectateSlot = slot;
                     this.lastPartyHudFastKey = '';
+                    this.lastPartyHudStructureKey = '';
                     this.updatePartyHUD();
                 }
             });

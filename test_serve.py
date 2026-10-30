@@ -706,5 +706,113 @@ class TestSecurityFixes(unittest.TestCase):
         self.assertIn("coop_debug", HOST_ALLOWED_MSG_TYPES)
 
 
+class TestPerformanceOptimizations(unittest.TestCase):
+    def setUp(self):
+        with rooms_lock:
+            rooms.clear()
+            ip_conns.clear()
+
+    def tearDown(self):
+        with rooms_lock:
+            rooms.clear()
+            ip_conns.clear()
+
+    def test_read_exact_single_chunk_zero_copy_fast_path(self):
+        sock = Mock()
+        raw_chunk = b"exact_frame_payload"
+        sock.recv.return_value = raw_chunk
+        res = read_exact(sock, len(raw_chunk))
+        self.assertIs(res, raw_chunk)
+        sock.recv.assert_called_once_with(len(raw_chunk))
+
+    def test_read_exact_multi_chunk_partial_read_path(self):
+        sock = Mock()
+        sock.recv.side_effect = [b"part1_", b"part2_", b"part3"]
+        res = read_exact(sock, 17)
+        self.assertEqual(res, b"part1_part2_part3")
+        self.assertEqual(sock.recv.call_count, 3)
+
+    def test_zero_reserialization_fast_path_sync_world(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        with rooms_lock:
+            rooms["fast_room"] = [
+                (host_sock, threading.Lock(), "host", 1),
+                (guest_sock, threading.Lock(), "guest", 2),
+            ]
+
+        original_obj = {
+            "type": "sync_world",
+            "tick": 120,
+            "players": [{"slot": 1, "x": 3200, "y": 3200, "hp": 99}],
+            "enemies": [{"id": 10, "npcId": 3127, "hp": 250}],
+        }
+        raw_payload = json.dumps(original_obj, separators=(",", ":")).encode("utf-8")
+
+        with patch("serve.json.dumps", wraps=json.dumps) as spy_dumps:
+            res = _process_ws_text_message(
+                host_sock, threading.Lock(), "fast_room", "host", 1, raw_payload
+            )
+            self.assertTrue(res)
+            spy_dumps.assert_not_called()
+
+        _, relayed_bytes, err = _read_ws_frame(MockSocket(bytes(guest_sock.sent_data)))
+        self.assertIsNone(err)
+        relayed_obj = json.loads(relayed_bytes.decode("utf-8"))
+
+        expected_obj = dict(original_obj)
+        expected_obj["senderSlot"] = 1
+        expected_obj["slot"] = 1
+        self.assertEqual(relayed_obj, expected_obj)
+
+    def test_single_occupant_room_skips_frame_broadcast(self):
+        host_sock = MockSocket()
+        with rooms_lock:
+            rooms["solo_room"] = [
+                (host_sock, threading.Lock(), "host", 1),
+            ]
+
+        raw_payload = b'{"type":"sync_world","tick":1}'
+        with patch("serve.encode_ws_frame", wraps=encode_ws_frame) as spy_encode:
+            res = _process_ws_text_message(
+                host_sock, threading.Lock(), "solo_room", "host", 1, raw_payload
+            )
+            self.assertTrue(res)
+            spy_encode.assert_not_called()
+        self.assertEqual(bytes(host_sock.sent_data), b"")
+
+    def test_smart_cache_control_headers(self):
+        def get_headers_for_path(path):
+            handler = CustomHandler.__new__(CustomHandler)
+            handler.path = path
+            handler._response_code = 200
+            sent = {}
+            handler.send_header = lambda k, v: sent.__setitem__(k, v)
+            with patch.object(serve.http.server.SimpleHTTPRequestHandler, "end_headers", lambda self: None):
+                handler.end_headers()
+            return sent
+
+        for immutable_path in (
+            "/assets/index-CC-eTnSU.js",
+            "/assets/index-BMrv4NGQ.css",
+            "/assets/module-yzz5kVyQ.wasm",
+            "/assets/multiplayer.js?v=8.5",
+            "/caches/osrs-241/main_file_cache.dat2",
+            "/caches/caches.json",
+        ):
+            with self.subTest(path=immutable_path):
+                hdrs = get_headers_for_path(immutable_path)
+                self.assertEqual(hdrs.get("Cache-Control"), "public, max-age=31536000, immutable")
+                self.assertNotIn("Pragma", hdrs)
+                self.assertNotIn("Expires", hdrs)
+
+        for uncached_path in ("/", "/index.html", "/assets/multiplayer.js", "/docs/CHANGELOG.md"):
+            with self.subTest(path=uncached_path):
+                hdrs = get_headers_for_path(uncached_path)
+                self.assertEqual(hdrs.get("Cache-Control"), "no-cache, no-store, must-revalidate")
+                self.assertEqual(hdrs.get("Pragma"), "no-cache")
+                self.assertEqual(hdrs.get("Expires"), "0")
+
+
 if __name__ == "__main__":
     unittest.main()

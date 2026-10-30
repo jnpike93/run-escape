@@ -10,7 +10,7 @@ export const mpPickupsMethods = {
         if (kind !== 'lamp_xp' && msg.senderSlot !== undefined && sanitizeSlot(msg.senderSlot, 0) !== this.hostSlot) return;
         const val = Number.isFinite(Number(msg.value)) ? Number(msg.value) : 0;
 
-        if (kind === 'bones' || kind === 'big_bones') {
+        if (kind === 'bones' || kind === 'big_bones' || kind === 'xp') {
             if (val <= 0 && !Number.isFinite(Number(msg.xpGained))) return;
             const gained = Number.isFinite(Number(msg.xpGained)) && Number(msg.xpGained) > 0
                 ? Number(msg.xpGained)
@@ -20,7 +20,7 @@ export const mpPickupsMethods = {
             sim.xp = Number.isFinite(hostXp)
                 ? Math.max(sim.xp + gained, hostXp)
                 : (sim.xp + gained);
-            client.sounds?.onEvents(sim, [{ type: 'pickup', kind, value: val || 1 }]);
+            client.sounds?.onEvents(sim, [{ type: 'pickup', kind: kind === 'xp' ? 'bones' : kind, value: val || 1 }]);
             sim.checkLevelUp();
             if (sim.state !== 'playing') {
                 client.accumulator = 0;
@@ -136,13 +136,23 @@ export const mpPickupsMethods = {
                     sim.xp += xpGained;
                     sim.events.push({ type: 'pickup', kind: pickup.kind, value: origVal });
                     sim.checkLevelUp();
-                    this.send({
-                        type: 'coop_pickup',
-                        kind: pickup.kind,
-                        value: origVal,
-                        xpGained: xpGained,
-                        totalXp: sim.xp
-                    });
+                    if (this.queueCoopPickup) {
+                        this.queueCoopPickup({
+                            type: 'coop_pickup',
+                            kind: pickup.kind,
+                            value: origVal,
+                            xpGained: xpGained,
+                            totalXp: sim.xp
+                        });
+                    } else {
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: pickup.kind,
+                            value: origVal,
+                            xpGained: xpGained,
+                            totalXp: sim.xp
+                        });
+                    }
                     if (sim.state !== 'playing' && client) {
                         client.accumulator = 0;
                         client.syncOverlay();
@@ -229,6 +239,64 @@ export const mpPickupsMethods = {
             }
         }
         sim.pickups = sim.pickups.filter(p => p.value >= 0);
+    },
+
+    queueCoopPickup(msg) {
+        if (!msg || typeof msg !== 'object') return;
+        const kind = msg.kind;
+        if (this._inSimStep === true) {
+            if (kind === 'xp' || kind === 'bones' || kind === 'big_bones') {
+                if (!this._batchedXpPickup) {
+                    this._batchedXpPickup = {
+                        type: 'coop_pickup',
+                        kind: kind,
+                        value: Number(msg.value) || 0,
+                        xpGained: Number(msg.xpGained) || 0,
+                        totalXp: Number(msg.totalXp) || 0
+                    };
+                } else {
+                    if (kind === 'big_bones' || kind === 'xp') {
+                        this._batchedXpPickup.kind = kind;
+                    }
+                    this._batchedXpPickup.value += Number(msg.value) || 0;
+                    this._batchedXpPickup.xpGained += Number(msg.xpGained) || 0;
+                    if (Number.isFinite(Number(msg.totalXp))) {
+                        this._batchedXpPickup.totalXp = Number(msg.totalXp);
+                    }
+                }
+                return;
+            }
+            if (kind === 'coins') {
+                if (!this._batchedCoinsPickup) {
+                    this._batchedCoinsPickup = {
+                        type: 'coop_pickup',
+                        kind: 'coins',
+                        value: Number(msg.value) || 0
+                    };
+                } else {
+                    this._batchedCoinsPickup.value += Number(msg.value) || 0;
+                }
+                return;
+            }
+        }
+        this.send(msg);
+    },
+
+    flushCoopPickups() {
+        if (this._batchedXpPickup) {
+            const xpMsg = this._batchedXpPickup;
+            this._batchedXpPickup = null;
+            if (xpMsg.value > 0 || xpMsg.xpGained > 0) {
+                this.send(xpMsg);
+            }
+        }
+        if (this._batchedCoinsPickup) {
+            const coinsMsg = this._batchedCoinsPickup;
+            this._batchedCoinsPickup = null;
+            if (coinsMsg.value > 0) {
+                this.send(coinsMsg);
+            }
+        }
     },
 
 };

@@ -351,3 +351,156 @@ describe("Security fixes - totalXp cap (L-2)", () => {
         }
     });
 });
+
+describe("25 Hz sync_world velocity normalization & batched coop_pickup frames", () => {
+    test("applyWorldSync normalizes enemy and remote player fallback velocity by tickDelta = 2 (25 Hz sync)", async () => {
+        const prevWindow = (globalThis as any).window;
+        const prevImage = (globalThis as any).Image;
+        try {
+            (globalThis as any).window = { ...(prevWindow || {}), addEventListener() {} };
+            (globalThis as any).Image = prevImage || class { src = ""; };
+            const { mpSyncEngineMethods } = await import("./mp-sync-engine.js");
+            const enemy: any = {
+                uid: 101,
+                def: { id: "goblin" },
+                x: 10,
+                y: 20,
+                prevX: 10,
+                prevY: 20,
+                netX: 10,
+                netY: 20,
+                netVx: 0,
+                netVy: 0,
+                hp: 15,
+                maxHp: 15,
+                yaw: 0,
+                dead: false,
+            };
+            const peerEntity: any = {
+                slot: 2,
+                x: 30,
+                y: 40,
+                prevX: 30,
+                prevY: 40,
+                netX: 30,
+                netY: 40,
+                vx: 0,
+                vy: 0,
+                hp: 25,
+                maxHp: 25,
+                moving: true,
+            };
+            const peer: any = {
+                slot: 2,
+                name: "Player 2",
+                entity: peerEntity,
+                pauseState: null,
+                _initialPosSynced: true,
+            };
+            const sim: any = {
+                tick: 100,
+                kills: 0,
+                xp: 0,
+                round: 1,
+                state: "playing",
+                player: { hp: 25, maxHp: 25, spectating: false },
+                enemies: [enemy],
+                pickups: [],
+                turrets: [],
+                thralls: [],
+                enemyProjectiles: [],
+                effects: [],
+            };
+            (globalThis as any).window = {
+                gameClient: {
+                    sim,
+                    accumulator: 0,
+                    syncOverlay() {},
+                    updateHud() {},
+                    handleEvents() {},
+                },
+            };
+
+            const ctx: any = {
+                ...mpSyncEngineMethods,
+                localSlot: 1,
+                _lastHostSyncTick: 100,
+                remotePeers: new Map([[2, peer]]),
+                damageStats: new Map(),
+                invalidateSortedRemotePeers() {},
+                updatePauseOverlay() {},
+                syncLocalPauseState() {},
+                showToast() {},
+            };
+
+            // Host tick advances by 2 (100 -> 102, 25 Hz sync).
+            // Enemy moved +0.8 in X and -0.4 in Y over 2 ticks => per-tick velocity should be +0.4 and -0.2.
+            // Remote player (without explicit vx/vy) moved +1.0 in X and +0.6 in Y over 2 ticks => +0.5 and +0.3.
+            ctx.applyWorldSync({
+                type: "sync_world",
+                tick: 102,
+                players: [
+                    { slot: 2, hp: 25, maxHp: 25, x: 31.0, y: 40.6, moving: true },
+                ],
+                enemies: [
+                    [101, "goblin", 10.8, 19.6, 15, 15, 0, 0, "walk", 0, 0, 1, 0, 0, -1, null, 0],
+                ],
+            });
+
+            expect(ctx._lastHostSyncTick).toBe(102);
+            expect(enemy.netVx).toBeCloseTo(0.4, 5);
+            expect(enemy.netVy).toBeCloseTo(-0.2, 5);
+            expect(peerEntity.vx).toBeCloseTo(0.5, 5);
+            expect(peerEntity.vy).toBeCloseTo(0.3, 5);
+        } finally {
+            (globalThis as any).window = prevWindow;
+            (globalThis as any).Image = prevImage;
+        }
+    });
+
+    test("queueCoopPickup batches XP and coin pickups during sim.step (_inSimStep = true) and sends immediately outside sim.step", () => {
+        const sentMessages: any[] = [];
+        const ctx: any = {
+            ...mpPickupsMethods,
+            _inSimStep: true,
+            _batchedXpPickup: null,
+            _batchedCoinsPickup: null,
+            send(msg: any) {
+                sentMessages.push(msg);
+            },
+        };
+
+        // Simulate 5 bone pickups and 3 coin pickups in a single tick
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "bones", value: 5, xpGained: 7.5, totalXp: 107.5 });
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "big_bones", value: 15, xpGained: 22.5, totalXp: 130.0 });
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "coins", value: 10 });
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "coins", value: 25 });
+        // Non-batched kinds (e.g. casket) are still sent immediately
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "casket", tier: "medium", pickupUid: "c1" });
+
+        expect(sentMessages.length).toBe(1);
+        expect(sentMessages[0].kind).toBe("casket");
+
+        // Flush at end of sim.step
+        ctx.flushCoopPickups();
+        expect(sentMessages.length).toBe(3);
+        expect(sentMessages[1]).toEqual({
+            type: "coop_pickup",
+            kind: "big_bones",
+            value: 20,
+            xpGained: 30,
+            totalXp: 130.0,
+        });
+        expect(sentMessages[2]).toEqual({
+            type: "coop_pickup",
+            kind: "coins",
+            value: 35,
+        });
+
+        // Outside sim.step (_inSimStep = false), pickups send immediately
+        ctx._inSimStep = false;
+        ctx.queueCoopPickup({ type: "coop_pickup", kind: "bones", value: 5, xpGained: 5, totalXp: 135 });
+        expect(sentMessages.length).toBe(4);
+        expect(sentMessages[3].value).toBe(5);
+    });
+});

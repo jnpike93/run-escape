@@ -1,23 +1,45 @@
 import type { Sim } from "../Sim";
-import type { Pickup } from "../entities";
+import type { Enemy, Pickup } from "../entities";
 import { isCircleFree } from "../world/Collision";
+
+const EMPTY_ENEMIES: readonly Enemy[] = [];
 
 export function isBlockedByStationaryEnemy(
     sim: Sim,
     x: number,
     y: number,
     playerRadius: number,
+    enemies: readonly Enemy[] = sim.enemies,
 ): boolean {
-    for (const enemy of sim.enemies) {
-        if (
-            !enemy.dead &&
-            enemy.def.stationary &&
-            Math.hypot(x - enemy.x, y - enemy.y) < enemy.radius + playerRadius
-        ) {
-            return true;
+    for (const enemy of enemies) {
+        if (!enemy.dead && enemy.def.stationary) {
+            const dx = x - enemy.x;
+            const dy = y - enemy.y;
+            const minDist = enemy.radius + playerRadius;
+            if (dx * dx + dy * dy < minDist * minDist) {
+                return true;
+            }
         }
     }
     return false;
+}
+
+function isTileWalkableForPickup(
+    sim: Sim,
+    tileX: number,
+    tileY: number,
+    playerPiece: number,
+): boolean {
+    if (!sim.grid.contains(tileX, tileY) || sim.grid.isSolid(tileX, tileY)) {
+        return false;
+    }
+    if (playerPiece >= 0 && sim.grid.getPiece(tileX, tileY) !== playerPiece) {
+        return false;
+    }
+    if (sim.flowField.contains(tileX, tileY) && !sim.flowField.isReachable(tileX, tileY)) {
+        return false;
+    }
+    return true;
 }
 
 export function isPickupSpotReachable(
@@ -28,14 +50,8 @@ export function isPickupSpotReachable(
 ): boolean {
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);
-    if (!sim.grid.contains(tileX, tileY) || sim.grid.isSolid(tileX, tileY)) {
-        return false;
-    }
     const playerPiece = sim.grid.getPiece(sim.flowField.targetX, sim.flowField.targetY);
-    if (playerPiece >= 0 && sim.grid.getPiece(tileX, tileY) !== playerPiece) {
-        return false;
-    }
-    if (sim.flowField.contains(tileX, tileY) && !sim.flowField.isReachable(tileX, tileY)) {
+    if (!isTileWalkableForPickup(sim, tileX, tileY, playerPiece)) {
         return false;
     }
     if (!isCircleFree(sim.grid, x, y, playerRadius)) {
@@ -65,6 +81,17 @@ export function findReachablePickupSpot(
         return { x: startX + 0.5, y: startY + 0.5 };
     }
     const player = sim.player;
+    const playerPiece = sim.grid.getPiece(sim.flowField.targetX, sim.flowField.targetY);
+    let stationaryEnemies: Enemy[] | readonly Enemy[] = EMPTY_ENEMIES;
+    for (const enemy of sim.enemies) {
+        if (!enemy.dead && enemy.def.stationary) {
+            if (stationaryEnemies === EMPTY_ENEMIES) {
+                stationaryEnemies = [enemy];
+            } else {
+                (stationaryEnemies as Enemy[]).push(enemy);
+            }
+        }
+    }
     const offsetX = (x - startX - 0.5) * 0.5;
     const offsetY = (y - startY - 0.5) * 0.5;
     let bestX = player.x;
@@ -72,18 +99,25 @@ export function findReachablePickupSpot(
     let bestScore = Infinity;
     for (let r = 1; r <= 32; r++) {
         for (let dy = -r; dy <= r; dy++) {
-            for (let dx = -r; dx <= r; dx++) {
-                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) {
-                    continue;
-                }
+            const stepX = Math.abs(dy) === r ? 1 : r * 2;
+            for (let dx = -r; dx <= r; dx += stepX) {
                 const tx = startX + dx;
                 const ty = startY + dy;
+                if (!isTileWalkableForPickup(sim, tx, ty, playerPiece)) {
+                    continue;
+                }
                 let cx = tx + 0.5 + offsetX;
                 let cy = ty + 0.5 + offsetY;
-                if (!isPickupSpotReachable(sim, cx, cy, playerRadius)) {
+                if (
+                    !isCircleFree(sim.grid, cx, cy, playerRadius) ||
+                    isBlockedByStationaryEnemy(sim, cx, cy, playerRadius, stationaryEnemies)
+                ) {
                     cx = tx + 0.5;
                     cy = ty + 0.5;
-                    if (!isPickupSpotReachable(sim, cx, cy, playerRadius)) {
+                    if (
+                        !isCircleFree(sim.grid, cx, cy, playerRadius) ||
+                        isBlockedByStationaryEnemy(sim, cx, cy, playerRadius, stationaryEnemies)
+                    ) {
                         continue;
                     }
                 }
@@ -105,30 +139,22 @@ export function findReachablePickupSpot(
 }
 
 export function stepPickupSlide(sim: Sim, pickup: Pickup, playerRadius: number): boolean {
-    if (
-        pickup.targetX === undefined &&
-        !isPickupSpotReachable(sim, pickup.x, pickup.y, playerRadius)
-    ) {
-        const safe = findReachablePickupSpot(sim, pickup.x, pickup.y, playerRadius);
-        pickup.targetX = safe.x;
-        pickup.targetY = safe.y;
+    if (pickup.attracted || pickup.targetX === undefined || pickup.targetY === undefined) {
+        return false;
     }
-    if (pickup.targetX !== undefined && pickup.targetY !== undefined) {
-        const tx = pickup.targetX - pickup.x;
-        const ty = pickup.targetY - pickup.y;
-        const td = Math.hypot(tx, ty);
-        pickup.speed = Math.min(pickup.speed + 0.025, 0.35);
-        if (td <= pickup.speed) {
-            pickup.x = pickup.targetX;
-            pickup.y = pickup.targetY;
-            pickup.targetX = undefined;
-            pickup.targetY = undefined;
-            pickup.speed = 0;
-        } else {
-            pickup.x += (tx / td) * pickup.speed;
-            pickup.y += (ty / td) * pickup.speed;
-        }
-        return true;
+    const tx = pickup.targetX - pickup.x;
+    const ty = pickup.targetY - pickup.y;
+    const td = Math.hypot(tx, ty);
+    pickup.speed = Math.min(pickup.speed + 0.025, 0.35);
+    if (td <= pickup.speed) {
+        pickup.x = pickup.targetX;
+        pickup.y = pickup.targetY;
+        pickup.targetX = undefined;
+        pickup.targetY = undefined;
+        pickup.speed = 0;
+    } else {
+        pickup.x += (tx / td) * pickup.speed;
+        pickup.y += (ty / td) * pickup.speed;
     }
-    return false;
+    return true;
 }

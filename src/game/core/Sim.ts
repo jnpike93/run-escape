@@ -2725,14 +2725,14 @@ export class Sim {
             projectile.prevX = projectile.x;
             projectile.prevY = projectile.y;
             projectile.life--;
-            const targetFoe =
-                projectile.targetEnemyUid !== undefined
-                    ? this.enemies.find((e) => e.uid === projectile.targetEnemyUid && !e.dead)
-                    : undefined;
-            const homeTarget = targetFoe ?? player;
-            const dx = homeTarget.x - projectile.x;
-            const dy = homeTarget.y - projectile.y;
             if (projectile.homing > 0) {
+                const targetFoe =
+                    projectile.targetEnemyUid !== undefined
+                        ? this.enemies.find((e) => e.uid === projectile.targetEnemyUid && !e.dead)
+                        : undefined;
+                const homeTarget = targetFoe ?? player;
+                const dx = homeTarget.x - projectile.x;
+                const dy = homeTarget.y - projectile.y;
                 // Turn towards the target, a little each tick
                 const heading = Math.atan2(projectile.vy, projectile.vx);
                 let turn = Math.atan2(dy, dx) - heading;
@@ -4740,6 +4740,11 @@ export class Sim {
         if (!pile || pile.value < 0) {
             // That one's been picked up already: this one stays put
             pickup.pileUid = 0;
+            const spot = findReachablePickupSpot(this, pickup.x, pickup.y, PLAYER_RADIUS);
+            if (spot.x !== pickup.x || spot.y !== pickup.y) {
+                pickup.targetX = spot.x;
+                pickup.targetY = spot.y;
+            }
             return;
         }
         const dx = pile.x - pickup.x;

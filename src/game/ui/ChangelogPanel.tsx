@@ -1,39 +1,21 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment } from "react";
 
 import "./ChangelogPanel.css";
-import { CHANGELOG, parseChangelog } from "./changelog";
+import { CHANGELOG } from "./changelog";
 import { renderBold } from "./renderBold";
 
 type Props = {
     onClose: () => void;
 };
 
-// What's changed, version by version, from docs/CHANGELOG.md. Unreleased only
+// What's changed, version by version, from CHANGELOG.md. Unreleased only
 // shows once something's under it.
 export function ChangelogPanel({ onClose }: Props): JSX.Element {
-    const [clData, setClData] = useState(CHANGELOG);
-    useEffect(() => {
-        let mounted = true;
-        fetch("docs/CHANGELOG.md", { cache: "no-cache" })
-            .then((r) => (r.ok ? r.text() : null))
-            .then((txt) => {
-                if (mounted && txt) {
-                    const parsed = parseChangelog(txt);
-                    if (parsed.length > 0) {
-                        setClData(parsed);
-                    }
-                }
-            })
-            .catch(() => {});
-        return () => {
-            mounted = false;
-        };
-    }, []);
     return (
         <div className="ui-panel rs-border rs-background ui-changelog">
             <h2>What's new</h2>
             <div className="ui-changelog-list">
-                {clData.filter((v) => v.sections.length > 0).map((v) => (
+                {CHANGELOG.filter((v) => v.sections.length > 0).map((v) => (
                     <section key={v.version}>
                         <h3 className="ui-changelog-version">
                             {v.version}

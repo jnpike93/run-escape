@@ -8,10 +8,40 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Upstream-Safe Performance & Multiplayer Stability Optimizations
+
+**Model**: Gemini (Antigravity)
+**Commit**: (pending - see git log)
+**Bundle**: `index-D7NfIRw6.js` (`?v=8.5`)
+
+**Scope**: End-to-end verification, micro-benchmarking, and implementation of upstream-safe performance and protocol stability optimizations across `nginx.conf`, `serve.py`, `src/game/core/custom/`, `src/game/core/Sim.ts`, `src/mapviewer/worker/customNpcIcon.ts`, `src/game/ui/ChangelogPanel.tsx`, and `src/custom/`.
+
+**Changes implemented**:
+- **Nginx & Python Delivery (`nginx.conf`, `serve.py`, `test_serve.py`)**:
+  - Added direct `/assets/` location block in `nginx.conf` (`sendfile on; tcp_nopush on; expires 365d;`) with full COOP/COEP/CORP/HSTS headers, offloading 11.73 MB of static assets from single-threaded `serve.py`.
+  - Enabled level-6 `gzip` in `nginx.conf` for JS/JSON/WASM/CSS/TTF/SVG (-83.4% non-audio payload size, from 8.72 MB to 1.44 MB), explicitly excluding `application/octet-stream` and `audio/ogg` to preserve HTTP `Range` support on `/caches/*.dat2`.
+  - Fixed `/caches/` extension regex in `nginx.conf` to `^/caches/.*\.(bin|dat2?|idx\d*|xtea|json|gz)$` so `main_file_cache.dat2` and `main_file_cache.idx0`-`idx255` are served properly with COOP/COEP headers.
+  - Updated `serve.py` `end_headers()` to emit `Cache-Control: public, max-age=31536000, immutable` for `/caches/` and versioned/hashed `/assets/` files while keeping `no-cache, no-store, must-revalidate` for `/index.html`.
+  - Added a zero-re-serialization byte-splicing fast path in `serve.py` `_process_ws_text_message` (-56.0% CPU time on `sync_world`), a single-chunk zero-copy fast path in `read_exact`, and a 1-player room broadcast skip.
+- **Unreachable Pickup Recovery & Custom Sim Hooks (`pickupRecovery.ts`, `customSimHooks.ts`, `Sim.ts`, `customNpcIcon.ts`, `ChangelogPanel.tsx`)**:
+  - Removed redundant per-tick `isPickupSpotReachable` checks on resting pickups in `stepPickupSlide` (64.6x to 221.9x speedup) and added a mid-slide reachability recovery guard in `Sim.slideIntoPile` when `!pile`.
+  - Pre-filtered stationary enemies once before the `r = 1..32` ring search in `findReachablePickupSpot`, stepped directly across perimeter cells (`stepX = Math.abs(dy) === r ? 1 : r * 2`), checked tile walkability once per perimeter tile, and used squared distances (5.13x speedup).
+  - Scoped `targetEnemyUid` lookup in `Sim.stepEnemyProjectiles` to `if (projectile.homing > 0)` and guarded shooter lookup in `stepFactionProjectileHit` with `if (!hitFoe.aggro && !hitFoe.foe)` (2.67x speedup).
+  - Early-returned in `stepCustomRegen` when `player.hp >= player.maxHp`, replaced per-vertex `Math.sqrt` in `customNpcIcon.ts` with a single post-loop `Math.sqrt(brSq)`, and reverted `ChangelogPanel.tsx` to match `upstream/main` verbatim (eliminating redundant runtime `fetch("docs/CHANGELOG.md")`).
+- **Co-Op Sync Engine, Pickups & Render Loops (`mp-sync-engine.js`, `mp-pickups.js`, `mp-hud-leaderboard.js`, `mp-prayers.js`, `cooks-assistant.js`, `tile-coords.js`)**:
+  - Decoupled `sync_world` broadcasts to 25 Hz (`sim.tick % 2 === 0` or immediate flush on non-damage events/state changes) while harvesting `sim.events` into `_pendingVisEvents` at 50 Hz, stripping redundant `enemyId` from `damage` events (preventing >64 KB `1009` disconnects), and normalizing Guest velocity extrapolation by `tickDelta`.
+  - Coalesced per-tick bone XP and coin `coop_pickup` frames via `queueCoopPickup`/`flushCoopPickups` during `sim.step` to prevent Magnet/Bonecrusher bursts from exceeding `MAX_FRAMES_PER_SEC = 120` (`1008` disconnects).
+  - Removed 28x spawn-loop and 50 Hz per-peer `sim.updateFlowField()` thrashing on the Host by updating `t.flowField` directly every 8 ticks or on tile crossings, preserved global `sim.countAlive()` across target buckets, memoized `sim.currentWave()`, and hoisted `applyBossWindup` out of Guest `applyWorldSync`.
+  - Added in-place DOM updates for HP-only changes in `mp-hud-leaderboard.js`, cached `#osrs-prayer-bar` and gated Jad/Zuk scans behind `sim.shownBoss` in `mp-prayers.js`, eliminated per-frame `getComputedStyle` reflows when away from the Cook in `cooks-assistant.js`, and cached DOM nodes/tile coordinates in `tile-coords.js`.
+
+**Tests**: 290 Vitest tests across 14 suites + 54 Python unit tests in `test_serve.py` - all pass. `npx tsc --noEmit` clean.
+
+---
+
 ### [2026-10-30] Security Hardening Round 2 - Full Codebase Audit
 
 **Model**: Gemini 2.5 Pro (Antigravity)
-**Commit**: (pending - see below)
+**Commit**: `0acb92b`
 **Bundle**: `index-CC-eTnSU.js` (`?v=8.5`)
 
 **Scope**: Full codebase audit of all previously unaudited subsystems: TypeScript engine/Sim, GameClient, secret codes/debug-mode, mapviewer/cache parsers, nginx/CSP/CI-CD infrastructure, React UI components.
@@ -62,7 +92,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-CC-eTnSU.js`](../assets/index-CC-eTnSU.js) | `index.html`, `MapViewerApp-DHjUTKJ4.js`, `module-NaptSLjl.js` |
+| **Main Engine Bundle** | [`assets/index-D7NfIRw6.js`](../assets/index-D7NfIRw6.js) | `index.html`, `MapViewerApp-DkHWqAjz.js`, `module-h2I9xmqO.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -72,13 +102,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | NOT loaded from `index.html` (security fix - load manually in dev only) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-DHjUTKJ4.js`](../assets/MapViewerApp-DHjUTKJ4.js) | `assets/index-CC-eTnSU.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DxgxqcOM.js`](../assets/RenderDataWorker-DxgxqcOM.js) | `assets/index-CC-eTnSU.js` |
-| **Worker WASM Loader** | [`assets/module-NaptSLjl.js`](../assets/module-NaptSLjl.js) | `assets/RenderDataWorker-DxgxqcOM.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-NaptSLjl.js`](../assets/module-NaptSLjl.js) | `assets/index-CC-eTnSU.js` (`module-yzz5kVyQ.wasm`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-DkHWqAjz.js`](../assets/MapViewerApp-DkHWqAjz.js) | `assets/index-D7NfIRw6.js` |
+| **Render Worker** | [`assets/RenderDataWorker-BZS73kvJ.js`](../assets/RenderDataWorker-BZS73kvJ.js) | `assets/index-D7NfIRw6.js` |
+| **Worker WASM Loader** | [`assets/module-DQGm7-d_.js`](../assets/module-DQGm7-d_.js) | `assets/RenderDataWorker-BZS73kvJ.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-h2I9xmqO.js`](../assets/module-h2I9xmqO.js) | `assets/index-D7NfIRw6.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-BRo3grs5.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-D7NfIRw6.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
    - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), secret codes (`secretCodes.ts`), and in-place content array overrides (`customOverrides.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, `weapons.ts`, `GameClient.ts`) via 1-line `applyCustom*(...)` calls or spreads.

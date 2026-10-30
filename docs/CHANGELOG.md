@@ -5,6 +5,16 @@ the version in the corner), so it's written for players.
 
 ## Custom Edition Updates (v8.5)
 
+### Performance & Multiplayer Stability Optimizations
+
+- **Static Asset Offloading & Gzip Compression**: Added direct Nginx `sendfile` serving and immutable caching for `/assets/`, enabled level-6 `gzip` compression for JS/JSON/WASM/CSS/TTF (reducing non-audio payload size by 83.4%, from 8.72 MB to 1.44 MB), and fixed `/caches/` regex matching for `.dat2` and `.idx0`-`.idx255` archives with full COOP/COEP headers.
+- **Unreachable Loot Recovery Speedup (64x-221x Faster)**: Removed redundant per-tick `isPickupSpotReachable` checks on resting pickups in `stepPickupSlide`, pre-filtered stationary enemies once before `findReachablePickupSpot` ring searches, stepped directly across perimeter cells, and added mid-slide pile interruption recovery in `Sim.slideIntoPile`.
+- **Co-Op 25 Hz World Sync & Event Buffering**: Decoupled `sync_world` broadcasts to 25 Hz while buffering `sim.events` at the full 50 Hz simulation rate (with immediate flush on non-damage boss/state events) and normalizing Guest entity velocity interpolation by `tickDelta`.
+- **Magnet & Late-Wave Co-Op Disconnect Prevention**: Coalesced per-tick bone XP and coin `coop_pickup` frames so Magnet/Bonecrusher bursts never exceed `MAX_FRAMES_PER_SEC`, and stripped unused `enemyId` fields from `damage` events to keep late-wave frames under the 64 KB WebSocket limit.
+- **Co-Op Dijkstra FlowField & Wave Memoization**: Eliminated 50 Hz per-peer and 28x spawn-loop flowfield thrashing on the Host by updating `t.flowField` directly every 8 ticks or on tile crossings, preserved global `countAlive()` accuracy across target buckets, memoized `sim.currentWave()`, and hoisted closures out of Guest `applyWorldSync`.
+- **WebSocket Relay Zero-Re-Serialization Fast Path**: Added a byte-splicing fast path in `serve.py` for unmodified JSON relay frames (-56% CPU time on `sync_world`), zero-copy single-chunk `read_exact`, and 1-player room broadcast skipping.
+- **God Wars Projectile & Render-Loop Cleanups**: Scoped `targetEnemyUid` lookups in `Sim.stepEnemyProjectiles` to homing projectiles only (2.67x faster), eliminated per-frame `getComputedStyle` reflows in `cooks-assistant.js`, cached DOM nodes in `tile-coords.js` and `mp-prayers.js`, updated Party HUD HP bars in place in `mp-hud-leaderboard.js`, and removed redundant runtime changelog fetches in `ChangelogPanel.tsx`.
+
 ### Security Hardening - Round 2 (Full Codebase Audit)
 
 - **Debug Mode Removed from Production**: Removed `debug-mode.js` from `index.html`; it is no longer loaded for any player. The `?debug=1` URL bypass and `localStorage` substring gate are also eliminated.

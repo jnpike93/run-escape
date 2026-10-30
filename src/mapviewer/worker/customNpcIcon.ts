@@ -221,7 +221,7 @@ export function renderNpcItemIcon(state: WorkerState, objId: number): Int32Array
     Rasterizer3D.rasterAlpha = 0;
     model.calculateBoundsCylinder();
     let bh = 0;
-    let br = 0;
+    let brSq = 1;
     for (let c = 0; c < model.verticesCount; c++) {
         const vy = -model.verticesY[c];
         if (vy > bh) {
@@ -229,11 +229,12 @@ export function renderNpcItemIcon(state: WorkerState, objId: number): Int32Array
         }
         const vx = model.verticesX[c];
         const vz = model.verticesZ[c];
-        const rd = Math.sqrt(vx * vx + vz * vz);
-        if (rd > br) {
-            br = rd;
+        const rSq = vx * vx + vz * vz;
+        if (rSq > brSq) {
+            brSq = rSq;
         }
     }
+    const br = Math.sqrt(brSq);
     const ext = Math.max(bh, br * 1.85, 20);
     const zoom = Math.round((ext * 512) / 25);
     const xan = 190;

@@ -18,6 +18,14 @@ export const mpSyncEngineMethods = {
         this._victorySent = false;
         this._seenEffectUids = new Set();
         this._openedCasketUids = new Set();
+        this._pendingVisEvents = [];
+        this._lastHostSyncTick = 0;
+        this._inSimStep = false;
+        this._batchedXpPickup = null;
+        this._batchedCoinsPickup = null;
+        this._cachedBaseWave = null;
+        this._cachedWavePartySize = 0;
+        this._cachedScaledWave = null;
         this.damageStats = new Map();
         this.lastLeaderboard = null;
         this.remotePeers.clear();
@@ -255,7 +263,11 @@ export const mpSyncEngineMethods = {
                 sim.currentWave = () => {
                     const baseWave = origCurrentWave();
                     if (!baseWave) return baseWave;
-                    const w = getActiveWeights();
+                    const activePartySize = Math.max(2, Math.min(4, this.remotePeers.size + 1));
+                    if (baseWave === this._cachedBaseWave && activePartySize === this._cachedWavePartySize && this._cachedScaledWave) {
+                        return this._cachedScaledWave;
+                    }
+                    const w = getCoopDifficultyWeights(activePartySize);
                     let minBaseHp = Infinity;
                     let maxBaseHp = 0;
                     const defs = baseWave.enemies.map(e => {
@@ -276,13 +288,17 @@ export const mpSyncEngineMethods = {
                         );
                         return { ...entry, weight: adjustedWeight };
                     });
-                    return {
+                    const scaledWave = {
                         ...baseWave,
                         minAlive: Math.round(baseWave.minAlive * w.spawnMult),
                         maxAlive: Math.round(baseWave.maxAlive * w.spawnMult),
                         spawnRate: baseWave.spawnRate * w.spawnMult,
                         enemies: weightedEnemies
                     };
+                    this._cachedBaseWave = baseWave;
+                    this._cachedWavePartySize = activePartySize;
+                    this._cachedScaledWave = scaledWave;
+                    return scaledWave;
                 };
             }
 
@@ -384,13 +400,15 @@ export const mpSyncEngineMethods = {
                     sim.xp = prevXp + xpGained;
                     sim.checkLevelUp();
                     if (this.remotePeers.size > 0) {
-                        this.send({
+                        const xpPayload = {
                             type: 'coop_pickup',
                             kind: kind,
                             value: val,
                             xpGained: xpGained,
                             totalXp: sim.xp
-                        });
+                        };
+                        if (this.queueCoopPickup) this.queueCoopPickup(xpPayload);
+                        else this.send(xpPayload);
                     }
                 } else if (kind === 'casket') {
                     if (pickup._casketCollected) return;
@@ -418,11 +436,13 @@ export const mpSyncEngineMethods = {
                 } else {
                     origCollect(pickup);
                     if (this.remotePeers.size > 0 && kind === 'coins' && val > 0) {
-                        this.send({
+                        const coinsPayload = {
                             type: 'coop_pickup',
                             kind: kind,
                             value: val
-                        });
+                        };
+                        if (this.queueCoopPickup) this.queueCoopPickup(coinsPayload);
+                        else this.send(coinsPayload);
                     }
                 }
                 if (sim.state !== 'playing') {
@@ -605,7 +625,7 @@ export const mpSyncEngineMethods = {
                 const origFindSpawnPoint = sim.findSpawnPoint.bind(sim);
                 sim.findSpawnPoint = (def, minRange, maxRange, dir) => {
                     const living = getLivingPlayerTargets();
-                    if (living.length <= 1) {
+                    if (living.length <= 1 && living[0]?.slot === this.localSlot) {
                         return origFindSpawnPoint(def, minRange, maxRange, dir);
                     }
                     const savedPlayer = sim.player;
@@ -613,11 +633,11 @@ export const mpSyncEngineMethods = {
                     try {
                         for (let attempt = 0; attempt < 28; attempt++) {
                             const anchor = living[sim.rng.int(living.length)];
+                            if (anchor.flowField && anchor.flowField.targetX < 0 && typeof anchor.flowField.update === 'function' && sim.grid) {
+                                anchor.flowField.update(Math.floor(anchor.entity.x), Math.floor(anchor.entity.y), sim.grid);
+                            }
                             sim.player = anchor.entity;
                             sim.flowField = anchor.flowField;
-                            if (anchor.slot !== this.localSlot && sim.updateFlowField) {
-                                sim.updateFlowField();
-                            }
                             const pt = origFindSpawnPoint(def, minRange, maxRange, attempt < 4 ? dir : undefined);
                             if (!pt) continue;
                             // Reject candidate spawn points that land too close to ANY living player in the party
@@ -678,12 +698,14 @@ export const mpSyncEngineMethods = {
                 }
 
                 const allEnemies = sim.enemies;
+                let totalAliveCount = 0;
                 for (let i = 0; i < allEnemies.length; i++) {
                     const enemy = allEnemies[i];
                     if (enemy.dead) {
                         activeTargets[0].bucket.push(enemy);
                         continue;
                     }
+                    totalAliveCount++;
                     let chosenIdx = -1;
                     if (enemy.lastAttackerSlot && slotToTargetIdx.has(enemy.lastAttackerSlot)) {
                         const attackerIdx = slotToTargetIdx.get(enemy.lastAttackerSlot);
@@ -710,6 +732,8 @@ export const mpSyncEngineMethods = {
 
                 const savedPlayer = sim.player;
                 const savedFlowField = sim.flowField;
+                const savedCountAlive = sim.countAlive;
+                sim.countAlive = () => totalAliveCount;
                 try {
                     for (const t of activeTargets) {
                         if (t.bucket.length === 0) continue;
@@ -717,17 +741,23 @@ export const mpSyncEngineMethods = {
                         sim.enemies = t.bucket;
                         sim.player = t.entity;
                         sim.flowField = t.flowField || savedFlowField;
-                        if (t.slot !== this.localSlot && sim.updateFlowField) {
-                            sim.updateFlowField();
+                        if (t.flowField && typeof t.flowField.update === 'function' && sim.grid) {
+                            const tx = Math.floor(t.entity.x);
+                            const ty = Math.floor(t.entity.y);
+                            if (sim.tick % 8 === 0 || t.flowField.targetX !== tx || t.flowField.targetY !== ty) {
+                                t.flowField.update(tx, ty, sim.grid);
+                            }
                         }
                         origStepEnemies();
                         if (t.bucket.length > initialLen) {
                             for (let k = initialLen; k < t.bucket.length; k++) {
                                 allEnemies.push(t.bucket[k]);
+                                if (!t.bucket[k].dead) totalAliveCount++;
                             }
                         }
                     }
                 } finally {
+                    sim.countAlive = savedCountAlive;
                     sim.flowField = savedFlowField;
                     sim.enemies = allEnemies;
                     sim.player = savedPlayer;
@@ -992,355 +1022,401 @@ export const mpSyncEngineMethods = {
         // Hook sim.step to step remote peers, handle pickups, and broadcast state
         const origStep = sim.step.bind(sim);
         sim.step = (moveX, moveY) => {
-            if (sim.state === 'playing' && !sim.runOver) {
-                for (const peer of this.remotePeers.values()) {
-                    if (peer.entity) {
-                        this.stepRemotePlayer(sim, peer);
-                    }
-                }
-            }
-
-            origStep(moveX, moveY);
-
-            if (isHost && sim.state === 'playing' && !sim.runOver) {
-                for (const peer of this.remotePeers.values()) {
-                    if (peer.entity && peer.entity.hp > 0) {
-                        this.stepRemotePlayerPickups(sim, peer);
-                    }
-                }
-            }
-
-            if (sim.state !== 'playing') {
-                this.syncLocalPauseState(client, true);
-            }
-
-            if (sim.tick === 10 || sim.tick === 45 || sim.tick === 120) {
-                this.sendLoadoutSync(client, false);
-            }
-
-            if (this.remotePeers.size > 0) {
-                if (isHost) {
-                    if (sim.state === 'victory' && !this._victorySent) {
-                        this._victorySent = true;
-                        this.gameStarted = false;
-                        const lb = this.buildLeaderboard();
-                        this.send({
-                            type: 'coop_pickup',
-                            kind: 'victory',
-                            kills: sim.kills,
-                            tick: sim.tick,
-                            leaderboard: lb
-                        });
-                        return;
-                    }
-
-                    const hostAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
-                    let anyPeerAlive = false;
+            this._inSimStep = true;
+            try {
+                if (sim.state === 'playing' && !sim.runOver) {
                     for (const peer of this.remotePeers.values()) {
                         if (peer.entity) {
-                            if (peer.entity.hp > 0 && !peer.entity.spectating) {
-                                anyPeerAlive = true;
-                            } else if (!peer._deathAnnounced) {
-                                peer._deathAnnounced = true;
-                                peer.entity.spectating = true;
-                                peer.entity.activePrayer = null;
-                                peer.pauseState = null;
-                                if (peer.entity.deathTick === -1) {
-                                    peer.entity.deathTick = sim.tick;
-                                }
-                                this.showToast(`${peer.name} has fallen! Spectating surviving party...`);
-                            }
+                            this.stepRemotePlayer(sim, peer);
                         }
                     }
+                }
 
-                    if (!hostAlive && anyPeerAlive && !sim.player.spectating) {
-                        this.enterSpectatorMode(client, sim);
-                    }
+                origStep(moveX, moveY);
 
-                    if (!this._gameOverSent && !hostAlive && !anyPeerAlive) {
-                        this._gameOverSent = true;
-                        const lb = this.buildLeaderboard();
-                        this.send({ type: 'game_over', reason: 'All party members have fallen in battle!', leaderboard: lb });
-                        this.endGameOnDisconnect('All party members have fallen - Game Over', lb);
-                        return;
-                    }
-
-                    const enemyData = [];
-                    for (let i = 0; i < sim.enemies.length; i++) {
-                        const e = sim.enemies[i];
-                        if (!e.dead || (sim.tick - e.deathTick <= 6)) {
-                            const wu = e.bossState?.windup;
-                            enemyData.push([
-                                e.uid,
-                                e.def.id,
-                                Math.round(e.x * 100) / 100,
-                                Math.round(e.y * 100) / 100,
-                                e.hp,
-                                e.maxHp,
-                                e.yaw,
-                                e.dead ? 1 : 0,
-                                e.anim,
-                                e.animStart,
-                                e.flash || 0,
-                                e.scale || 1,
-                                e.elite ? 1 : (e.boss ? 2 : 0),
-                                e.variant || 0,
-                                e.attackSeq ?? e.def.attackSeq ?? -1,
-                                wu && wu.attack ? [
-                                    wu.attack.name, wu.startTick, wu.landTick,
-                                    Math.round((wu.targets?.[0]?.x ?? wu.targetX ?? 0) * 100) / 100,
-                                    Math.round((wu.targets?.[0]?.y ?? wu.targetY ?? 0) * 100) / 100,
-                                    wu.dir ?? 0,
-                                    // Blast attacks (Jad's Rockfall) need their target circles on guests too
-                                    Array.isArray(wu.targets) ? wu.targets.slice(0, 8).map(t => [Math.round(t.x * 100) / 100, Math.round(t.y * 100) / 100]) : []
-                                ] : null,
-                                (e.shielded || e.shieldEnd > sim.tick) ? 1 : 0
-                            ]);
-                        }
-                    }
-
-                    const pickupData = [];
-                    for (let i = 0; i < sim.pickups.length; i++) {
-                        const p = sim.pickups[i];
-                        if (p.value >= 0) {
-                            pickupData.push([
-                                p.uid,
-                                p.kind,
-                                Math.round(p.x * 100) / 100,
-                                Math.round(p.y * 100) / 100,
-                                p.value,
-                                p.tier || '',
-                                p.powerUp || ''
-                            ]);
-                        }
-                    }
-
-                    const turretData = [];
-                    if (Array.isArray(sim.turrets)) {
-                        for (let i = 0; i < sim.turrets.length; i++) {
-                            const t = sim.turrets[i];
-                            if (sim.tick < t.endTick) {
-                                turretData.push([
-                                    t.uid,
-                                    Math.round(t.x * 100) / 100,
-                                    Math.round(t.y * 100) / 100,
-                                    t.yaw & 2047,
-                                    t.startTick,
-                                    t.endTick,
-                                    Math.round((t.range || 8) * 100) / 100,
-                                    t.amount || 1,
-                                    t.interval || 18
-                                ]);
-                            }
-                        }
-                    }
-
-                    const thrallData = [];
-                    if (Array.isArray(sim.thralls)) {
-                        for (let i = 0; i < sim.thralls.length; i++) {
-                            const th = sim.thralls[i];
-                            if (sim.tick < th.endTick && th.def) {
-                                thrallData.push([
-                                    th.uid,
-                                    th.def.id,
-                                    th.ownerSlot || th.owner?.slot || this.localSlot,
-                                    Math.round(th.x * 100) / 100,
-                                    Math.round(th.y * 100) / 100,
-                                    th.yaw & 2047,
-                                    th.moving ? 1 : 0,
-                                    th.attackStart ?? -1,
-                                    th.startTick,
-                                    th.endTick
-                                ]);
-                            }
-                        }
-                    }
-
-                    const enemyProjData = [];
-                    if (Array.isArray(sim.enemyProjectiles)) {
-                        for (let i = 0; i < sim.enemyProjectiles.length; i++) {
-                            const ep = sim.enemyProjectiles[i];
-                            if (ep.life > 0 && ep.attack?.spotAnim !== undefined) {
-                                enemyProjData.push([
-                                    ep.uid,
-                                    ep.attack.spotAnim,
-                                    Math.round(ep.x * 100) / 100,
-                                    Math.round(ep.y * 100) / 100,
-                                    Math.round((ep.vx || 0) * 1000) / 1000,
-                                    Math.round((ep.vy || 0) * 1000) / 1000,
-                                    ep.yaw & 2047,
-                                    ep.startTick,
-                                    ep.life
-                                ]);
-                            }
-                        }
-                    }
-
-                    const effectData = [];
-                    if (Array.isArray(sim.effects)) {
-                        for (let i = 0; i < sim.effects.length; i++) {
-                            const ef = sim.effects[i];
-                            if (ef._remoteSynced || ef._fromStepWeapons) continue;
-                            if (ef.startTick >= sim.tick - 1 && sim.tick < ef.endTick) {
-                                effectData.push([
-                                    ef.uid,
-                                    ef.spotAnim,
-                                    Math.round(ef.x * 100) / 100,
-                                    Math.round(ef.y * 100) / 100,
-                                    ef.height || 0,
-                                    Math.max(5, ef.endTick - ef.startTick),
-                                    ef.enemyUid || 0
-                                ]);
-                            }
-                        }
-                    }
-
-                    const visEvents = [];
-                    if (Array.isArray(sim.events)) {
-                        for (let i = 0; i < sim.events.length; i++) {
-                            const ev = sim.events[i];
-                            if (!ev) continue;
-                            if (
-                                ev.type === 'damage' ||
-                                ev.type === 'playerHit' ||
-                                ev.type === 'playerPoisoned' ||
-                                ev.type === 'bossSwing' ||
-                                ev.type === 'bossShout' ||
-                                ev.type === 'bossAttack' ||
-                                ev.type === 'blast' ||
-                                ev.type === 'cannonSetup' ||
-                                ev.type === 'cannonFire' ||
-                                ev.type === 'powerUp' ||
-                                ev.type === 'bossSpawned' ||
-                                ev.type === 'bossRose' ||
-                                ev.type === 'bossEnraged' ||
-                                ev.type === 'notice'
-                            ) {
-                                visEvents.push(ev);
-                            }
-                        }
-                    }
-
-                    const localStat = this.damageStats?.get(this.localSlot);
-                    const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
-                    if (localStat) localStat.level = localLvl;
-                    const playersSnapshot = [{
-                        slot: this.localSlot,
-                        level: localLvl,
-                        x: Math.round(sim.player.x * 100) / 100,
-                        y: Math.round(sim.player.y * 100) / 100,
-                        vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
-                        vy: Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
-                        yaw: sim.player.yaw & 2047,
-                        facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
-                        facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
-                        moving: Boolean(sim.player.moving),
-                        moveStart: sim.player.moveStart || 0,
-                        attackSeq: sim.player.attackSeq ?? -1,
-                        attackStart: sim.player.attackStart || 0,
-                        hp: sim.player.hp,
-                        maxHp: sim.player.maxHp,
-                        activePrayer: sim.player.activePrayer || window._osrsPrayer || null,
-                        pauseState: this.getLocalPauseState(client),
-                        dmg: Math.round(localStat?.damage || 0),
-                        kills: Math.round(localStat?.kills || 0)
-                    }];
-
+                if (isHost && sim.state === 'playing' && !sim.runOver) {
                     for (const peer of this.remotePeers.values()) {
-                        const re = peer.entity;
-                        if (!re) continue;
-                        const pStat = this.damageStats?.get(peer.slot);
-                        const peerLvl = Math.max(1, Math.round(Number(peer.level || re.level || pStat?.level) || 1));
-                        if (pStat) pStat.level = peerLvl;
-                        playersSnapshot.push({
-                            slot: peer.slot,
-                            level: peerLvl,
-                            x: Math.round(re.x * 100) / 100,
-                            y: Math.round(re.y * 100) / 100,
-                            vx: Math.round((re.x - re.prevX) * 1000) / 1000,
-                            vy: Math.round((re.y - re.prevY) * 1000) / 1000,
-                            yaw: re.yaw & 2047,
-                            facingX: Math.round((re.facingX || 0) * 1000) / 1000,
-                            facingY: Math.round((re.facingY ?? -1) * 1000) / 1000,
-                            moving: Boolean(re.moving),
-                            moveStart: re.moveStart || 0,
-                            attackSeq: re.attackSeq ?? -1,
-                            attackStart: re.attackStart || 0,
-                            hp: re.hp,
-                            maxHp: re.maxHp,
-                            activePrayer: re.activePrayer || null,
-                            pauseState: peer.pauseState,
-                            dmg: Math.round(pStat?.damage || 0),
-                            kills: Math.round(pStat?.kills || 0)
-                        });
-                    }
-
-                    this.send({
-                        type: 'sync_world',
-                        tick: sim.tick,
-                        xp: Math.round(sim.xp * 100) / 100,
-                        round: sim.round || 1,
-                        roundStartTick: sim.roundStartTick || 0,
-                        kills: sim.kills,
-                        pauseState: this.getLocalPauseState(client),
-                        players: playersSnapshot,
-                        enemies: enemyData,
-                        pickups: pickupData,
-                        turrets: turretData.length > 0 ? turretData : undefined,
-                        thralls: thrallData.length > 0 ? thrallData : undefined,
-                        enemyProjs: enemyProjData.length > 0 ? enemyProjData : undefined,
-                        effects: effectData.length > 0 ? effectData : undefined,
-                        visEvents: visEvents.length > 0 ? visEvents : undefined
-                    });
-                } else {
-                    const localAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
-                    let anyPeerAlive = false;
-                    for (const peer of this.remotePeers.values()) {
-                        if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
-                            anyPeerAlive = true;
-                            break;
+                        if (peer.entity && peer.entity.hp > 0) {
+                            this.stepRemotePlayerPickups(sim, peer);
                         }
                     }
+                }
 
-                    if (!localAlive) {
-                        if (anyPeerAlive) {
-                            if (!sim.player.spectating) {
-                                this.enterSpectatorMode(client, sim);
-                            }
-                        } else if (!this._gameOverSent) {
-                            this._gameOverSent = true;
-                            this.send({ type: 'game_over', reason: 'All party members have fallen in battle!' });
-                            this.endGameOnDisconnect('All party members have fallen - Game Over');
+                if (isHost && this.remotePeers.size > 0 && this.flushCoopPickups) {
+                    this.flushCoopPickups();
+                }
+
+                if (sim.state !== 'playing') {
+                    this.syncLocalPauseState(client, true);
+                }
+
+                if (sim.tick === 10 || sim.tick === 45 || sim.tick === 120) {
+                    this.sendLoadoutSync(client, false);
+                }
+
+                if (this.remotePeers.size > 0) {
+                    if (isHost) {
+                        if (sim.state === 'victory' && !this._victorySent) {
+                            this._victorySent = true;
+                            this.gameStarted = false;
+                            const lb = this.buildLeaderboard();
+                            this.send({
+                                type: 'coop_pickup',
+                                kind: 'victory',
+                                kills: sim.kills,
+                                tick: sim.tick,
+                                leaderboard: lb
+                            });
                             return;
                         }
-                    }
 
-                    const isSpectating = Boolean(sim.player.spectating || sim.player.hp <= 0);
-                    const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
-                    const localStat = this.damageStats?.get(this.localSlot);
-                    if (localStat) localStat.level = localLvl;
-                    this.send({
-                        type: 'input',
-                        slot: this.localSlot,
-                        level: localLvl,
-                        tick: sim.tick,
-                        dead: isSpectating,
-                        pauseState: isSpectating ? null : this.getLocalPauseState(client),
-                        moveX: isSpectating ? 0 : moveX,
-                        moveY: isSpectating ? 0 : moveY,
-                        x: Math.round(sim.player.x * 100) / 100,
-                        y: Math.round(sim.player.y * 100) / 100,
-                        vx: isSpectating ? 0 : Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
-                        vy: isSpectating ? 0 : Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
-                        yaw: sim.player.yaw & 2047,
-                        facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
-                        facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
-                        moving: isSpectating ? false : Boolean(sim.player.moving),
-                        moveStart: sim.player.moveStart || 0,
-                        attackSeq: isSpectating ? -1 : (sim.player.attackSeq ?? -1),
-                        attackStart: sim.player.attackStart || 0,
-                        activePrayer: isSpectating ? null : (sim.player.activePrayer || window._osrsPrayer || null)
-                    });
+                        const hostAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
+                        let anyPeerAlive = false;
+                        for (const peer of this.remotePeers.values()) {
+                            if (peer.entity) {
+                                if (peer.entity.hp > 0 && !peer.entity.spectating) {
+                                    anyPeerAlive = true;
+                                } else if (!peer._deathAnnounced) {
+                                    peer._deathAnnounced = true;
+                                    peer.entity.spectating = true;
+                                    peer.entity.activePrayer = null;
+                                    peer.pauseState = null;
+                                    if (peer.entity.deathTick === -1) {
+                                        peer.entity.deathTick = sim.tick;
+                                    }
+                                    this.showToast(`${peer.name} has fallen! Spectating surviving party...`);
+                                }
+                            }
+                        }
+
+                        if (!hostAlive && anyPeerAlive && !sim.player.spectating) {
+                            this.enterSpectatorMode(client, sim);
+                        }
+
+                        if (!this._gameOverSent && !hostAlive && !anyPeerAlive) {
+                            this._gameOverSent = true;
+                            const lb = this.buildLeaderboard();
+                            this.send({ type: 'game_over', reason: 'All party members have fallen in battle!', leaderboard: lb });
+                            this.endGameOnDisconnect('All party members have fallen - Game Over', lb);
+                            return;
+                        }
+
+                        if (!this._pendingVisEvents) {
+                            this._pendingVisEvents = [];
+                        }
+                        if (Array.isArray(sim.events)) {
+                            for (let i = 0; i < sim.events.length; i++) {
+                                const ev = sim.events[i];
+                                if (!ev) continue;
+                                if (ev.type === 'damage') {
+                                    this._pendingVisEvents.push({
+                                        type: 'damage',
+                                        x: Math.round(ev.x * 100) / 100,
+                                        y: Math.round(ev.y * 100) / 100,
+                                        amount: ev.amount,
+                                        enemyUid: ev.enemyUid,
+                                        blocked: ev.blocked,
+                                        poison: ev.poison
+                                    });
+                                } else if (
+                                    ev.type === 'playerHit' ||
+                                    ev.type === 'playerPoisoned' ||
+                                    ev.type === 'bossSwing' ||
+                                    ev.type === 'bossShout' ||
+                                    ev.type === 'bossAttack' ||
+                                    ev.type === 'blast' ||
+                                    ev.type === 'cannonSetup' ||
+                                    ev.type === 'cannonFire' ||
+                                    ev.type === 'powerUp' ||
+                                    ev.type === 'bossSpawned' ||
+                                    ev.type === 'bossRose' ||
+                                    ev.type === 'bossEnraged' ||
+                                    ev.type === 'notice'
+                                ) {
+                                    this._pendingVisEvents.push(ev);
+                                }
+                            }
+                            if (this._pendingVisEvents.length > 120) {
+                                const prioritized = [];
+                                const damageEvs = [];
+                                for (let i = 0; i < this._pendingVisEvents.length; i++) {
+                                    const e = this._pendingVisEvents[i];
+                                    if (e.type !== 'damage') prioritized.push(e);
+                                    else damageEvs.push(e);
+                                }
+                                const remaining = Math.max(0, 120 - prioritized.length);
+                                this._pendingVisEvents = remaining > 0
+                                    ? prioritized.concat(damageEvs.slice(-remaining))
+                                    : prioritized.slice(-120);
+                            }
+                        }
+
+                        const shouldSendSyncWorld =
+                            sim.tick % 2 === 0 ||
+                            sim.state !== 'playing' ||
+                            this._pendingVisEvents.some(e => e.type !== 'damage' && e.type !== 'playerHit');
+
+                        if (shouldSendSyncWorld) {
+                            const enemyData = [];
+                            for (let i = 0; i < sim.enemies.length; i++) {
+                                const e = sim.enemies[i];
+                                if (!e.dead || (sim.tick - e.deathTick <= 6)) {
+                                    const wu = e.bossState?.windup;
+                                    enemyData.push([
+                                        e.uid,
+                                        e.def.id,
+                                        Math.round(e.x * 100) / 100,
+                                        Math.round(e.y * 100) / 100,
+                                        e.hp,
+                                        e.maxHp,
+                                        e.yaw,
+                                        e.dead ? 1 : 0,
+                                        e.anim,
+                                        e.animStart,
+                                        e.flash || 0,
+                                        e.scale || 1,
+                                        e.elite ? 1 : (e.boss ? 2 : 0),
+                                        e.variant || 0,
+                                        e.attackSeq ?? e.def.attackSeq ?? -1,
+                                        wu && wu.attack ? [
+                                            wu.attack.name, wu.startTick, wu.landTick,
+                                            Math.round((wu.targets?.[0]?.x ?? wu.targetX ?? 0) * 100) / 100,
+                                            Math.round((wu.targets?.[0]?.y ?? wu.targetY ?? 0) * 100) / 100,
+                                            wu.dir ?? 0,
+                                            // Blast attacks (Jad's Rockfall) need their target circles on guests too
+                                            Array.isArray(wu.targets) ? wu.targets.slice(0, 8).map(t => [Math.round(t.x * 100) / 100, Math.round(t.y * 100) / 100]) : []
+                                        ] : null,
+                                        (e.shielded || e.shieldEnd > sim.tick) ? 1 : 0
+                                    ]);
+                                }
+                            }
+
+                            const pickupData = [];
+                            for (let i = 0; i < sim.pickups.length; i++) {
+                                const p = sim.pickups[i];
+                                if (p.value >= 0) {
+                                    pickupData.push([
+                                        p.uid,
+                                        p.kind,
+                                        Math.round(p.x * 100) / 100,
+                                        Math.round(p.y * 100) / 100,
+                                        p.value,
+                                        p.tier || '',
+                                        p.powerUp || ''
+                                    ]);
+                                }
+                            }
+
+                            const turretData = [];
+                            if (Array.isArray(sim.turrets)) {
+                                for (let i = 0; i < sim.turrets.length; i++) {
+                                    const t = sim.turrets[i];
+                                    if (sim.tick < t.endTick) {
+                                        turretData.push([
+                                            t.uid,
+                                            Math.round(t.x * 100) / 100,
+                                            Math.round(t.y * 100) / 100,
+                                            t.yaw & 2047,
+                                            t.startTick,
+                                            t.endTick,
+                                            Math.round((t.range || 8) * 100) / 100,
+                                            t.amount || 1,
+                                            t.interval || 18
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const thrallData = [];
+                            if (Array.isArray(sim.thralls)) {
+                                for (let i = 0; i < sim.thralls.length; i++) {
+                                    const th = sim.thralls[i];
+                                    if (sim.tick < th.endTick && th.def) {
+                                        thrallData.push([
+                                            th.uid,
+                                            th.def.id,
+                                            th.ownerSlot || th.owner?.slot || this.localSlot,
+                                            Math.round(th.x * 100) / 100,
+                                            Math.round(th.y * 100) / 100,
+                                            th.yaw & 2047,
+                                            th.moving ? 1 : 0,
+                                            th.attackStart ?? -1,
+                                            th.startTick,
+                                            th.endTick
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const enemyProjData = [];
+                            if (Array.isArray(sim.enemyProjectiles)) {
+                                for (let i = 0; i < sim.enemyProjectiles.length; i++) {
+                                    const ep = sim.enemyProjectiles[i];
+                                    if (ep.life > 0 && ep.attack?.spotAnim !== undefined) {
+                                        enemyProjData.push([
+                                            ep.uid,
+                                            ep.attack.spotAnim,
+                                            Math.round(ep.x * 100) / 100,
+                                            Math.round(ep.y * 100) / 100,
+                                            Math.round((ep.vx || 0) * 1000) / 1000,
+                                            Math.round((ep.vy || 0) * 1000) / 1000,
+                                            ep.yaw & 2047,
+                                            ep.startTick,
+                                            ep.life
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const effectData = [];
+                            if (Array.isArray(sim.effects)) {
+                                for (let i = 0; i < sim.effects.length; i++) {
+                                    const ef = sim.effects[i];
+                                    if (ef._remoteSynced || ef._fromStepWeapons) continue;
+                                    if (ef.startTick >= sim.tick - 1 && sim.tick < ef.endTick) {
+                                        effectData.push([
+                                            ef.uid,
+                                            ef.spotAnim,
+                                            Math.round(ef.x * 100) / 100,
+                                            Math.round(ef.y * 100) / 100,
+                                            ef.height || 0,
+                                            Math.max(5, ef.endTick - ef.startTick),
+                                            ef.enemyUid || 0
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const visEvents = this._pendingVisEvents;
+                            this._pendingVisEvents = [];
+
+                            const localStat = this.damageStats?.get(this.localSlot);
+                            const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
+                            if (localStat) localStat.level = localLvl;
+                            const playersSnapshot = [{
+                                slot: this.localSlot,
+                                level: localLvl,
+                                x: Math.round(sim.player.x * 100) / 100,
+                                y: Math.round(sim.player.y * 100) / 100,
+                                vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
+                                vy: Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
+                                yaw: sim.player.yaw & 2047,
+                                facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
+                                facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
+                                moving: Boolean(sim.player.moving),
+                                moveStart: sim.player.moveStart || 0,
+                                attackSeq: sim.player.attackSeq ?? -1,
+                                attackStart: sim.player.attackStart || 0,
+                                hp: sim.player.hp,
+                                maxHp: sim.player.maxHp,
+                                activePrayer: sim.player.activePrayer || window._osrsPrayer || null,
+                                pauseState: this.getLocalPauseState(client),
+                                dmg: Math.round(localStat?.damage || 0),
+                                kills: Math.round(localStat?.kills || 0)
+                            }];
+
+                            for (const peer of this.remotePeers.values()) {
+                                const re = peer.entity;
+                                if (!re) continue;
+                                const pStat = this.damageStats?.get(peer.slot);
+                                const peerLvl = Math.max(1, Math.round(Number(peer.level || re.level || pStat?.level) || 1));
+                                if (pStat) pStat.level = peerLvl;
+                                playersSnapshot.push({
+                                    slot: peer.slot,
+                                    level: peerLvl,
+                                    x: Math.round(re.x * 100) / 100,
+                                    y: Math.round(re.y * 100) / 100,
+                                    vx: Math.round((re.x - re.prevX) * 1000) / 1000,
+                                    vy: Math.round((re.y - re.prevY) * 1000) / 1000,
+                                    yaw: re.yaw & 2047,
+                                    facingX: Math.round((re.facingX || 0) * 1000) / 1000,
+                                    facingY: Math.round((re.facingY ?? -1) * 1000) / 1000,
+                                    moving: Boolean(re.moving),
+                                    moveStart: re.moveStart || 0,
+                                    attackSeq: re.attackSeq ?? -1,
+                                    attackStart: re.attackStart || 0,
+                                    hp: re.hp,
+                                    maxHp: re.maxHp,
+                                    activePrayer: re.activePrayer || null,
+                                    pauseState: peer.pauseState,
+                                    dmg: Math.round(pStat?.damage || 0),
+                                    kills: Math.round(pStat?.kills || 0)
+                                });
+                            }
+
+                            this.send({
+                                type: 'sync_world',
+                                tick: sim.tick,
+                                xp: Math.round(sim.xp * 100) / 100,
+                                round: sim.round || 1,
+                                roundStartTick: sim.roundStartTick || 0,
+                                kills: sim.kills,
+                                pauseState: this.getLocalPauseState(client),
+                                players: playersSnapshot,
+                                enemies: enemyData,
+                                pickups: pickupData,
+                                turrets: turretData.length > 0 ? turretData : undefined,
+                                thralls: thrallData.length > 0 ? thrallData : undefined,
+                                enemyProjs: enemyProjData.length > 0 ? enemyProjData : undefined,
+                                effects: effectData.length > 0 ? effectData : undefined,
+                                visEvents: visEvents.length > 0 ? visEvents : undefined
+                            });
+                        }
+                    } else {
+                        const localAlive = sim.player && sim.player.hp > 0 && !sim.player.spectating && sim.state !== 'dead';
+                        let anyPeerAlive = false;
+                        for (const peer of this.remotePeers.values()) {
+                            if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
+                                anyPeerAlive = true;
+                                break;
+                            }
+                        }
+
+                        if (!localAlive) {
+                            if (anyPeerAlive) {
+                                if (!sim.player.spectating) {
+                                    this.enterSpectatorMode(client, sim);
+                                }
+                            } else if (!this._gameOverSent) {
+                                this._gameOverSent = true;
+                                this.send({ type: 'game_over', reason: 'All party members have fallen in battle!' });
+                                this.endGameOnDisconnect('All party members have fallen - Game Over');
+                                return;
+                            }
+                        }
+
+                        const isSpectating = Boolean(sim.player.spectating || sim.player.hp <= 0);
+                        const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
+                        const localStat = this.damageStats?.get(this.localSlot);
+                        if (localStat) localStat.level = localLvl;
+                        this.send({
+                            type: 'input',
+                            slot: this.localSlot,
+                            level: localLvl,
+                            tick: sim.tick,
+                            dead: isSpectating,
+                            pauseState: isSpectating ? null : this.getLocalPauseState(client),
+                            moveX: isSpectating ? 0 : moveX,
+                            moveY: isSpectating ? 0 : moveY,
+                            x: Math.round(sim.player.x * 100) / 100,
+                            y: Math.round(sim.player.y * 100) / 100,
+                            vx: isSpectating ? 0 : Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
+                            vy: isSpectating ? 0 : Math.round((sim.player.y - sim.player.prevY) * 1000) / 1000,
+                            yaw: sim.player.yaw & 2047,
+                            facingX: Math.round((sim.player.facingX || 0) * 1000) / 1000,
+                            facingY: Math.round((sim.player.facingY ?? -1) * 1000) / 1000,
+                            moving: isSpectating ? false : Boolean(sim.player.moving),
+                            moveStart: sim.player.moveStart || 0,
+                            attackSeq: isSpectating ? -1 : (sim.player.attackSeq ?? -1),
+                            attackStart: sim.player.attackStart || 0,
+                            activePrayer: isSpectating ? null : (sim.player.activePrayer || window._osrsPrayer || null)
+                        });
+                    }
+                }
+            } finally {
+                this._inSimStep = false;
+                if (isHost && this.remotePeers.size > 0 && this.flushCoopPickups) {
+                    this.flushCoopPickups();
                 }
             }
         };
@@ -1768,10 +1844,16 @@ export const mpSyncEngineMethods = {
         const sim = client.sim;
         const now = performance.now();
 
+        const hostTick = Number(msg.tick) || 0;
+        const tickDelta = this._lastHostSyncTick > 0 && hostTick > this._lastHostSyncTick
+            ? Math.max(1, Math.min(4, hostTick - this._lastHostSyncTick))
+            : 1;
+        this._lastHostSyncTick = hostTick;
+
         if (Number.isFinite(Number(msg.tick)) && msg.tick >= 0) {
-            const hostTick = Math.round(Number(msg.tick));
-            if (Math.abs(hostTick - sim.tick) > 3) {
-                sim.tick = hostTick;
+            const roundedHostTick = Math.round(Number(msg.tick));
+            if (Math.abs(roundedHostTick - sim.tick) > 3) {
+                sim.tick = roundedHostTick;
             }
         }
         if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
@@ -1880,8 +1962,8 @@ export const mpSyncEngineMethods = {
                         re.vx = Math.max(-1.5, Math.min(1.5, pState.vx));
                         re.vy = Math.max(-1.5, Math.min(1.5, pState.vy));
                     } else if (Number.isFinite(re.netX) && Number.isFinite(re.netY)) {
-                        re.vx = Math.max(-1.5, Math.min(1.5, nx - re.netX));
-                        re.vy = Math.max(-1.5, Math.min(1.5, ny - re.netY));
+                        re.vx = Math.max(-1.5, Math.min(1.5, (nx - re.netX) / tickDelta));
+                        re.vy = Math.max(-1.5, Math.min(1.5, (ny - re.netY) / tickDelta));
                     }
                     re.netX = nx;
                     re.netY = ny;
@@ -1970,6 +2052,31 @@ export const mpSyncEngineMethods = {
                 existingMap.set(sim.enemies[i].uid, sim.enemies[i]);
             }
 
+            const applyBossWindup = (sim, targetEnemy, wuArr) => {
+                if (!targetEnemy || !targetEnemy.bossState || !targetEnemy.def?.boss?.attacks) return;
+                if (Array.isArray(wuArr) && wuArr.length >= 3) {
+                    const [atkName, startTick, landTick, targetX, targetY, dir, targetList] = wuArr;
+                    const atk = targetEnemy.def.boss.attacks.find(a => a.name === atkName) || targetEnemy.def.boss.attacks[0];
+                    if (atk) {
+                        let targets = Array.isArray(targetList)
+                            ? targetList.filter(t => Array.isArray(t) && Number.isFinite(t[0]) && Number.isFinite(t[1])).map(t => ({ x: t[0], y: t[1] }))
+                            : [];
+                        if (targets.length === 0 && atk.kind === 'blast') targets = [{ x: Number(targetX) || targetEnemy.x, y: Number(targetY) || targetEnemy.y }];
+                        targetEnemy.bossState.windup = {
+                            attack: atk,
+                            targets,
+                            startTick: Number(startTick) || sim.tick,
+                            landTick: Number(landTick) || (sim.tick + 30),
+                            targetX: Number(targetX) || targetEnemy.x,
+                            targetY: Number(targetY) || targetEnemy.y,
+                            dir: Number(dir) || 0
+                        };
+                    }
+                } else {
+                    targetEnemy.bossState.windup = undefined;
+                }
+            };
+
             const hostUids = new Set();
             for (let i = 0; i < msg.enemies.length; i++) {
                 const item = msg.enemies[i];
@@ -1977,31 +2084,6 @@ export const mpSyncEngineMethods = {
                     uid, defId, x, y, hp, maxHp, yaw, dead, anim, animStart, flash, scale, kindFlag, variant, attackSeq, windupData, shielded
                 ] = item;
                 hostUids.add(uid);
-
-                const applyBossWindup = (targetEnemy, wuArr) => {
-                    if (!targetEnemy || !targetEnemy.bossState || !targetEnemy.def?.boss?.attacks) return;
-                    if (Array.isArray(wuArr) && wuArr.length >= 3) {
-                        const [atkName, startTick, landTick, targetX, targetY, dir, targetList] = wuArr;
-                        const atk = targetEnemy.def.boss.attacks.find(a => a.name === atkName) || targetEnemy.def.boss.attacks[0];
-                        if (atk) {
-                            let targets = Array.isArray(targetList)
-                                ? targetList.filter(t => Array.isArray(t) && Number.isFinite(t[0]) && Number.isFinite(t[1])).map(t => ({ x: t[0], y: t[1] }))
-                                : [];
-                            if (targets.length === 0 && atk.kind === 'blast') targets = [{ x: Number(targetX) || targetEnemy.x, y: Number(targetY) || targetEnemy.y }];
-                            targetEnemy.bossState.windup = {
-                                attack: atk,
-                                targets,
-                                startTick: Number(startTick) || sim.tick,
-                                landTick: Number(landTick) || (sim.tick + 30),
-                                targetX: Number(targetX) || targetEnemy.x,
-                                targetY: Number(targetY) || targetEnemy.y,
-                                dir: Number(dir) || 0
-                            };
-                        }
-                    } else {
-                        targetEnemy.bossState.windup = undefined;
-                    }
-                };
 
                 let enemy = existingMap.get(uid);
                 if (enemy) {
@@ -2015,8 +2097,8 @@ export const mpSyncEngineMethods = {
                             enemy.netVx = 0;
                             enemy.netVy = 0;
                         } else {
-                            enemy.netVx = Math.max(-1.2, Math.min(1.2, x - enemy.netX));
-                            enemy.netVy = Math.max(-1.2, Math.min(1.2, y - enemy.netY));
+                            enemy.netVx = Math.max(-1.2, Math.min(1.2, (x - enemy.netX) / tickDelta));
+                            enemy.netVy = Math.max(-1.2, Math.min(1.2, (y - enemy.netY) / tickDelta));
                         }
                     }
                     enemy.netX = x;
@@ -2034,16 +2116,17 @@ export const mpSyncEngineMethods = {
                     enemy.scale = scale;
                     if (Number.isFinite(variant)) enemy.variant = variant;
                     if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
+                    const wasShielded = Boolean(enemy.shielded || enemy.shieldEnd > 0);
                     enemy.shielded = Boolean(shielded);
                     if (shielded) {
                         enemy.shieldEnd = Math.max(enemy.shieldEnd || 0, sim.tick + 15);
-                    } else if (enemy.shieldEnd > 0) {
+                    } else if (wasShielded) {
                         enemy.shieldEnd = 0;
                         if (Array.isArray(sim.effects)) {
                             sim.effects = sim.effects.filter(ef => !(ef.enemyUid === enemy.uid && ef.loop));
                         }
                     }
-                    applyBossWindup(enemy, windupData);
+                    applyBossWindup(sim, enemy, windupData);
                 } else {
                     const def = client.getEnemyDef ? client.getEnemyDef(defId) : null;
                     if (def) {
@@ -2077,10 +2160,7 @@ export const mpSyncEngineMethods = {
                                 if (Number.isFinite(attackSeq)) enemy.attackSeq = attackSeq;
                                 enemy.shielded = Boolean(shielded);
                                 enemy.shieldEnd = shielded ? Math.max(enemy.shieldEnd || 0, sim.tick + 15) : 0;
-                                if (!shielded && Array.isArray(sim.effects)) {
-                                    sim.effects = sim.effects.filter(ef => !(ef.enemyUid === enemy.uid && ef.loop));
-                                }
-                                applyBossWindup(enemy, windupData);
+                                applyBossWindup(sim, enemy, windupData);
                             }
                         } catch (err) {
                             console.warn('[Multiplayer] Failed spawning synced enemy:', defId, err);
@@ -2100,10 +2180,6 @@ export const mpSyncEngineMethods = {
                 }
             }
             sim.enemies = sim.enemies.filter(e => hostUids.has(e.uid) || (e.dead && (sim.tick - (e.deathTick || 0) < 45)));
-
-            if (sim.rebuildEnemyHash) {
-                sim.rebuildEnemyHash();
-            }
         }
 
         // 3. Synchronize pickups

@@ -553,9 +553,16 @@
     }
 
     const scratch = { x: 0, y: 0, visible: false };
+    let cachedUiScale = 1;
+    let cachedUiScaleTime = 0;
 
     function overlayMetrics(overlayRenderer, ctx) {
-        const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+        const now = performance.now();
+        if (now - cachedUiScaleTime > 250) {
+            cachedUiScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+            cachedUiScaleTime = now;
+        }
+        const scale = cachedUiScale;
         const dpr = (overlayRenderer.width && ctx.canvas.clientWidth) ? overlayRenderer.width / ctx.canvas.clientWidth : (window.devicePixelRatio || 1);
         return { scale, dpr };
     }
@@ -597,24 +604,28 @@
         if (!quest || s !== sim) return;
         const ctx = overlayRenderer?.ctx;
         if (!ctx) return;
-        const { scale, dpr } = overlayMetrics(overlayRenderer, ctx);
-        ctx.save();
-
-        const size = Math.round(16 * scale * dpr);
-        const g = s.grid ? s.grid.getHeight(COOK.x, COOK.y) / 128 : 0;
-        overlayRenderer.project(COOK.x, g - 240 / 128, COOK.y, scratch);
-        const headX = scratch.x, headY = Math.round(scratch.y), headVisible = scratch.visible;
 
         // Overhead chat sits right above the Cook's head.
         const speech = quest.speech;
         const speaking = !!speech && performance.now() < speech.until;
         if (speech && !speaking) quest.speech = null;
-        if (speaking && headVisible && s.state === 'playing' && overlayIsNone()) {
+        if (!quest.speech && (quest.stage === 2 || distToCook() > COOK.talkRange)) return;
+
+        const g = s.grid ? s.grid.getHeight(COOK.x, COOK.y) / 128 : 0;
+        overlayRenderer.project(COOK.x, g - 240 / 128, COOK.y, scratch);
+        const headX = scratch.x, headY = Math.round(scratch.y), headVisible = scratch.visible;
+        if (!headVisible) return;
+
+        const { scale, dpr } = overlayMetrics(overlayRenderer, ctx);
+        ctx.save();
+        const size = Math.round(16 * scale * dpr);
+
+        if (speaking && s.state === 'playing' && overlayIsNone()) {
             drawLabel(ctx, [[speech.text, OVERHEAD_YELLOW]], headX, headY, size, dpr);
         }
 
         // Prompt above the Cook (moved up a line while he's talking).
-        if (headVisible && s.state === 'playing' && !client.paused && overlayIsNone() && distToCook() <= COOK.talkRange) {
+        if (s.state === 'playing' && !client.paused && overlayIsNone() && distToCook() <= COOK.talkRange) {
             const parts = promptText();
             if (parts) drawLabel(ctx, parts, headX, speaking ? headY - Math.round(size * 1.35) : headY, size, dpr);
         }

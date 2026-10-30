@@ -5,7 +5,10 @@
 (() => {
     const STYLE_ID = 'tile-coords-style';
     const READOUT_CLASS = 'ui-tile-coords';
-    let lastText = '';
+    let minimapEl = null;
+    let coordsEl = null;
+    let lastTileX = NaN;
+    let lastTileY = NaN;
 
     function injectStyle() {
         if (document.getElementById(STYLE_ID)) return;
@@ -32,24 +35,36 @@
     }
 
     function tick() {
-        const minimap = document.querySelector('.ui-minimap');
-        if (minimap) {
-            let readout = minimap.querySelector('.' + READOUT_CLASS);
-            if (!readout) {
-                readout = document.createElement('div');
-                readout.className = READOUT_CLASS;
-                minimap.appendChild(readout);
-                lastText = '';
+        if (!minimapEl || !minimapEl.isConnected) {
+            minimapEl = document.querySelector('.ui-minimap');
+            coordsEl = null;
+        }
+        if (minimapEl) {
+            if (!coordsEl || !coordsEl.isConnected || coordsEl.parentElement !== minimapEl) {
+                coordsEl = minimapEl.querySelector('.' + READOUT_CLASS);
+                if (!coordsEl) {
+                    coordsEl = document.createElement('div');
+                    coordsEl.className = READOUT_CLASS;
+                    minimapEl.appendChild(coordsEl);
+                }
+                lastTileX = NaN;
+                lastTileY = NaN;
             }
             const player = window.gameClient?.sim?.player;
             // Settings > Game > Tile coordinates (on by default).
             const enabled = window.gameClient?.display?.showCoords !== false;
-            const text = enabled && player && Number.isFinite(player.x) && Number.isFinite(player.y)
-                ? `Tile: ${Math.floor(player.x)}, ${Math.floor(player.y)}`
-                : '';
-            if (text !== lastText) {
-                readout.textContent = text;
-                lastText = text;
+            if (enabled && player && Number.isFinite(player.x) && Number.isFinite(player.y)) {
+                const tileX = Math.floor(player.x);
+                const tileY = Math.floor(player.y);
+                if (tileX !== lastTileX || tileY !== lastTileY) {
+                    coordsEl.textContent = `Tile: ${tileX}, ${tileY}`;
+                    lastTileX = tileX;
+                    lastTileY = tileY;
+                }
+            } else if (lastTileX !== null || lastTileY !== null) {
+                coordsEl.textContent = '';
+                lastTileX = null;
+                lastTileY = null;
             }
         }
         requestAnimationFrame(tick);

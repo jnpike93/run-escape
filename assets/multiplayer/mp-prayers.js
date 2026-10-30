@@ -40,8 +40,18 @@ export function setOsrsPrayer(type) {
     updateOsrsPrayerBarUI();
 }
 
+let _prayerBarEl = null;
+let _lastPrayerBarVisible = false;
+
+function getPrayerBarEl() {
+    if (!_prayerBarEl || !_prayerBarEl.isConnected) {
+        _prayerBarEl = document.getElementById('osrs-prayer-bar');
+    }
+    return _prayerBarEl;
+}
+
 export function ensureOsrsPrayerBarUI() {
-    let bar = document.getElementById('osrs-prayer-bar');
+    let bar = getPrayerBarEl();
     if (bar) return bar;
     bar = document.createElement('div');
     bar.id = 'osrs-prayer-bar';
@@ -93,11 +103,13 @@ export function ensureOsrsPrayerBarUI() {
         });
     });
     document.body.appendChild(bar);
+    _prayerBarEl = bar;
+    _lastPrayerBarVisible = false;
     return bar;
 }
 
 export function updateOsrsPrayerBarUI() {
-    const bar = document.getElementById('osrs-prayer-bar');
+    const bar = getPrayerBarEl();
     if (!bar) return;
     bar.querySelectorAll('button[data-prayer]').forEach(btn => {
         const pId = btn.getAttribute('data-prayer');
@@ -178,7 +190,8 @@ export function initOsrsPrayers(multiplayer = null) {
         return;
     }
 
-    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
+    const hasBossCandidate = Boolean(sim.shownBoss) || sim.map?.id === 'fight_caves' || sim.map?.id === 'inferno';
+    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || (hasBossCandidate && sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk')));
     if (!isFightCavesOrJad) return;
     if (ev.code === 'KeyQ') {
         ev.preventDefault();
@@ -201,9 +214,10 @@ window._hideOsrsPrayerBar = function() {
     if (client?.sim?.player) {
         client.sim.player.activePrayer = null;
     }
-    const bar = document.getElementById('osrs-prayer-bar');
-    if (bar && bar.style.display !== 'none') {
+    const bar = getPrayerBarEl();
+    if (bar && (_lastPrayerBarVisible || bar.style.display !== 'none')) {
         bar.style.display = 'none';
+        _lastPrayerBarVisible = false;
     }
 };
 
@@ -219,23 +233,31 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
     // A level-up, casket or pause screen only hides the bar. Prayers stay on (as in OSRS), so closing
     // a menu mid-fight doesn't leave the player unprotected for Jad's next attack.
     if (activeOverlay && activeOverlay !== 'none') {
-        const openBar = document.getElementById('osrs-prayer-bar');
-        if (openBar && openBar.style.display !== 'none') openBar.style.display = 'none';
+        const openBar = getPrayerBarEl();
+        if (openBar && _lastPrayerBarVisible) {
+            openBar.style.display = 'none';
+            _lastPrayerBarVisible = false;
+        }
         return;
     }
-    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk'));
+    const hasBossCandidate = Boolean(sim.shownBoss) || sim.map?.id === 'fight_caves' || sim.map?.id === 'inferno';
+    const isFightCavesOrJad = sim.map?.id === 'fight_caves' || (hasBossCandidate && sim.enemies?.some(e => !e.dead && (e.def?.id === 'tztok_jad' || e.def?.id === 'tzkal_zuk')));
     if (!isFightCavesOrJad) {
         // On guests the boss can drop out of the synced enemy list for a moment. Hide the bar right away,
         // but only switch prayers off once the boss has really been gone for a few seconds.
-        const hiddenBar = document.getElementById('osrs-prayer-bar');
-        if (hiddenBar && hiddenBar.style.display !== 'none') hiddenBar.style.display = 'none';
+        const hiddenBar = getPrayerBarEl();
+        if (hiddenBar && _lastPrayerBarVisible) {
+            hiddenBar.style.display = 'none';
+            _lastPrayerBarVisible = false;
+        }
         if (window._osrsPrayer && performance.now() - (window._osrsBossLastSeen || 0) > 3000) window._hideOsrsPrayerBar();
         return;
     }
     window._osrsBossLastSeen = performance.now();
     const bar = ensureOsrsPrayerBarUI();
-    if (bar.style.display !== 'flex') {
+    if (!_lastPrayerBarVisible) {
         bar.style.display = 'flex';
+        _lastPrayerBarVisible = true;
         updateOsrsPrayerBarUI();
     }
 

@@ -31,12 +31,24 @@ def _get_default_port():
 PORT = _get_default_port()
 BIND_HOST = os.environ.get("HOST", "127.0.0.1")
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+_CACHED_DIR_RAW = DIRECTORY
+REAL_DIRECTORY = os.path.realpath(DIRECTORY)
 MAX_FRAME_SIZE = 65536       # 64 KB max frame payload
 MAX_FRAMES_PER_SEC = 120     # Maximum WebSocket frames per second per connection
 MAX_ROOMS = 1000             # Maximum concurrent rooms
 MAX_PEERS_PER_ROOM = 4       # 4-player co-op cap
 MAX_CONNS_PER_IP = 16        # Maximum concurrent WebSocket connections per client IP
 SOCKET_TIMEOUT = 60.0        # Socket read/write timeout in seconds
+
+_ROOM_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+_ROOM_ID_CLEAN_RE = re.compile(r"[^A-Za-z0-9_-]")
+_RANGE_RE = re.compile(r"^bytes=(\d+)-(\d*)$")
+_IP_CHARS_RE = re.compile(r"^[\d.:a-fA-F]+$")
+_HASHED_ASSET_RE = re.compile(r"-[A-Za-z0-9_-]{8}\.(js|css|json|wasm|ogg|ttf|ico)$")
+_SLOT_SUFFIXES = {
+    slot: f',"senderSlot":{slot},"slot":{slot}}}'.encode("utf-8")
+    for slot in range(1, MAX_PEERS_PER_ROOM + 1)
+}
 
 # WebSocket Room Broker: room_id -> list of (client_sock, lock, role, slot)
 rooms = {}
@@ -92,7 +104,9 @@ def safe_close(sock):
 def sanitize_room_id(raw_room):
     if not raw_room or not isinstance(raw_room, str):
         return "default"
-    cleaned = re.sub(r"[^A-Za-z0-9_-]", "", raw_room.strip())[:32]
+    if _ROOM_ID_RE.fullmatch(raw_room):
+        return raw_room
+    cleaned = _ROOM_ID_CLEAN_RE.sub("", raw_room.strip())[:32]
     return cleaned if cleaned else "default"
 
 def encode_ws_frame(msg, opcode=1):
@@ -107,16 +121,23 @@ def encode_ws_frame(msg, opcode=1):
     return header + payload
 
 def read_exact(sock, n):
-    buf = bytearray()
-    while len(buf) < n:
-        try:
+    if n <= 0:
+        return b""
+    try:
+        chunk = sock.recv(n)
+        if not chunk:
+            return None
+        if len(chunk) == n:
+            return chunk
+        buf = bytearray(chunk)
+        while len(buf) < n:
             chunk = sock.recv(n - len(buf))
             if not chunk:
                 return None
             buf.extend(chunk)
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, socket.timeout, TimeoutError, OSError):
-            return None
-    return bytes(buf)
+        return bytes(buf)
+    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, socket.timeout, TimeoutError, OSError):
+        return None
 
 def _register_ws_client(sock, sock_lock, room_id, client_ip):
     """
@@ -287,18 +308,41 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
     if msg_type not in allowed_types:
         return True
 
+    msg_modified = False
     if current_role != "host":
         if msg_type == "coop_pickup" and parsed_msg.get("kind") != "lamp_xp":
             return True
         if msg_type == "lobby_update":
             for host_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter"):
-                parsed_msg.pop(host_key, None)
+                if host_key in parsed_msg:
+                    parsed_msg.pop(host_key, None)
+                    msg_modified = True
 
     if msg_type == "peer_leaving":
         return False
-    parsed_msg["senderSlot"] = current_slot
-    parsed_msg["slot"] = current_slot
-    relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
+
+    if len(room_entries) <= 1 or not any(p_sock != sock for p_sock, _, _, _ in room_entries):
+        return True
+
+    if (
+        not msg_modified
+        and "slot" not in parsed_msg
+        and "senderSlot" not in parsed_msg
+        and len(parsed_msg) > 0
+        and current_slot in _SLOT_SUFFIXES
+    ):
+        stripped = payload.rstrip()
+        if stripped.endswith(b"}") and b'": ' not in stripped:
+            relay_payload = stripped[:-1] + _SLOT_SUFFIXES[current_slot]
+        else:
+            parsed_msg["senderSlot"] = current_slot
+            parsed_msg["slot"] = current_slot
+            relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
+    else:
+        parsed_msg["senderSlot"] = current_slot
+        parsed_msg["slot"] = current_slot
+        relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
+
     relay = encode_ws_frame(relay_payload, opcode=1)
     for peer_sock, peer_lock, _, _ in room_entries:
         if peer_sock != sock:
@@ -457,7 +501,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             forwarded = self.headers.get("X-Real-IP")
             if forwarded:
                 forwarded = forwarded.strip()[:64]
-                if not re.match(r'^[\d.:a-fA-F]+$', forwarded):
+                if not _IP_CHARS_RE.match(forwarded):
                     return remote_ip
                 return forwarded
         return remote_ip
@@ -516,7 +560,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         try:
             target_path = self.translate_path(self.path)
             real_target = os.path.realpath(target_path)
-            real_dir = os.path.realpath(DIRECTORY)
+            real_dir = REAL_DIRECTORY if DIRECTORY == _CACHED_DIR_RAW else os.path.realpath(DIRECTORY)
             if os.path.commonpath([real_dir, real_target]) != real_dir:
                 self.send_error(404, "File not found")
                 return None
@@ -558,15 +602,18 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         path = self.translate_path(self.path)
         if not os.path.isfile(path):
             return super().send_head()
-        m = re.fullmatch(r"\s*bytes=(\d*)-(\d*)\s*", range_header)
-        if not m or (m.group(1) == "" and m.group(2) == ""):
-            return super().send_head()
-        size = os.path.getsize(path)
-        if m.group(1) == "":
-            length = min(int(m.group(2)), size)
+        stripped_range = range_header.strip()
+        m = _RANGE_RE.match(stripped_range)
+        if not m:
+            m_suffix = re.fullmatch(r"bytes=-(\d+)", stripped_range)
+            if not m_suffix:
+                return super().send_head()
+            size = os.path.getsize(path)
+            length = min(int(m_suffix.group(1)), size)
             start = size - length
             end = size - 1
         else:
+            size = os.path.getsize(path)
             start = int(m.group(1))
             end = int(m.group(2)) if m.group(2) else size - 1
             end = min(end, size - 1)
@@ -601,9 +648,17 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Security-Policy", CSP_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
+        req_path = getattr(self, "path", "") or ""
+        clean_path = req_path.split("?", 1)[0]
+        if clean_path.startswith("/caches/") or (
+            clean_path.startswith("/assets/")
+            and ("?v=" in req_path or _HASHED_ASSET_RE.search(clean_path))
+        ):
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         super().end_headers()
 
     def guess_type(self, path):
