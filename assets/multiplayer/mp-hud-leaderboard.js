@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer HUD, Spectator, Pause Overlay & Leaderboard Methods
-import { ALL_CHARACTERS, sanitizeSlot, escapeHtml } from './mp-constants.js?v=8.1';
+import { ALL_CHARACTERS, sanitizeSlot, escapeHtml } from './mp-constants.js?v=8.5';
 
 export const mpHudLeaderboardMethods = {
     getSpectatedPeer() {
@@ -209,10 +209,23 @@ export const mpHudLeaderboardMethods = {
                 if (entry) {
                     if (Number.isFinite(Number(st.damage))) entry.damage = Math.max(entry.damage, Math.round(Number(st.damage)));
                     if (Number.isFinite(Number(st.kills))) entry.kills = Math.max(entry.kills, Math.round(Number(st.kills)));
+                    if (Number.isFinite(Number(st.level))) entry.level = Math.max(entry.level || 1, Math.round(Number(st.level)));
                 }
             }
         }
         if (!this.damageStats || this.damageStats.size === 0) return [];
+        const localSimLvl = Math.max(1, Math.round(Number(window.gameClient?.sim?.level) || 1));
+        const localEntry = this.damageStats.get(this.localSlot);
+        if (localEntry) {
+            localEntry.level = Math.max(localEntry.level || 1, localSimLvl);
+        }
+        for (const [s, peer] of this.remotePeers.entries()) {
+            const pEntry = this.damageStats.get(s);
+            const pLvl = Math.max(1, Math.round(Number(peer.entity?.level || peer.level) || 1));
+            if (pEntry) {
+                pEntry.level = Math.max(pEntry.level || 1, pLvl);
+            }
+        }
         const list = Array.from(this.damageStats.values()).map(e => ({
             slot: e.slot,
             name: e.name,
@@ -220,6 +233,7 @@ export const mpHudLeaderboardMethods = {
             charName: e.charName,
             damage: Math.max(0, Math.round(e.damage || 0)),
             kills: Math.max(0, Math.round(e.kills || 0)),
+            level: Math.max(1, Math.round(Number(e.level) || 1)),
             isLocal: e.slot === this.localSlot
         }));
         list.sort((a, b) => (b.damage - a.damage) || (b.kills - a.kills) || (a.slot - b.slot));
@@ -259,15 +273,18 @@ export const mpHudLeaderboardMethods = {
 
         const peersList = this.getSortedRemotePeers();
         const client = window.gameClient;
-        const isLocalSpectating = Boolean(client?.sim?.player && (client.sim.player.spectating || client.sim.player.hp <= 0));
+        const sim = client?.sim;
+        const localLvl = Math.max(1, Math.round(Number(sim?.level) || 1));
+        const isLocalSpectating = Boolean(sim?.player && (sim.player.spectating || sim.player.hp <= 0));
         const activeSpectatePeer = isLocalSpectating ? this.getSpectatedPeer() : null;
 
-        let fastKey = 'v:' + (this.loadoutVersion || 0) + '|sp:' + (isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1);
+        let fastKey = 'v:' + (this.loadoutVersion || 0) + '|ll:' + localLvl + '|sp:' + (isLocalSpectating ? (activeSpectatePeer?.slot || 0) : -1);
         for (let i = 0; i < peersList.length; i++) {
             const peer = peersList[i];
             const hp = Math.max(0, Math.round(Number(peer.entity?.hp) || 0));
             const maxHp = Math.max(1, Math.round(Number(peer.entity?.maxHp) || 25));
-            fastKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + hp + ':' + maxHp + ':' + (peer.entity?.spectating ? 1 : 0);
+            const lvl = Math.max(1, Math.round(Number(peer.entity?.level || peer.level) || 1));
+            fastKey += '|' + peer.slot + ':' + peer.name + ':' + peer.characterId + ':' + hp + ':' + maxHp + ':' + lvl + ':' + (peer.entity?.spectating ? 1 : 0);
         }
         if (this.lastPartyHudFastKey === fastKey) return;
         this.lastPartyHudFastKey = fastKey;
@@ -333,14 +350,38 @@ export const mpHudLeaderboardMethods = {
             `;
         };
 
+        const SLOT_COLORS = { 1: '#ffff00', 2: '#40e0ff', 3: '#50ff50', 4: '#ff70ff' };
+        const localHeaderHtml = `
+            <div style="
+                background: rgba(22, 17, 12, 0.94);
+                border: 1px solid #5a4a35;
+                padding: 4px 10px;
+                border-radius: 4px;
+                color: ${SLOT_COLORS[this.localSlot] || '#ffff00'};
+                font-family: 'OSRS Bold', monospace;
+                font-size: 11px;
+                text-shadow: 1px 1px 0 #000;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            ">
+                <span>P${this.localSlot}: ${escapeHtml(this.localName)} (YOU)</span>
+                <span style="color: #00ff00;">Lv.${localLvl}</span>
+            </div>
+        `;
+
         const cardsHtml = peersList.map(peer => {
             const p2 = peer.entity || { hp: 25, maxHp: 25, characterId: peer.characterId };
             const hp = Math.max(0, Math.round(Number(p2.hp) || 0));
             const maxHp = Math.max(1, Math.round(Number(p2.maxHp) || 25));
+            const lvl = Math.max(1, Math.round(Number(peer.entity?.level || peer.level) || 1));
             const isCorgi = p2.characterId === 'dipper';
             const isChih = p2.characterId === 'elias';
             const charName = escapeHtml(isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase()));
             const displayName = escapeHtml((peer.name || `Player ${peer.slot}`).toUpperCase());
+            const slotColor = isLocalSpectating && activeSpectatePeer?.slot === peer.slot
+                ? '#ffff00'
+                : (SLOT_COLORS[peer.slot] || '#ffffff');
             const hpRatio = Math.max(0, Math.min(1, hp / maxHp));
             const hpPercent = Math.round(hpRatio * 100);
             const barColor = hpRatio > 0.5 ? '#00ff00' : (hpRatio > 0.25 ? '#ffff00' : '#ff0000');
@@ -422,9 +463,9 @@ export const mpHudLeaderboardMethods = {
                     opacity: ${isDeadPeer ? '0.68' : '1'};
                     cursor: ${isLocalSpectating && !isDeadPeer ? 'pointer' : 'default'};
                 ">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 6px;">
-                        <span style="font-size: 12px; color: ${isSpectated ? '#ffff00' : '#ffffff'}; text-shadow: 1px 1px #000;">P${peer.slot}: ${displayName}${isSpectated ? ' [SPECTATING]' : ''}</span>
-                        <span style="font-size: 9px; color: #ff981f;">${charName}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px;">
+                        <span style="font-size: 12px; color: ${slotColor}; font-weight: bold; text-shadow: 1px 1px 0 #000;">P${peer.slot}: ${displayName}${isSpectated ? ' [SPECTATING]' : ''} <span style="color: #00ff00; font-size: 11px;">(Lv.${lvl})</span></span>
+                        <span style="font-size: 9px; color: #b8a890;">${charName} · Lv.${lvl}</span>
                     </div>
                     <div style="background: #2b0000; border: 1px solid #4a3c2c; height: 8px; border-radius: 2px; overflow: hidden;">
                         <div style="background: ${barColor}; width: ${hpPercent}%; height: 100%; transition: width 0.15s ease-out;"></div>
@@ -440,7 +481,7 @@ export const mpHudLeaderboardMethods = {
             `;
         }).join('');
 
-        hud.innerHTML = cardsHtml;
+        hud.innerHTML = localHeaderHtml + cardsHtml;
         hud.querySelectorAll('[data-peer-slot]').forEach(card => {
             card.addEventListener('click', () => {
                 const slot = Number(card.getAttribute('data-peer-slot'));

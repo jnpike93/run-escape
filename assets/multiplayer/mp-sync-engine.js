@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=8.1';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.1';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=8.5';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.5';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -17,6 +17,7 @@ export const mpSyncEngineMethods = {
         this._gameOverSent = false;
         this._victorySent = false;
         this._seenEffectUids = new Set();
+        this._openedCasketUids = new Set();
         this.damageStats = new Map();
         this.lastLeaderboard = null;
         this.remotePeers.clear();
@@ -30,6 +31,7 @@ export const mpSyncEngineMethods = {
                 name: sanitizeName(name) || `Player ${slot}`,
                 characterId,
                 charName: charObj ? charObj.name : String(characterId || 'Warrior'),
+                level: 1,
                 damage: 0,
                 kills: 0
             });
@@ -47,15 +49,18 @@ export const mpSyncEngineMethods = {
             sim.endRun = (state) => {
                 const lb = this.buildLeaderboard();
                 const res = origEndRun(state);
-                if (isHost && state === 'victory' && !this._victorySent && this.remotePeers.size > 0) {
-                    this._victorySent = true;
-                    this.send({
-                        type: 'coop_pickup',
-                        kind: 'victory',
-                        kills: sim.kills,
-                        tick: sim.tick,
-                        leaderboard: lb
-                    });
+                if (isHost && state === 'victory') {
+                    this.gameStarted = false;
+                    if (!this._victorySent && this.remotePeers.size > 0) {
+                        this._victorySent = true;
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: 'victory',
+                            kills: sim.kills,
+                            tick: sim.tick,
+                            leaderboard: lb
+                        });
+                    }
                 }
                 return res;
             };
@@ -117,7 +122,8 @@ export const mpSyncEngineMethods = {
                 arr[0] = (Math.random() * 0x100000000) >>> 0;
             }
             if (sim.rng) {
-                sim.rng.state = ((sim.rng.state ^ arr[0]) >>> 0) || 1;
+                const slotSalt = ((this.localSlot || 1) * 2654435761) >>> 0;
+                sim.rng.state = ((sim.rng.state ^ arr[0] ^ slotSalt) >>> 0) || 1;
             }
         };
 
@@ -158,8 +164,9 @@ export const mpSyncEngineMethods = {
 
         sim.remotePlayers = [];
         for (const pInfo of partyPlayers) {
-            if (!pInfo || pInfo.slot === this.localSlot) continue;
+            if (!pInfo) continue;
             const slot = sanitizeSlot(pInfo.slot, 2);
+            if (slot === this.localSlot || this.remotePeers.has(slot)) continue;
             const offset = SPAWN_OFFSETS[slot] || { dx: 1.0, dy: 0 };
             const sx = spawnX + offset.dx;
             const sy = spawnY + offset.dy;
@@ -167,6 +174,7 @@ export const mpSyncEngineMethods = {
 
             const entity = {
                 slot,
+                level: 1,
                 x: sx,
                 y: sy,
                 prevX: sx,
@@ -201,6 +209,7 @@ export const mpSyncEngineMethods = {
             const weaponId = CHAR_WEAPONS[charId] || 'throwing_knives';
             let peerWeapons = [];
             const savedWeapons = sim.weapons;
+            const savedAppVer = sim.appearanceVersion;
             try {
                 sim.weapons = [];
                 sim.addWeapon(weaponId);
@@ -211,10 +220,12 @@ export const mpSyncEngineMethods = {
                 console.error(`[Multiplayer] Failed adding weapon for slot ${slot}:`, err);
             } finally {
                 sim.weapons = savedWeapons;
+                sim.appearanceVersion = savedAppVer;
             }
 
             const peerObj = {
                 slot,
+                level: 1,
                 name: sanitizeName(pInfo.name) || `Player ${slot}`,
                 characterId: charId,
                 isHost: Boolean(pInfo.isHost),
@@ -227,6 +238,9 @@ export const mpSyncEngineMethods = {
             this.remotePeers.set(slot, peerObj);
             this.invalidateSortedRemotePeers();
             sim.remotePlayers.push(entity);
+            if (charId !== 'dipper' && charId !== 'elias') {
+                this.bakeRemotePeerAppearance(client, peerObj, [{ id: weaponId, level: 1 }]);
+            }
         }
 
         // Maintain sim.player2 alias for compatibility
@@ -306,12 +320,21 @@ export const mpSyncEngineMethods = {
                 if (!enemy || enemy._coopHpScaled) return;
                 enemy._coopHpScaled = true;
                 const w = getActiveWeights();
+                const customMult = Math.max(0.5, Number(this.gameConfig?.difficultyMult || this.difficultyMult) || 1.0);
                 const isBossOrElite = kind === 'boss' || kind === 'finalBoss' || kind === 'elite' || enemy.boss || enemy.elite;
-                const hpMult = isBossOrElite ? w.bossHpMult : w.hpMult;
+                const hpMult = (isBossOrElite ? w.bossHpMult : w.hpMult) * customMult;
+                const dmgMult = w.dmgMult * customMult;
                 enemy.hp = Math.max(1, Math.round(enemy.hp * hpMult));
                 enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * hpMult));
-                if (Number.isFinite(enemy.damage)) {
-                    enemy.damage = Math.max(1, Math.round(enemy.damage * w.dmgMult));
+                enemy.damageScale = (enemy.damageScale || 1) * dmgMult;
+                const baseDmg = Number(enemy.def?.damage ?? enemy.damage);
+                if (Number.isFinite(baseDmg)) {
+                    if (baseDmg > 0) {
+                        const scaledDmg = baseDmg * enemy.damageScale;
+                        enemy.damage = dmgMult > 1 ? Math.max(1, Math.ceil(scaledDmg - 0.05)) : Math.max(1, Math.round(scaledDmg));
+                    } else {
+                        enemy.damage = 0;
+                    }
                 }
                 if (Number.isFinite(enemy.xp)) {
                     enemy.xp = Math.max(1, Math.round(enemy.xp * w.xpMult));
@@ -356,15 +379,31 @@ export const mpSyncEngineMethods = {
                 const kind = pickup.kind;
                 const val = pickup.value;
                 const tier = pickup.tier || 'medium';
-                origCollect(pickup);
-                if (this.remotePeers.size > 0) {
-                    if ((kind === 'bones' || kind === 'big_bones' || kind === 'coins') && val > 0) {
+                if ((kind === 'bones' || kind === 'big_bones') && val > 0) {
+                    const prevXp = sim.xp;
+                    origCollect(pickup);
+                    const sharedGrowth = this.getLobbyGrowthMultiplier ? this.getLobbyGrowthMultiplier(sim) : (sim.stats?.growth || 0);
+                    const xpGained = val * (1 + sharedGrowth);
+                    sim.xp = prevXp + xpGained;
+                    sim.checkLevelUp();
+                    if (this.remotePeers.size > 0) {
                         this.send({
                             type: 'coop_pickup',
                             kind: kind,
-                            value: val
+                            value: val,
+                            xpGained: xpGained,
+                            totalXp: sim.xp
                         });
-                    } else if (kind === 'casket') {
+                    }
+                } else if (kind === 'casket') {
+                    if (pickup._casketCollected) return;
+                    pickup._casketCollected = true;
+                    const pickupUid = pickup.uid || ('casket_' + sim.tick + '_' + Math.round(pickup.x * 100) + '_' + Math.round(pickup.y * 100));
+                    if (!this._openedCasketUids) this._openedCasketUids = new Set();
+                    if (this._openedCasketUids.has(pickupUid)) return;
+                    this._openedCasketUids.add(pickupUid);
+                    origCollect(pickup);
+                    if (this.remotePeers.size > 0) {
                         const latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
                         for (const peer of this.remotePeers.values()) {
                             if (peer.entity && peer.entity.hp > 0 && !peer.entity.spectating) {
@@ -375,7 +414,17 @@ export const mpSyncEngineMethods = {
                             type: 'coop_pickup',
                             kind: 'casket',
                             tier: tier,
-                            excludeItemId: latestChest?.itemId || undefined
+                            pickupUid,
+                            excludeItemId: latestChest?.upgradedFrom || latestChest?.itemId || undefined
+                        });
+                    }
+                } else {
+                    origCollect(pickup);
+                    if (this.remotePeers.size > 0 && kind === 'coins' && val > 0) {
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: kind,
+                            value: val
                         });
                     }
                 }
@@ -844,11 +893,15 @@ export const mpSyncEngineMethods = {
                     remoteOrbits = sim.projectiles.filter(p => p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot);
                     sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot && p.ownerSlot !== this.localSlot));
                 }
+                const effLenBeforeLocal = sim.effects.length;
                 this._activeAttackerSlot = this.localSlot;
                 try {
                     origStepWeapons();
                 } finally {
                     this._activeAttackerSlot = null;
+                }
+                for (let i = effLenBeforeLocal; i < sim.effects.length; i++) {
+                    if (sim.effects[i]) sim.effects[i]._fromStepWeapons = true;
                 }
                 for (const p of sim.projectiles) {
                     if (!p.ownerSlot) {
@@ -878,8 +931,14 @@ export const mpSyncEngineMethods = {
                         sim.projectiles = sim.projectiles.filter(p => !(p.orbit && p.ownerSlot !== peer.slot));
                     }
 
+                    const savedStats = sim.stats;
+                    const evLenBefore = sim.events.length;
+                    const effLenBefore = sim.effects.length;
                     sim.player = rEntity;
                     this._activeAttackerSlot = peer.slot;
+                    if (peer.stats) {
+                        sim.stats = { ...savedStats, ...peer.stats };
+                    }
                     try {
                         for (const t of rWeapons) {
                             if (t.cooldown > 0) {
@@ -896,12 +955,23 @@ export const mpSyncEngineMethods = {
                                     weaponId: t.def.id,
                                     sound: n?.sound ?? e.sound ?? t.def.sound,
                                     x: rEntity.x,
-                                    y: rEntity.y
+                                    y: rEntity.y,
+                                    slot: peer.slot
                                 });
                                 if (!rEntity.moving) {
                                     rEntity.attackSeq = n?.playerSeq ?? t.def.playerSeq;
                                     rEntity.attackStart = sim.tick;
                                 }
+                            }
+                        }
+                        for (let i = evLenBefore; i < sim.events.length; i++) {
+                            if (sim.events[i] && sim.events[i].slot === undefined) {
+                                sim.events[i].slot = peer.slot;
+                            }
+                        }
+                        for (let i = effLenBefore; i < sim.effects.length; i++) {
+                            if (sim.effects[i]) {
+                                sim.effects[i]._fromStepWeapons = true;
                             }
                         }
                         for (const p of sim.projectiles) {
@@ -911,6 +981,7 @@ export const mpSyncEngineMethods = {
                             }
                         }
                     } finally {
+                        sim.stats = savedStats;
                         this._activeAttackerSlot = null;
                         sim.player = origPlayer;
                         if (otherOrbits && otherOrbits.length > 0) {
@@ -946,7 +1017,7 @@ export const mpSyncEngineMethods = {
                 this.syncLocalPauseState(client, true);
             }
 
-            if (sim.tick === 10) {
+            if (sim.tick === 10 || sim.tick === 45 || sim.tick === 120) {
                 this.sendLoadoutSync(client, false);
             }
 
@@ -954,6 +1025,7 @@ export const mpSyncEngineMethods = {
                 if (isHost) {
                     if (sim.state === 'victory' && !this._victorySent) {
                         this._victorySent = true;
+                        this.gameStarted = false;
                         const lb = this.buildLeaderboard();
                         this.send({
                             type: 'coop_pickup',
@@ -1111,6 +1183,7 @@ export const mpSyncEngineMethods = {
                     if (Array.isArray(sim.effects)) {
                         for (let i = 0; i < sim.effects.length; i++) {
                             const ef = sim.effects[i];
+                            if (ef._remoteSynced || ef._fromStepWeapons) continue;
                             if (ef.startTick >= sim.tick - 1 && sim.tick < ef.endTick) {
                                 effectData.push([
                                     ef.uid,
@@ -1138,7 +1211,6 @@ export const mpSyncEngineMethods = {
                                 ev.type === 'bossShout' ||
                                 ev.type === 'bossAttack' ||
                                 ev.type === 'blast' ||
-                                ev.type === 'aura' ||
                                 ev.type === 'cannonSetup' ||
                                 ev.type === 'cannonFire' ||
                                 ev.type === 'powerUp' ||
@@ -1153,8 +1225,11 @@ export const mpSyncEngineMethods = {
                     }
 
                     const localStat = this.damageStats?.get(this.localSlot);
+                    const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
+                    if (localStat) localStat.level = localLvl;
                     const playersSnapshot = [{
                         slot: this.localSlot,
+                        level: localLvl,
                         x: Math.round(sim.player.x * 100) / 100,
                         y: Math.round(sim.player.y * 100) / 100,
                         vx: Math.round((sim.player.x - sim.player.prevX) * 1000) / 1000,
@@ -1178,8 +1253,11 @@ export const mpSyncEngineMethods = {
                         const re = peer.entity;
                         if (!re) continue;
                         const pStat = this.damageStats?.get(peer.slot);
+                        const peerLvl = Math.max(1, Math.round(Number(peer.level || re.level || pStat?.level) || 1));
+                        if (pStat) pStat.level = peerLvl;
                         playersSnapshot.push({
                             slot: peer.slot,
+                            level: peerLvl,
                             x: Math.round(re.x * 100) / 100,
                             y: Math.round(re.y * 100) / 100,
                             vx: Math.round((re.x - re.prevX) * 1000) / 1000,
@@ -1203,6 +1281,7 @@ export const mpSyncEngineMethods = {
                     this.send({
                         type: 'sync_world',
                         tick: sim.tick,
+                        xp: Math.round(sim.xp * 100) / 100,
                         round: sim.round || 1,
                         roundStartTick: sim.roundStartTick || 0,
                         kills: sim.kills,
@@ -1240,9 +1319,13 @@ export const mpSyncEngineMethods = {
                     }
 
                     const isSpectating = Boolean(sim.player.spectating || sim.player.hp <= 0);
+                    const localLvl = Math.max(1, Math.round(Number(sim.level) || 1));
+                    const localStat = this.damageStats?.get(this.localSlot);
+                    if (localStat) localStat.level = localLvl;
                     this.send({
                         type: 'input',
                         slot: this.localSlot,
+                        level: localLvl,
                         tick: sim.tick,
                         dead: isSpectating,
                         pauseState: isSpectating ? null : this.getLocalPauseState(client),
@@ -1314,10 +1397,21 @@ export const mpSyncEngineMethods = {
 
             const origUseItem = client.useItem.bind(client);
             client.useItem = (slot) => {
-                const prevHp = client.sim?.player?.hp ?? 0;
+                const sim = client.sim;
+                const prevHp = sim?.player?.hp ?? 0;
+                const invSlot = sim?.inventory?.[slot];
+                const itemId = invSlot?.itemId || null;
+                const prevCount = invSlot?.count ?? 0;
                 origUseItem(slot);
-                if (this.gameStarted && client.sim) {
-                    this.sendLoadoutSync(client, client.sim.player.hp > prevHp);
+                if (this.gameStarted && sim) {
+                    const afterSlot = sim.inventory?.[slot];
+                    const afterCount = (afterSlot && afterSlot.itemId === itemId) ? afterSlot.count : 0;
+                    const itemConsumed = Boolean(itemId && afterCount < prevCount);
+                    const hpDelta = sim.player.hp - prevHp;
+                    this.sendLoadoutSync(client, hpDelta > 0, {
+                        usedItemId: itemConsumed ? itemId : null,
+                        hpDelta
+                    });
                     this.syncLocalPauseState(client, true);
                 }
             };
@@ -1350,6 +1444,12 @@ export const mpSyncEngineMethods = {
         }
 
         this.sendLoadoutSync(client, true);
+        if (this._pendingLoadouts && this._pendingLoadouts.size > 0) {
+            for (const [, pendingMsg] of this._pendingLoadouts.entries()) {
+                this.applyRemoteLoadout(pendingMsg);
+            }
+            this._pendingLoadouts.clear();
+        }
 
         // Hook view.submitActors to render all remote players (up to 3 teammates)
         if (client.view && !this.inGameHooked) {
@@ -1393,23 +1493,24 @@ export const mpSyncEngineMethods = {
                                 (model.getAnim(6561) || model.anims[0]);
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                         } else {
-                            const attackAnim = p2.attackSeq !== -1 ? model.getAnim(p2.attackSeq) : null;
-                            const isAttacking = Boolean(
-                                attackAnim &&
-                                attackAnim.seqId === p2.attackSeq &&
-                                (!p2.moving || p2.attackSeq === 1979 || (s.tick - p2.attackStart) < 12) &&
-                                (s.tick - p2.attackStart) >= 0 &&
-                                (s.tick - p2.attackStart) < (attackAnim.totalTicks || 15)
-                            );
-                            if (isAttacking) {
-                                anim = attackAnim;
-                                frame = anim.getFrame(Math.max(0, s.tick - p2.attackStart), false);
-                            } else if (p2.moving) {
+                            if (p2.moving) {
                                 anim = model.getAnim(824) || model.getAnim(819) || model.anims[0];
                                 frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                             } else {
-                                anim = model.getAnim(808) || model.anims[0];
-                                frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                                const attackAnim = p2.attackSeq !== -1 ? model.getAnim(p2.attackSeq) : null;
+                                const isAttacking = Boolean(
+                                    attackAnim &&
+                                    attackAnim.seqId === p2.attackSeq &&
+                                    (s.tick - p2.attackStart) >= 0 &&
+                                    (s.tick - p2.attackStart) < (attackAnim.totalTicks || 15)
+                                );
+                                if (isAttacking) {
+                                    anim = attackAnim;
+                                    frame = anim.getFrame(Math.max(0, s.tick - p2.attackStart), false);
+                                } else {
+                                    anim = model.getAnim(808) || model.anims[0];
+                                    frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                                }
                             }
                         }
 
@@ -1679,6 +1780,16 @@ export const mpSyncEngineMethods = {
         if (Number.isFinite(Number(msg.kills)) && msg.kills >= 0) {
             sim.kills = Math.round(Number(msg.kills));
         }
+        if (Number.isFinite(Number(msg.xp)) && msg.xp > sim.xp) {
+            sim.xp = Number(msg.xp);
+            sim.checkLevelUp();
+            if (sim.state !== 'playing') {
+                client.accumulator = 0;
+                client.syncOverlay();
+                this.syncLocalPauseState(client, true);
+            }
+            client.updateHud?.(true);
+        }
         if (Number.isFinite(Number(msg.round)) && msg.round >= 1) {
             const hostRound = Math.round(Number(msg.round));
             if (hostRound > (sim.round || 1)) {
@@ -1698,14 +1809,17 @@ export const mpSyncEngineMethods = {
             const allowedStates = new Set(['levelUp', 'chest', 'paused']);
             let pauseChanged = false;
             let localPlayerSnapshot = null;
+            const syncedSlots = new Set();
 
             for (const pState of msg.players) {
                 if (!pState || typeof pState !== 'object') continue;
                 const slot = sanitizeSlot(pState.slot, 0);
+                syncedSlots.add(slot);
                 const dStat = this.damageStats?.get(slot);
                 if (dStat) {
                     if (Number.isFinite(Number(pState.dmg))) dStat.damage = Math.max(0, Math.round(Number(pState.dmg)));
                     if (Number.isFinite(Number(pState.kills))) dStat.kills = Math.max(0, Math.round(Number(pState.kills)));
+                    if (Number.isFinite(Number(pState.level))) dStat.level = Math.max(1, Math.min(999, Math.round(Number(pState.level))));
                 }
                 if (slot === this.localSlot) {
                     localPlayerSnapshot = pState;
@@ -1715,6 +1829,12 @@ export const mpSyncEngineMethods = {
                 const peer = this.remotePeers.get(slot);
                 if (!peer || !peer.entity) continue;
                 const re = peer.entity;
+
+                if (Number.isFinite(Number(pState.level))) {
+                    const lvl = Math.max(1, Math.min(999, Math.round(Number(pState.level))));
+                    peer.level = lvl;
+                    re.level = lvl;
+                }
 
                 if (Number.isFinite(Number(pState.hp))) {
                     re.hp = Math.max(0, Number(pState.hp));
@@ -1753,7 +1873,13 @@ export const mpSyncEngineMethods = {
                 if (Number.isFinite(pState.x) && Number.isFinite(pState.y)) {
                     const nx = Math.max(0, Math.min(16384, pState.x));
                     const ny = Math.max(0, Math.min(16384, pState.y));
-                    if (Number.isFinite(pState.vx) && Number.isFinite(pState.vy)) {
+                    if (!peer._initialPosSynced) {
+                        re.x = re.prevX = re.netX = nx;
+                        re.y = re.prevY = re.netY = ny;
+                        re.vx = 0;
+                        re.vy = 0;
+                        peer._initialPosSynced = true;
+                    } else if (Number.isFinite(pState.vx) && Number.isFinite(pState.vy)) {
                         re.vx = Math.max(-1.5, Math.min(1.5, pState.vx));
                         re.vy = Math.max(-1.5, Math.min(1.5, pState.vy));
                     } else if (Number.isFinite(re.netX) && Number.isFinite(re.netY)) {
@@ -1784,6 +1910,23 @@ export const mpSyncEngineMethods = {
                     }
                 }
                 re.activePrayer = (pState.activePrayer === 'magic' || pState.activePrayer === 'ranged' || pState.activePrayer === 'melee') ? pState.activePrayer : null;
+            }
+
+            if (msg.players.length >= 1) {
+                let removedGhost = false;
+                for (const [rSlot] of this.remotePeers.entries()) {
+                    if (rSlot === this.localSlot || !syncedSlots.has(rSlot)) {
+                        this.remotePeers.delete(rSlot);
+                        removedGhost = true;
+                    }
+                }
+                if (removedGhost) {
+                    this.invalidateSortedRemotePeers();
+                    if (Array.isArray(sim.remotePlayers)) {
+                        sim.remotePlayers = sim.remotePlayers.filter(rp => rp && rp.slot !== this.localSlot && syncedSlots.has(rp.slot));
+                        sim.player2 = sim.remotePlayers[0] || null;
+                    }
+                }
             }
 
             if (localPlayerSnapshot && sim.player && Number.isFinite(Number(localPlayerSnapshot.hp))) {
@@ -2181,6 +2324,13 @@ export const mpSyncEngineMethods = {
     applyRemoteInput(peer, msg) {
         if (!peer || !peer.entity || !msg || typeof msg !== 'object') return;
         const p2 = peer.entity;
+        if (Number.isFinite(Number(msg.level))) {
+            const lvl = Math.max(1, Math.min(999, Math.round(Number(msg.level))));
+            peer.level = lvl;
+            p2.level = lvl;
+            const dStat = this.damageStats?.get(peer.slot);
+            if (dStat) dStat.level = lvl;
+        }
         if (msg.dead === true) {
             p2.hp = 0;
             p2.spectating = true;
@@ -2238,7 +2388,7 @@ export const mpSyncEngineMethods = {
         }
         p2.moving = moving;
 
-        if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1) {
+        if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1 && !p2.moving) {
             p2.attackSeq = msg.attackSeq;
             if (Number.isFinite(msg.attackStart)) {
                 p2.attackStart = msg.attackStart;

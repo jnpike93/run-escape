@@ -218,6 +218,11 @@ export function getOutfitAppearance(outfit: EnemyOutfit): PlayerAppearance {
 export function getCharacterAppearance(characterId: string): PlayerAppearance {
     const character = getCharacter(characterId);
     const appearance = createAppearance(character.equipment);
+    const startWeapon = WEAPONS.find((w) => w.id === character.startingWeapon);
+    const heldObjId = startWeapon?.levels[0]?.objId ?? startWeapon?.iconObjId;
+    if (heldObjId !== undefined && appearance.equipment[EquipSlot.WEAPON] === -1) {
+        appearance.equipment[EquipSlot.WEAPON] = heldObjId;
+    }
     if (character.kits) {
         appearance.kits = character.kits.slice();
     }

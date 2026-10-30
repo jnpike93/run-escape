@@ -32,10 +32,10 @@ export function QuestScreen({ ui, client }: Props): JSX.Element {
     return (
         <div className="ui-fill ui-center">
             <div className="ui-panel rs-border rs-background ui-quests">
-                <h2>Quests</h2>
+                <h2>Slayer Tasks</h2>
                 <p className="ui-subtle">
-                    Quests take as many runs as they need. Each pays its coins once, when the run
-                    that finishes it ends.
+                    Slayer tasks take as many runs as they need. Each pays its coins once, when the run
+                    that finishes it ends. (The only quest is Cook's Assistant in Lumbridge.)
                 </p>
                 <div className="ui-quest-list">
                     {getQuestGroups().map(({ mapId, quests }) => (

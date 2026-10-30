@@ -556,17 +556,29 @@ export class GameClient implements GameFrameHandler {
             this.store.toast(`Couldn't get to ${map.name}.`);
             return;
         }
+        const hostUpgrades =
+            mp?.gameStarted && mp?.gameConfig?.upgrades && typeof mp.gameConfig.upgrades === "object"
+                ? mp.gameConfig.upgrades
+                : this.save.upgrades;
+        const hostUnlockedItems =
+            mp?.gameStarted && Array.isArray(mp?.gameConfig?.unlockedItems)
+                ? mp.gameConfig.unlockedItems
+                : this.save.unlockedItems;
+        const hostArmoury =
+            mp?.gameStarted && mp?.gameConfig?.armoury && typeof mp.gameConfig.armoury === "object"
+                ? mp.gameConfig.armoury
+                : this.save.armoury;
         const sim = new Sim({
             grid: this.grid,
             mapId,
             characterId,
-            metaStats: getMetaStats(this.save),
+            metaStats: getMetaStats({ ...this.save, upgrades: hostUpgrades }),
             seed: mp?.gameConfig?.seed ?? ((Math.random() * 0x7fffffff) | 0),
             spawnX: map.spawn.x,
             spawnY: map.spawn.y,
-            unlockedItems: new Set(this.save.unlockedItems),
+            unlockedItems: new Set(hostUnlockedItems),
             endless,
-            armoury: { ...this.save.armoury },
+            armoury: { ...hostArmoury },
         });
         for (let i = 0; i < this.options.stress; i++) {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
@@ -785,7 +797,7 @@ export class GameClient implements GameFrameHandler {
                 this.tasksAnnounced.add(key);
                 this.sounds.taskDone();
                 this.store.toast(
-                    `Quest complete: ${quest.name}! ${quest.coins.toLocaleString()} coins ` +
+                    `Slayer task complete: ${quest.name}! ${quest.coins.toLocaleString()} coins ` +
                         "are yours after this run.",
                     6000,
                 );

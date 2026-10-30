@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Co-Op Pickups & Shared Loot Methods
-import { sanitizeSlot } from './mp-constants.js?v=8.1';
+import { sanitizeSlot } from './mp-constants.js?v=8.5';
 
 export const mpPickupsMethods = {
     applyCoopPickup(msg) {
@@ -10,9 +10,28 @@ export const mpPickupsMethods = {
         const val = Number.isFinite(Number(msg.value)) ? Number(msg.value) : 0;
 
         if (kind === 'bones' || kind === 'big_bones') {
-            if (val <= 0) return;
-            sim.xp += val * (1 + (sim.stats?.growth || 0));
-            client.sounds?.onEvents(sim, [{ type: 'pickup', kind, value: val }]);
+            if (val <= 0 && !Number.isFinite(Number(msg.xpGained))) return;
+            const gained = Number.isFinite(Number(msg.xpGained)) && Number(msg.xpGained) > 0
+                ? Number(msg.xpGained)
+                : val * (1 + (this.getLobbyGrowthMultiplier ? this.getLobbyGrowthMultiplier(sim) : (sim.stats?.growth || 0)));
+            sim.xp = Number.isFinite(Number(msg.totalXp))
+                ? Math.max(sim.xp + gained, Number(msg.totalXp))
+                : (sim.xp + gained);
+            client.sounds?.onEvents(sim, [{ type: 'pickup', kind, value: val || 1 }]);
+            sim.checkLevelUp();
+            if (sim.state !== 'playing') {
+                client.accumulator = 0;
+                client.syncOverlay();
+                this.syncLocalPauseState(client, true);
+            }
+            client.updateHud(true);
+        } else if (kind === 'lamp_xp') {
+            const levels = Number.isFinite(Number(msg.levels)) && Number(msg.levels) > 0
+                ? Number(msg.levels)
+                : 0;
+            if (levels <= 0) return;
+            const span = Math.max(1, (sim.xpForNextLevel || 0) - (sim.xpForThisLevel || 0));
+            sim.xp += span * levels;
             sim.checkLevelUp();
             if (sim.state !== 'playing') {
                 client.accumulator = 0;
@@ -33,6 +52,11 @@ export const mpPickupsMethods = {
             client.updateHud(true);
         } else if (kind === 'casket') {
             if (sim.player?.spectating || sim.player?.hp <= 0) return;
+            if (!this._openedCasketUids) this._openedCasketUids = new Set();
+            if (msg.pickupUid !== undefined && msg.pickupUid !== null) {
+                if (this._openedCasketUids.has(msg.pickupUid)) return;
+                this._openedCasketUids.add(msg.pickupUid);
+            }
             const allowedTiers = new Set(['beginner', 'easy', 'medium', 'hard', 'elite', 'master']);
             const tier = (typeof msg.tier === 'string' && allowedTiers.has(msg.tier)) ? msg.tier : 'medium';
             this.nextChestExcludeId = (typeof msg.excludeItemId === 'string' && msg.excludeItemId) ? msg.excludeItemId : undefined;
@@ -104,16 +128,29 @@ export const mpPickupsMethods = {
             if (dist < 0.6) {
                 const origVal = pickup.value;
                 pickup.value = -1;
-                if (pickup.kind === 'bones' || pickup.kind === 'big_bones' || pickup.kind === 'coins') {
-                    pickup.value = origVal;
-                    sim.collect(pickup);
-                    pickup.value = -1;
+                if (pickup.kind === 'bones' || pickup.kind === 'big_bones') {
+                    const sharedGrowth = this.getLobbyGrowthMultiplier ? this.getLobbyGrowthMultiplier(sim) : (sim.stats?.growth || 0);
+                    const xpGained = origVal * (1 + sharedGrowth);
+                    sim.xp += xpGained;
+                    sim.events.push({ type: 'pickup', kind: pickup.kind, value: origVal });
                     sim.checkLevelUp();
+                    this.send({
+                        type: 'coop_pickup',
+                        kind: pickup.kind,
+                        value: origVal,
+                        xpGained: xpGained,
+                        totalXp: sim.xp
+                    });
                     if (sim.state !== 'playing' && client) {
                         client.accumulator = 0;
                         client.syncOverlay();
                         this.syncLocalPauseState(client, true);
                     }
+                    client?.updateHud?.(true);
+                } else if (pickup.kind === 'coins') {
+                    pickup.value = origVal;
+                    sim.collect(pickup);
+                    pickup.value = -1;
                 } else if (pickup.kind === 'food') {
                     p2.hp = Math.min(p2.maxHp, p2.hp + origVal);
                     this.send({
@@ -123,11 +160,22 @@ export const mpPickupsMethods = {
                         value: origVal
                     });
                 } else if (pickup.kind === 'casket') {
+                    if (pickup._casketCollected) continue;
+                    pickup._casketCollected = true;
+                    const pickupUid = pickup.uid || ('casket_' + sim.tick + '_' + Math.round(pickup.x * 100) + '_' + Math.round(pickup.y * 100));
+                    if (!this._openedCasketUids) this._openedCasketUids = new Set();
+                    if (this._openedCasketUids.has(pickupUid)) continue;
+                    this._openedCasketUids.add(pickupUid);
                     const tier = pickup.tier || 'medium';
                     let latestChest = null;
                     if (!sim.player.spectating && sim.player.hp > 0) {
                         sim.openCasket(tier);
                         latestChest = sim.chests && sim.chests.length > 0 ? sim.chests[sim.chests.length - 1] : null;
+                        if (client) {
+                            client.handleEvents(sim, sim.takeEvents());
+                            client.syncOverlay();
+                            client.updateHud(true);
+                        }
                     }
                     for (const rp of this.remotePeers.values()) {
                         if (rp.entity && rp.entity.hp > 0 && !rp.entity.spectating) {
@@ -138,13 +186,14 @@ export const mpPickupsMethods = {
                         type: 'coop_pickup',
                         kind: 'casket',
                         tier: tier,
-                        excludeItemId: latestChest?.itemId || undefined
+                        pickupUid,
+                        excludeItemId: latestChest?.upgradedFrom || latestChest?.itemId || undefined
                     });
                     if (client) {
                         client.accumulator = 0;
                         this.syncLocalPauseState(client, true);
                     }
-                } else if (pickup.kind === 'powerUp') {
+                } else if (pickup.kind === 'powerUp' || pickup.kind === 'powerup') {
                     const savedPlayer = sim.player;
                     const savedSlot = this._activeAttackerSlot;
                     sim.player = p2;
@@ -158,6 +207,16 @@ export const mpPickupsMethods = {
                     } finally {
                         this._activeAttackerSlot = savedSlot;
                         sim.player = savedPlayer;
+                    }
+                    if (pickup.powerUp === 'magnet') {
+                        for (const p of sim.pickups) {
+                            if (p.value >= 0 && p.kind !== 'casket' && p.kind !== 'powerUp' && p.kind !== 'powerup') {
+                                p.attracted = false;
+                                p[attractKey] = true;
+                                p[speedKey] = Math.max(p[speedKey] || 0, 0.25);
+                                p.pileUid = 0;
+                            }
+                        }
                     }
                     this.send({
                         type: 'coop_pickup',

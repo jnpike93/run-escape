@@ -892,9 +892,27 @@ export class Sim {
                 });
                 break;
             }
-            case "xp":
-                this.xp += (this.xpForNextLevel - this.xpForThisLevel) * use.levels;
+            case "xp": {
+                const mp =
+                    typeof window !== "undefined" ? (window as any).multiplayer : undefined;
+                const isCoop = Boolean(
+                    mp?.gameStarted && mp?.remotePeers && mp.remotePeers.size > 0,
+                );
+                const playerCount = isCoop ? Math.max(1, 1 + mp.remotePeers.size) : 1;
+                const levelsToGrant = use.levels / playerCount;
+                const xpGain =
+                    (this.xpForNextLevel - this.xpForThisLevel) * levelsToGrant;
+                this.xp += xpGain;
+                if (isCoop && typeof mp.send === "function") {
+                    mp.send({
+                        type: "coop_pickup",
+                        kind: "lamp_xp",
+                        levels: levelsToGrant,
+                        xpGained: xpGain,
+                    });
+                }
                 break;
+            }
         }
     }
 
@@ -1047,6 +1065,7 @@ export class Sim {
             player.facingX = moveX / len;
             player.facingY = moveY / len;
             player.yaw = yawFromVector(moveX, moveY);
+            this.player.attackSeq = -1;
         }
         if (moving !== player.moving) {
             player.moving = moving;
@@ -3307,7 +3326,7 @@ export class Sim {
                 weapon.def.playerSeq;
             if (
                 fired &&
-                (!this.player.moving || weapon.def.kind === "aura" || nextSeq === 1979) &&
+                !this.player.moving &&
                 !(
                     this.player.attackSeq === 1979 &&
                     this.tick - this.player.attackStart < 45 &&

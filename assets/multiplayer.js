@@ -21,20 +21,20 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './multiplayer/mp-constants.js?v=8.4';
-import { MpEventBus } from './multiplayer/mp-event-bus.js?v=8.4';
-import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=8.4';
-import { mpTransportMethods } from './multiplayer/mp-transport.js?v=8.4';
-import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=8.4';
-import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=8.4';
-import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=8.4';
-import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=8.4';
-import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=8.4';
+} from './multiplayer/mp-constants.js?v=8.5';
+import { MpEventBus } from './multiplayer/mp-event-bus.js?v=8.5';
+import { initOsrsPrayers } from './multiplayer/mp-prayers.js?v=8.5';
+import { mpTransportMethods } from './multiplayer/mp-transport.js?v=8.5';
+import { mpLobbyUiMethods } from './multiplayer/mp-lobby-ui.js?v=8.5';
+import { mpHudLeaderboardMethods } from './multiplayer/mp-hud-leaderboard.js?v=8.5';
+import { mpActorRendererMethods } from './multiplayer/mp-actor-renderer.js?v=8.5';
+import { mpPickupsMethods } from './multiplayer/mp-pickups.js?v=8.5';
+import { mpSyncEngineMethods } from './multiplayer/mp-sync-engine.js?v=8.5';
 
 export class MultiplayerManager {
     constructor() {
         this.bus = new MpEventBus();
-        this.roomId = null;
+        this.roomId = sanitizeRoomId(new URLSearchParams(window.location.search).get('room')) || null;
         this.role = null; // 'host' | 'guest'
         this.localSlot = 1; // 1..4
         this.hostSlot = 1;
@@ -43,11 +43,15 @@ export class MultiplayerManager {
         this.peerConnected = false;
 
         this.localCharacter = 'warrior';
-        this.localName = 'Player 1';
-        this.localNameCustomized = false;
+        this.playerNamesBySlot = this.loadSavedPlayerNames ? this.loadSavedPlayerNames() : {};
+        const savedSlotName = this.getRememberedPlayerName ? this.getRememberedPlayerName(this.localSlot) : '';
+        this.localName = savedSlotName || 'Player 1';
+        this.localNameDraft = this.localName;
+        this.localNameCustomized = Boolean(savedSlotName);
         this.localReady = false;
         this.selectedMapId = 'lumbridge';
         this.selectedEndless = false;
+        this.difficultyMult = 1.0;
         this.hostUnlockedCharacters = this.readLocalSaveUnlockedCharacters();
 
         // Map<slot (1..4), { slot, name, character, ready, isHost }>
@@ -103,23 +107,31 @@ Object.assign(
     mpSyncEngineMethods
 );
 
-export const multiplayer = new MultiplayerManager();
-window.multiplayer = multiplayer;
-initOsrsPrayers(multiplayer);
+let mpInstance;
+if (window.__runEscapeMpInitialized && window.multiplayer) {
+    mpInstance = window.multiplayer;
+} else {
+    window.__runEscapeMpInitialized = true;
+    const mp = new MultiplayerManager();
+    window.multiplayer = mp;
+    mpInstance = mp;
+    initOsrsPrayers(mp);
 
-// Disable browser right-click context menu in the game window
-window.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-});
+    // Disable browser right-click context menu in the game window
+    window.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
 
-// Automatically open lobby if ?room= is in URL
-window.addEventListener('DOMContentLoaded', () => {
-    const params = new URLSearchParams(window.location.search);
-    const room = sanitizeRoomId(params.get('room'));
-    if (room) {
-        console.log('[Multiplayer] Auto-joining room from URL query:', room);
-        setTimeout(() => {
-            multiplayer.openLobbyModal(room);
-        }, 1500);
-    }
-});
+    // Automatically open lobby if ?room= is in URL
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const room = sanitizeRoomId(params.get('room'));
+        if (room) {
+            console.log('[Multiplayer] Auto-joining room from URL query:', room);
+            setTimeout(() => {
+                mp.openLobbyModal(room);
+            }, 1500);
+        }
+    });
+}
+export const multiplayer = mpInstance;

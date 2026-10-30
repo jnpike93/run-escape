@@ -12,9 +12,56 @@ import {
     sanitizeCharacter,
     sanitizeSlot,
     escapeHtml
-} from './mp-constants.js?v=8.1';
+} from './mp-constants.js?v=8.5';
+
+const sanitizePlayerName = (name, fallback = '') => sanitizeName(name) || fallback;
 
 export const mpLobbyUiMethods = {
+    loadSavedPlayerNames() {
+        try {
+            const raw = localStorage.getItem('run-escape-coop-player-names');
+            const parsed = raw ? JSON.parse(raw) : {};
+            return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch (e) {
+            return {};
+        }
+    },
+
+    savePlayerNameForSlot(slot, name) {
+        if (!this.playerNamesBySlot) this.playerNamesBySlot = this.loadSavedPlayerNames();
+        const s = sanitizeSlot(slot, 1);
+        const cleaned = sanitizePlayerName(name, '');
+        const isDefault = /^Player\s+[1-4]$/i.test(cleaned);
+        if (cleaned && !isDefault) {
+            this.playerNamesBySlot[s] = cleaned;
+            if (s === this.localSlot) {
+                try { localStorage.setItem('run-escape-coop-local-name', cleaned); } catch (e) {}
+            }
+        } else {
+            delete this.playerNamesBySlot[s];
+            if (s === this.localSlot) {
+                try { localStorage.removeItem('run-escape-coop-local-name'); } catch (e) {}
+            }
+        }
+        try {
+            localStorage.setItem('run-escape-coop-player-names', JSON.stringify(this.playerNamesBySlot));
+        } catch (e) {}
+    },
+
+    getRememberedPlayerName(slot) {
+        if (!this.playerNamesBySlot) this.playerNamesBySlot = this.loadSavedPlayerNames();
+        const s = sanitizeSlot(slot, 1);
+        const bySlot = sanitizePlayerName(this.playerNamesBySlot[s], '');
+        if (bySlot) return bySlot;
+        if (s === this.localSlot) {
+            try {
+                const localSaved = sanitizePlayerName(localStorage.getItem('run-escape-coop-local-name') || '', '');
+                if (localSaved) return localSaved;
+            } catch (e) {}
+        }
+        return '';
+    },
+
     syncLocalToLobbyPlayers() {
         this.lobbyPlayers.set(this.localSlot, {
             slot: this.localSlot,
@@ -89,6 +136,7 @@ export const mpLobbyUiMethods = {
             hostCharacter: this.localCharacter,
             mapId: this.selectedMapId,
             endless: Boolean(this.selectedEndless),
+            difficultyMult: Number(this.difficultyMult) || 1.0,
             name: this.localName,
             ready: this.localReady,
             unlockedCharacters: unlocked,
@@ -138,6 +186,8 @@ export const mpLobbyUiMethods = {
         const cleaned = sanitizeName(this.localNameDraft);
         this.localNameCustomized = Boolean(cleaned);
         this.localName = cleaned || `Player ${this.localSlot}`;
+        this.savePlayerNameForSlot(this.localSlot, this.localName);
+        this.localNameDraft = this.localName;
         this.syncLocalToLobbyPlayers();
         clearTimeout(this._nameUpdateTimer);
         this._nameUpdateTimer = setTimeout(() => {
@@ -197,8 +247,8 @@ export const mpLobbyUiMethods = {
 
         const seqIds = [
             808, 819, 824, 836,
-            386, 390, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
-            2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
+            386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
+            2062, 2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
         ];
         this.playerSeqIds = seqIds;
         const bakes = [];
@@ -223,10 +273,19 @@ export const mpLobbyUiMethods = {
         for (const cid of missing) {
             const pureId = cid.replace('player_', '');
             let appearance = null;
-            if (client.getAppearance) {
+            if (typeof client.getAppearance === 'function') {
                 try {
                     appearance = client.getAppearance(pureId);
                 } catch (err) {}
+            }
+            if (
+                appearance &&
+                Array.isArray(appearance.equipment) &&
+                appearance.equipment[3] === -1 &&
+                CLASS_EQUIPMENT[pureId] &&
+                CLASS_EQUIPMENT[pureId][3] !== -1
+            ) {
+                appearance.equipment[3] = CLASS_EQUIPMENT[pureId][3];
             }
             if (!appearance) {
                 const eqMap = CLASS_EQUIPMENT[pureId];
@@ -309,9 +368,12 @@ export const mpLobbyUiMethods = {
             seed,
             mapId: selectedRegion.id,
             endless: Boolean(this.selectedEndless),
+            difficultyMult: Number(this.difficultyMult) || 1.0,
             partySize: players.length,
             players,
-            unlockedItems: Array.isArray(client.save?.unlockedItems) ? [...client.save.unlockedItems] : []
+            unlockedItems: Array.isArray(client.save?.unlockedItems) ? [...client.save.unlockedItems] : [],
+            upgrades: client.save?.upgrades ? { ...client.save.upgrades } : {},
+            armoury: client.save?.armoury ? { ...client.save.armoury } : {}
         };
 
         this.send({
@@ -320,12 +382,22 @@ export const mpLobbyUiMethods = {
         });
         this.gameStarted = true;
         this.gameConfig = config;
-        this.closeLobbyModal();
         await this.launchCoopRun(config);
     }
 ,
 
     async launchCoopRun(config) {
+        if (this.modalEl) {
+            const startBtn = this.modalEl.querySelector('#coop-start-btn');
+            if (startBtn) {
+                startBtn.textContent = 'Launching Co-Op...';
+                startBtn.disabled = true;
+            } else {
+                const statusEl = this.modalEl.querySelector('#coop-guest-status');
+                if (statusEl) statusEl.textContent = 'Launching Co-Op...';
+            }
+        }
+
         let client = window.gameClient;
         if (!client) {
             console.log('[Multiplayer] Waiting for gameClient...');
@@ -344,13 +416,14 @@ export const mpLobbyUiMethods = {
         }
 
         const players = Array.isArray(config.players) ? config.players : [];
-        const localEntry = players.find(p => p.slot === this.localSlot) || players[0] || {
+        const myEntry = players.find(p => p.slot === this.localSlot) || players[0] || {
             slot: this.localSlot,
             name: this.localName,
             character: this.localCharacter
         };
-        const localChar = config.mapId === 'falador' ? 'durial321' : (localEntry.character || 'warrior');
-        this.localName = localEntry.name || this.localName;
+        const localChar = config.mapId === 'falador' ? 'durial321' : (myEntry.character || 'warrior');
+        this.localName = myEntry.name || this.localName;
+        this.localNameDraft = this.localName;
 
         const allPartyChars = [...players.map(p => p.character), ...(config.mapId === 'falador' ? ['durial321'] : [])];
         await this.ensureAllCharacterModels(client, allPartyChars);
@@ -369,7 +442,8 @@ export const mpLobbyUiMethods = {
         }
 
         try {
-            await client.startRun();
+            this.closeLobbyModal();
+            await client.startRun(config.mapId, localChar, Boolean(config.endless));
             this.setupInGameHooks(localChar, players);
         } catch (err) {
             console.error('[Multiplayer] Error starting run:', err);
@@ -408,16 +482,23 @@ export const mpLobbyUiMethods = {
 ,
 
     openLobbyModal(roomId = null) {
-        const requestedRoom = sanitizeRoomId(roomId);
-        if (!requestedRoom && this.ws && this.ws.readyState === WebSocket.OPEN && this.roomId) {
-            this.localReady = true;
-            this.syncLocalToLobbyPlayers();
-            this.sendLobbyUpdate();
+        const urlRoom = sanitizeRoomId(new URLSearchParams(window.location.search).get('room'));
+        const requestedRoom = sanitizeRoomId(roomId) || urlRoom;
+        const targetRoom = requestedRoom || this.roomId || this.constructor.generateRoomId();
+        if (
+            this.ws &&
+            (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) &&
+            this.roomId === targetRoom
+        ) {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.localReady = true;
+                this.syncLocalToLobbyPlayers();
+                this.sendLobbyUpdate();
+            }
             this.renderLobbyModal();
             return;
         }
-        const cleanRoom = requestedRoom || this.roomId || this.constructor.generateRoomId();
-        this.connect(cleanRoom);
+        this.connect(targetRoom);
         this.renderLobbyModal();
     }
 ,
@@ -475,13 +556,11 @@ export const mpLobbyUiMethods = {
         const box = this.modalEl.firstElementChild;
         if (!box) return;
 
-        const prevNameEl = box.querySelector('#coop-local-name');
-        const wasNameFocused = Boolean(prevNameEl && document.activeElement === prevNameEl);
-        const prevNameVal = wasNameFocused
-            ? prevNameEl.value
-            : (this.localNameDraft !== undefined ? this.localNameDraft : this.localName);
-        const prevSelStart = wasNameFocused ? prevNameEl.selectionStart : null;
-        const prevSelEnd = wasNameFocused ? prevNameEl.selectionEnd : null;
+        const nameInput = box.querySelector('#coop-local-name');
+        const wasNameFocused = Boolean(nameInput && document.activeElement === nameInput);
+        const prevNameVal = nameInput ? nameInput.value : (this.localNameDraft || this.localName);
+        const prevSelStart = wasNameFocused ? nameInput.selectionStart : null;
+        const prevSelEnd = wasNameFocused ? nameInput.selectionEnd : null;
 
         this.syncLocalToLobbyPlayers();
         const isHost = this.role === 'host' || this.role === null;
@@ -511,10 +590,12 @@ export const mpLobbyUiMethods = {
 
         const partyCount = Math.max(1, this.lobbyPlayers.size);
         const activeScaleParty = Math.max(2, Math.min(4, partyCount));
-        const weights = getCoopDifficultyWeights(activeScaleParty);
-        const hpScaleLabel = `${weights.hpMult}x Mob / ${weights.bossHpMult}x Boss HP`;
-        const spawnScaleLabel = `${weights.spawnMult}x Spawns (+${Math.round(weights.heavyWeightBias * 100)}% Heavy Weight)`;
-        const dmgScaleLabel = `${weights.dmgMult}x Dmg`;
+        const diffWeights = getCoopDifficultyWeights(activeScaleParty);
+        const customDiff = Number(this.difficultyMult) || 1.0;
+        const hpScaleLabel = `${(diffWeights.hpMult * customDiff).toFixed(2)}x Mob / ${(diffWeights.bossHpMult * customDiff).toFixed(2)}x Boss HP`;
+        const spawnScaleLabel = `${diffWeights.spawnMult}x Spawns (+${Math.round(diffWeights.heavyWeightBias * 100)}% Heavy Weight)`;
+        const dmgScaleLabel = `${(diffWeights.dmgMult * customDiff).toFixed(2)}x Dmg`;
+        const weights = diffWeights;
         const allGuestsReady = Array.from(this.lobbyPlayers.values())
             .filter(p => p.slot !== this.localSlot)
             .every(p => p.ready);
@@ -633,9 +714,16 @@ export const mpLobbyUiMethods = {
                             padding: 5px 10px; cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; white-space: nowrap;">
                             Endless: ${this.selectedEndless ? 'ON' : 'OFF'}
                         </button>
+                        <button id="coop-diff-mult-btn" style="
+                            background: ${customDiff > 1 ? '#5c2d16' : '#2a2118'};
+                            border: 2px solid ${customDiff > 1 ? '#ffd700' : '#5a4a35'};
+                            color: ${customDiff > 1 ? '#ffd700' : '#b8a890'};
+                            padding: 5px 10px; cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; white-space: nowrap;">
+                            Diff: ${customDiff}x
+                        </button>
                     ` : `
                         <div style="font-size: 15px; color: #ffff00;">
-                            ${escapeHtml(currentRegion.name)}${this.selectedEndless ? ' <span style="color: #ff6040;">[ENDLESS]</span>' : ''} <span style="font-size: 11px; color: #888;">(Selected by Host)</span>
+                            ${escapeHtml(currentRegion.name)}${this.selectedEndless ? ' <span style="color: #ff6040;">[ENDLESS]</span>' : ''} · Diff: <strong style="color:#ffd700;">${customDiff}x</strong> <span style="font-size: 11px; color: #888;">(Selected by Host)</span>
                         </div>
                     `}
                 </div>
@@ -666,7 +754,7 @@ export const mpLobbyUiMethods = {
                         ${partyCount >= 2 ? (allGuestsReady ? `Enter ${escapeHtml(currentRegion.name)} (${partyCount}P Co-Op)` : `Start ${partyCount}P Co-Op (Guests Loading...)`) : 'Waiting for at least 1 more player...'}
                     </button>
                 ` : `
-                    <div style="flex: 2; padding: 9px; color: #ffff00; font-size: 14px; align-self: center;">
+                    <div id="coop-guest-status" style="flex: 2; padding: 9px; color: #ffff00; font-size: 14px; align-self: center;">
                         ${this.localReady ? `Ready (${partyCount}/4)! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : 'Loading assets...'}
                     </div>
                 `}
@@ -699,6 +787,19 @@ export const mpLobbyUiMethods = {
         const endlessBtn = box.querySelector('#coop-endless-btn');
         if (endlessBtn) {
             endlessBtn.onclick = () => this.toggleEndless();
+        }
+
+        const diffMultBtn = box.querySelector('#coop-diff-mult-btn');
+        if (diffMultBtn) {
+            diffMultBtn.onclick = () => {
+                if (this.role !== 'host' && this.role !== null) return;
+                const steps = [1, 1.25, 1.5, 2, 3];
+                const cur = Number(this.difficultyMult) || 1;
+                const idx = steps.findIndex(v => Math.abs(v - cur) < 0.01);
+                this.difficultyMult = steps[(idx + 1) % steps.length];
+                this.sendLobbyUpdate();
+                this.updateLobbyUI();
+            };
         }
 
         const localNameInput = box.querySelector('#coop-local-name');

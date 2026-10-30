@@ -111,6 +111,7 @@ type SlashFx = {
     start: number;
     // r, g, b; white when unset
     color?: string;
+    playerRef?: { x: number; y: number; prevX: number; prevY: number };
 };
 type AuraFx = { x: number; y: number; radius: number; start: number };
 type BlastFx = { x: number; y: number; radius: number; start: number };
@@ -220,7 +221,28 @@ export class GameView {
                     this.shouts = this.shouts.filter((s) => s.enemyUid !== PLAYER_SHOUT);
                     this.shouts.push({ enemyUid: PLAYER_SHOUT, text: event.text, start: now });
                     break;
-                case "slash":
+                case "slash": {
+                    const ev = event as any;
+                    const mp = (window as any).multiplayer;
+                    let pRef: { x: number; y: number; prevX: number; prevY: number } | undefined =
+                        sim.player;
+                    if (mp?.gameStarted && mp.remotePeers) {
+                        if (ev.slot && ev.slot !== mp.localSlot) {
+                            pRef = mp.remotePeers.get(ev.slot)?.entity;
+                        } else if (
+                            Math.hypot(event.x - sim.player.x, event.y - sim.player.y) > 0.05
+                        ) {
+                            for (const peer of mp.remotePeers.values()) {
+                                if (
+                                    peer.entity &&
+                                    Math.hypot(event.x - peer.entity.x, event.y - peer.entity.y) <= 0.5
+                                ) {
+                                    pRef = peer.entity;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     this.slashes.push({
                         x: event.x,
                         y: event.y,
@@ -230,8 +252,10 @@ export class GameView {
                         arc: event.arc,
                         start: now,
                         color: SLASH_COLORS[event.weaponId],
+                        playerRef: pRef,
                     });
                     break;
+                }
                 case "aura":
                     this.auras.push({ x: event.x, y: event.y, radius: event.radius, start: now });
                     break;
@@ -477,18 +501,18 @@ export class GameView {
                     Math.min(tick - player.deathTick, MAX_DEATH_ANIM_TICKS),
                     false,
                 );
+            } else if (player.moving) {
+                anim = model.getAnim(PLAYER_SEQS.run);
+                frame = anim.getFrame(tick - player.moveStart);
             } else if (
                 attack &&
                 attack.seqId === player.attackSeq &&
-                (!player.moving ||
-                    player.attackSeq === 1979 ||
-                    tick - player.attackStart < 12) &&
                 tick - player.attackStart < attack.totalTicks
             ) {
                 anim = attack;
                 frame = anim.getFrame(tick - player.attackStart, false);
             } else {
-                anim = model.getAnim(player.moving ? PLAYER_SEQS.run : PLAYER_SEQS.idle);
+                anim = model.getAnim(PLAYER_SEQS.idle);
                 frame = anim.getFrame(tick - player.moveStart);
             }
         }
@@ -602,7 +626,7 @@ export class GameView {
         this.drawAuras(overlay, sim, now);
         this.drawBlasts(overlay, sim, now, scale);
         this.drawSwings(overlay, sim, now, scale);
-        this.drawSlashes(overlay, sim, now, scale);
+        this.drawSlashes(overlay, sim, now, scale, alpha);
         this.drawEnemyProjectileGlows(overlay, sim, alpha, scale);
 
         // Health bars over hurt elites; with hundreds of enemies bars on all of
@@ -922,14 +946,18 @@ export class GameView {
         }
     }
 
-    private drawSlashes(overlay: Overlay, sim: Sim, now: number, scale: number): void {
+    private drawSlashes(overlay: Overlay, sim: Sim, now: number, scale: number, alpha: number = 1): void {
         const ctx = overlay.ctx;
         this.slashes = this.slashes.filter((s) => now - s.start < SLASH_MS);
         for (const slash of this.slashes) {
             const t = (now - slash.start) / SLASH_MS;
             // Follows the player, like the weapon does
-            const cx = sim.player.x;
-            const cy = sim.player.y;
+            const cx = slash.playerRef
+                ? lerp(slash.playerRef.prevX, slash.playerRef.x, alpha)
+                : slash.x;
+            const cy = slash.playerRef
+                ? lerp(slash.playerRef.prevY, slash.playerRef.y, alpha)
+                : slash.y;
             const base = Math.atan2(slash.dirY, slash.dirX);
             const sweep = slash.arc;
             // Enough points for a wide sweep to stay round

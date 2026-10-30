@@ -42,11 +42,11 @@ ip_conns = {}
 rooms_lock = threading.Lock()
 
 HOST_ALLOWED_MSG_TYPES = {
-    "lobby_update", "game_start", "sync_world", "game_over",
+    "lobby_update", "game_start", "sync_world", "game_over", "peer_leaving",
     "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 GUEST_ALLOWED_MSG_TYPES = {
-    "lobby_update", "input", "game_over",
+    "lobby_update", "input", "game_over", "peer_leaving",
     "coop_pause", "coop_pickup", "coop_loadout", "coop_quest", "coop_debug"
 }
 
@@ -281,6 +281,8 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
     if msg_type not in allowed_types:
         return True
 
+    if msg_type == "peer_leaving":
+        return False
     parsed_msg["senderSlot"] = current_slot
     relay_payload = json.dumps(parsed_msg, separators=(",", ":")).encode("utf-8")
     relay = encode_ws_frame(relay_payload, opcode=1)

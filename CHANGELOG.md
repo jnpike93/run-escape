@@ -3,6 +3,23 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner), so it's written for players.
 
+## Custom Edition Updates (v8.5)
+
+### Co-Op Multiplayer, Combat & Balance Updates
+
+- **Player Level on Infograph & Leaderboard**: Added live player levels (`Lv.X`) to each player's Co-Op party infograph card and the post-run Co-Op Damage Leaderboard.
+- **Weapon Animation & 3D Equipment Sync**: Fixed melee slash/sweep animations so they render around the attacking player rather than all players, removed duplicate aura/spotAnim playback on Guests, and ensured each player's starting and upgraded weapons render in their hands with preserved cooldowns.
+- **Shared Co-Op XP & Host Skills**: Synchronized Co-Op XP gains using the Host's shop skills (`upgrades`), and pooled item/character XP bonuses across all players in the lobby divided by the party size (`1 + hostMetaGrowth + sum(itemGrowth) / partySize`).
+- **Unique Single Casket Rolls**: Fixed duplicate script bundling and casket pickup handling so each casket opens once and grants each player one unique chest item (including Armoury-upgraded gear exclusions).
+- **Walking Animation Priority**: Prioritized walking/running animations over attack animations while moving so characters never slide in an attack pose.
+- **Persistent Lobby Player Names**: Custom player names are now saved and restored per player slot when returning to a lobby or reconnecting.
+- **Antique Lamp Co-Op Split**: Rubbing an Antique Lamp grants `100%` of 1 level in solo play and splits XP into `1/x` of a level across all `x` players on the level in multiplayer.
+- **Blood Barrage & Blood Burst Radius**: Aligned Blood Barrage (`area: 3.8`) and Blood Burst (`area: 2.3 -> 2.6 -> 2.9`) with Ice Barrage and Ice Burst so they target the same screen area and monster count.
+- **Guest Spawn Deduplication**: Fixed duplicate WebSocket slot registration and added `peer_leaving` cleanup so Guests never see duplicate player entities at spawn.
+- **Slayer Tasks Tab**: Renamed the Quests checklist tab, HUD tracker, and completion notices to **Slayer Tasks** (leaving **Cook's Assistant** in Lumbridge as the game's quest).
+- **Guest Utility Items & Combat Stats**: Fixed **Bonecrusher**, **Red/Black Chinchompas**, self-damaging potions (**Overload**, **Zamorak brew**), ground Magnets, and casket gear/potion combat stats for Co-Op Guests.
+- **Co-Op Difficulty Multiplier**: Fixed boss special attacks and enemy explosions ignoring the Co-Op damage multiplier (`damageScale`), prevented double-rounding damage loss on normal enemies, and added a Host-selectable Difficulty Multiplier (`1x` - `3x`) in the Co-Op Lobby.
+
 ## Custom Edition Updates (v8.4)
 
 ### Architecture & Build Pipeline
@@ -10,6 +27,7 @@ the version in the corner), so it's written for players.
 - **Source-Based TypeScript + Vite Migration**: Migrated the repository to the full unminified TypeScript + React + Vite source base (`src/`, `vite.config.ts`, `package.json`, `scripts/sync_dist.cjs`) with `upstream` tracking `https://github.com/Dynrothe/Run-Escape.git`. Running `npm run build` compiles `src/` and synchronizes the production bundles into `assets/` and `index.html`.
 - **Automated Upstream Cron Sync (`scripts/auto_sync_upstream.cjs`)**: Added hourly automated `upstream/main` merge, Vite bundle rebuild, cache-busting bump, test suite verification, and PM2 service reload via `/etc/cron.d/run-escape-upstream-sync` on `cuteanimegirls.moe` and `.github/workflows/sync-upstream.yaml`.
 - **PM2 CommonJS Config Compatibility (`ecosystem.config.cjs`)**: Renamed `ecosystem.config.js` to `ecosystem.config.cjs` and updated `.github/workflows/deploy.yaml` and `nginx.conf` so PM2 loads the CommonJS ecosystem configuration cleanly alongside `"type": "module"` in `package.json`.
+- **Repository & Asset Cleanup**: Removed 64.5 MB of superseded OSRS slim caches, obsolete pre-TypeScript bundle patch scripts (`scripts/patches/`), and duplicate WASM/favicon assets.
 
 ### Balance & Combat Adjustments
 

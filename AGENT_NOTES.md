@@ -6,39 +6,39 @@
 
 ## 1. Active Bundle & Hook Registry
 
-### Current Active Asset Files (Version `?v=8.4` - Source-Built `0.14.0`)
+### Current Active Asset Files (Version `?v=8.5` - Source-Built `0.14.0`)
 | Role | Active File | Imported / Referenced By |
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](./src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
-| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.4`) |
-| **Main Engine Bundle** | [`assets/index-TPKpDRK1.js`](./assets/index-TPKpDRK1.js) | `index.html`, `MapViewerApp-CfAkm72z.js`, `module-BdnIUByq.js` |
-| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.4`, imports `assets/multiplayer/mp-*.js?v=8.4`) |
+| **HTML Entrypoint** | [`index.html`](./index.html) | Browser root (`?v=8.5`) |
+| **Main Engine Bundle** | [`assets/index-DFhq8KrM.js`](./assets/index-DFhq8KrM.js) | `index.html`, `MapViewerApp-CvUyPoMO.js`, `module-D4Rj_YIr.js` |
+| **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](./assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](./assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](./scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
 | **Upstream Auto-Syncer** | [`scripts/auto_sync_upstream.cjs`](./scripts/auto_sync_upstream.cjs) | `/etc/cron.d/run-escape-upstream-sync`, `.github/workflows/sync-upstream.yaml` |
-| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.4`) |
-| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.4`) |
-| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.4`, remove before live production) |
-| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.4`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-CfAkm72z.js`](./assets/MapViewerApp-CfAkm72z.js) | `assets/index-TPKpDRK1.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](./assets/RenderDataWorker-DJjFWldW.js) | `assets/index-TPKpDRK1.js` |
+| **Cook's Assistant Quest** | [`assets/cooks-assistant.js`](./assets/cooks-assistant.js) | `index.html` (`?v=8.5`) |
+| **Tile Coordinate HUD** | [`assets/tile-coords.js`](./assets/tile-coords.js) | `index.html` (`?v=8.5`) |
+| **Debug / God Mode** | [`assets/debug-mode.js`](./assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
+| **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](./assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-CvUyPoMO.js`](./assets/MapViewerApp-CvUyPoMO.js) | `assets/index-DFhq8KrM.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](./assets/RenderDataWorker-DJjFWldW.js) | `assets/index-DFhq8KrM.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](./assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-BdnIUByq.js`](./assets/module-BdnIUByq.js) | `assets/index-TPKpDRK1.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-D4Rj_YIr.js`](./assets/module-D4Rj_YIr.js) | `assets/index-DFhq8KrM.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](./caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](./caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Inline Hooks in `assets/index-XWbnxuVz.js`
-When merging a new upstream `index-*.js` bundle, ensure the following global hooks and custom patches are preserved or ported to the new bundle:
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-DFhq8KrM.js`)
+When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
 1. **Client Instance Export (`window.gameClient`)**:
-   - Exposes the primary game client instance (`xw`, formerly `vw`) as `window.gameClient = p` during initialization (`xw.create`) and attaches helper methods (`getEnemyDef: Jn`, `getAppearance: E0`, `getSimAppearance: U$`, `iconCache: A0`, `getCharacters: () => Ja`, `getMaps: () => aC`, `getThrallDefs: () => Zh`) so [`assets/multiplayer.js`](./assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim` (`r$`, formerly `KW`).
+   - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](./assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
 2. **Multiplayer Hook Callbacks (`window.multiplayer`)**:
-   - References in `index-XWbnxuVz.js` delegate state transitions, spectator flow-field/pickup guards, minimap player dots, pause checks, and post-run damage leaderboards (`DZ`) to `window.multiplayer`.
+   - References across `src/game/` delegate state transitions, spectator flow-field/pickup guards, minimap player dots, pause checks, and post-run damage leaderboards to `window.multiplayer`.
 3. **OSRS Overhead Prayer Hooks (`window._osrsPrayer`, `window._drawOsrsPrayerOverlay`, `window._hideOsrsPrayerBar`)**:
    - Used for Fight Caves (`fight_caves`) protection prayers (`magic` / `ranged` / `melee` via `Q` / `E` / `R`) against `tztok_jad` (NPC 3127) and `tzkal_zuk` (NPC 7706).
    - `window._drawOsrsPrayerOverlay(viewport, sim, alpha, ctx, scale, playerScreenPos)` renders overhead prayer icons and boss attack windup banners.
 4. **Custom Maps, Characters, Weapons & Boss Definitions**:
-   - `fight_caves`: Spawns TzTok-Jad (`tztok_jad`, NPC 3127) at 6:00 (`at: 360`) and TzKal-Zuk (`tzkal_zuk`, NPC 7706, collision radius `0.45`) at 12:00 (`at: 720`), plus custom cache archives in `caches/osrs-241_2026-09-30-slim-4cd931ae/`.
-   - Custom secret-code characters in `Ja`: `dipper` (NPC `16370`, code `dipperthedog`) and `elias` (NPC `16543`, code `barkelly`), rendered in 2D icons via `QG` (`t < 0`) and in 3D via `drawPlayer` / `submitActors`.
-   - Custom `blood_burst` -> `blood_barrage` (`id: "blood_barrage"`, `SpotAnim 377`) weapon evolution paired with `rapid_heal` (`perLevel: 12`), plus buffed `Saradomin brew` and `Sanfew serum`.
+   - `fight_caves`: Spawns TzTok-Jad (`tztok_jad`, NPC 3127) at 6:00 (`at: 360`) and TzKal-Zuk (`tzkal_zuk`, NPC 7706, collision radius `0.45`) at 12:00 (`at: 720`), plus custom cache archives in `caches/osrs-241_2026-09-30-slim-74e0d2b3/`.
+   - Custom secret-code characters in `src/game/data/characters.ts`: `dipper` (NPC `16370`, code `dipperthedog`) and `elias` (NPC `16543`, code `barkelly`), rendered in 2D icons and in 3D via `drawPlayer` / `submitActors`.
+   - Custom `blood_burst` -> `blood_barrage` (`id: "blood_barrage"`, `SpotAnim 377`) weapon evolution paired with `rapid_heal`, plus buffed `Saradomin brew` and `Sanfew serum`.
 
 ---
 
@@ -58,6 +58,40 @@ When merging a new upstream `index-*.js` bundle, ensure the following global hoo
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - 12 Co-Op Multiplayer, Animation, Balance, Lobby & UI Fixes + Vite Duplicate Bundle Fix (v8.5)
+- **Commit / PR**: 12 multiplayer/gameplay/UI fixes & Vite script entry fix (`?v=8.5`)
+- **Files Modified**: `vite.config.ts`, `scripts/sync_dist.cjs`, `serve.py`, `src/game/content/weapons.ts`, `src/game/core/Sim.ts`, `src/game/client/GameAssets.ts`, `src/game/client/GameView.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `src/game/ui/QuestScreen.tsx`, `assets/multiplayer.js`, `assets/cooks-assistant.js`, `assets/multiplayer/mp-lobby-ui.js`, `assets/multiplayer/mp-transport.js`, `assets/multiplayer/mp-hud-leaderboard.js`, `assets/multiplayer/mp-actor-renderer.js`, `assets/multiplayer/mp-pickups.js`, `assets/multiplayer/mp-sync-engine.js`, `index.html`, `CHANGELOG.md`, `AGENT_NOTES.md`, `assets/index-DFhq8KrM.js`, `assets/MapViewerApp-CvUyPoMO.js`, `assets/module-D4Rj_YIr.js`
+- **Bundle / Version Impact**: Bumped cache-busting query string from `?v=8.4` to `?v=8.5` across `index.html`, `assets/multiplayer.js`, and all `assets/multiplayer/mp-*.js` submodules. Main bundle changed to `assets/index-DFhq8KrM.js` (reduced from `1.75 MB` to `1.60 MB` by excluding external `assets/*.js` scripts from Vite's Rollup entry points), MapViewer to `assets/MapViewerApp-CvUyPoMO.js`, and WASM loader to `assets/module-D4Rj_YIr.js`.
+- **What Changed**:
+  - **Build Pipeline Fix**: Updated `sourceEntryIndexHtmlPlugin()` in `vite.config.ts` to strip external `./assets/*.js` script tags (`multiplayer.js`, `tile-coords.js`, `cooks-assistant.js`, `debug-mode.js`) during Vite's HTML entry analysis so Rollup no longer bundles duplicate copies of those scripts inside `assets/index-*.js`. Updated `scripts/sync_dist.cjs` to sync `?v=X.Y` across `assets/multiplayer/*.js`.
+  - **Item 1 (Player Level on Infograph & Leaderboard)**: Synced `level` across `coop_loadout`, `sync_world`, and `input`, displaying `Lv.X` on each player's `#coop-party-hud` infograph card and in the `#coop-leaderboard` table in `GameUi.tsx`.
+  - **Item 2 (Weapon Animations & 3D Held Weapon Sync)**: Attached `playerRef` to `SlashFx` in `GameView.ts` so melee slash/sweep arcs render around the attacking player rather than `sim.player`; populated `EquipSlot.WEAPON` in `getCharacterAppearance()`; added sequence IDs `393` and `2062`; buffered early `coop_loadout` packets; preserved weapon `cooldown`/`uses` and `sim.appearanceVersion`; and eliminated duplicate aura/spotAnim playback on Guests.
+  - **Item 3 (Shared Co-Op XP & Host Skills)**: Synced the Host's `upgrades` (`metaStats`), `unlockedItems`, and `armoury` in `game_start` (`GameClient.ts`), and computed a shared lobby XP growth multiplier (`1 + hostMetaGrowth + sum(itemGrowth) / partySize`) applied to all bone pickups and synced via `xpGained` and `totalXp`.
+  - **Item 4 (Single Unique Chest Per Player)**: Deduplicated casket pickups by `pickupUid` (`_openedCasketUids`), used base item IDs (`latestChest.upgradedFrom || latestChest.itemId`) for `excludeItemId`, mixed `localSlot` into `mixRandomSeed()`, and triggered `client.handleEvents`/`syncOverlay` on the Host when a Guest collects a casket.
+  - **Item 5 (Walking Animation Precedence)**: Moved `player.moving` / `p2.moving` ahead of `attack` animation selection in `GameView.ts` and `mp-sync-engine.js`, and prevented `attackSeq` from overriding movement in `Sim.ts`.
+  - **Item 6 (Persistent Lobby Player Names)**: Added `localStorage`-backed per-slot player name persistence (`run-escape-coop-player-names` and `run-escape-coop-local-name`), restored names across `welcome`, `reconcileActiveSlots`, `peer_joined`, `lobby_update`, and `returnToLobby()`, and set `this.gameStarted = false` on Host victory.
+  - **Item 7 (Antique Lamp `1/x` Split)**: Updated `Sim.useUtility` (`case "xp"`) to grant `1` level in solo play and `1/x` of a level synced across all `x` players on the level (`kind: "lamp_xp"`) in multiplayer.
+  - **Item 8 (Blood Barrage & Blood Burst Radius)**: Updated `blood_barrage` (`area: 3.8`, removed `castSpotAnim: 377`) and `blood_burst` (`area: 2.3 -> 2.6 -> 2.9`) in `src/game/content/weapons.ts` to match `ice_barrage` and `ice_burst`.
+  - **Item 9 (Guest Spawn Deduplication)**: Guarded `openLobbyModal` against `WebSocket.CONNECTING`, detached old socket callbacks in `connect()`, allowed `welcome` to update `role`/`localSlot` whenever `!this.gameStarted`, deduplicated `game_start` slots, pruned ghost slots in `applyWorldSync`, and added `"peer_leaving"` handling to `serve.py`.
+  - **Item 10 (Slayer Tasks Tab)**: Renamed `Quests` UI labels, headings, and notices in `GameUi.tsx`, `QuestScreen.tsx`, and `GameClient.ts` to **Slayer Tasks** (noting Cook's Assistant in Lumbridge as the only quest).
+  - **Item 11 (Guest Utility Items & Combat Stats)**: Synced `usedItemId`, `hpDelta`, and `stats` in `coop_loadout` so Guest Bonecrusher, Red/Black Chinchompas, Overload/Zamorak brew self-damage, ground Magnets, and casket/potion combat stats execute authoritatively on the Host.
+  - **Item 12 (Multiplayer Difficulty Multiplier)**: Scaled `enemy.damageScale` by `dmgMult` in `scaleEnemyForCoop` (fixing boss special attacks and enemy explosions), fixed normal enemy damage double-rounding, and added a Host-selectable Difficulty Multiplier (`1x` - `3x`) in the Co-Op Lobby.
+- **Notes / Invariants for Future Agents**:
+  - `sourceEntryIndexHtmlPlugin()` in `vite.config.ts` must continue stripping external `./assets/*.js` module scripts during `vite build` so they are not bundled inside `assets/index-*.js`.
+
+### 2026-10-29 - Antigravity - Legacy Caches, Pre-TypeScript Patch Pipeline & Workspace Cleanup
+- **Commit / PR**: Repository legacy file cleanup (`?v=8.4`)
+- **Files Modified**: `caches/osrs-241_2026-09-30-slim-4a90e306/` (deleted), `caches/osrs-241_2026-09-30-slim-b1840d05/` (deleted), `caches/osrs-241_2026-09-30-slim-4cd931ae/` (deleted), `scripts/apply_patches.js` (deleted), `scripts/discover_symbols.js` (deleted), `scripts/patches/01..06-*.patch.js` (deleted), `ARCHITECTURE_EVALUATION.md` (deleted), `assets/module.wasm` (deleted), `assets/favicon-BwwwC_CH.ico` (deleted), `scripts/sync_dist.cjs`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `../.agents/skills/merge-update/SKILL.md`, `CHANGELOG.md`, `AGENT_NOTES.md`
+- **Bundle / Version Impact**: `?v=8.4` (no bundle hash changes; reclaimed ~65.6 MB of obsolete cache and duplicate asset files)
+- **What Changed**:
+  - Removed 3 superseded OSRS slim cache directories (`osrs-241_2026-09-30-slim-4a90e306`, `osrs-241_2026-09-30-slim-b1840d05`, `osrs-241_2026-09-30-slim-4cd931ae`), saving 64.51 MB while retaining the active `osrs-241_2026-09-30-slim-74e0d2b3` cache.
+  - Removed obsolete pre-TypeScript minified bundle patch scripts (`scripts/apply_patches.js`, `scripts/discover_symbols.js`, `scripts/patches/01..06-*.patch.js`) and `ARCHITECTURE_EVALUATION.md`.
+  - Removed duplicate unhashed `assets/module.wasm` (1.05 MB) and unused `assets/favicon-BwwwC_CH.ico`, and updated `scripts/sync_dist.cjs`.
+  - Removed untracked local debug screenshots (`*.png`), `scratch_model_55847.dat`, and `scratch/`.
+  - Aligned agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `.agents/skills/merge-update/SKILL.md`) with the TypeScript + Vite source workflow.
+- **Notes / Invariants for Future Agents**:
+  - All engine changes are now authored directly in `src/` and built via `npm run build` (`vite build && node scripts/sync_dist.cjs`); do not recreate `scripts/patches/*.patch.js` or unhashed `assets/module.wasm`.
 
 ### 2026-10-29 - Antigravity - Hourly Upstream Auto-Sync Cron on `cuteanimegirls.moe` & GitHub Actions (`scripts/auto_sync_upstream.cjs`)
 - **Commit / PR**: Automated upstream cron sync (`?v=8.4`)

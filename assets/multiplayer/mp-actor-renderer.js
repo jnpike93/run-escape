@@ -1,14 +1,35 @@
 // Run Escape - Multiplayer Actor Appearance Baking & Loadout Sync Methods
-import { sanitizeSlot } from './mp-constants.js?v=8.1';
+import { sanitizeSlot } from './mp-constants.js?v=8.5';
 
 export const mpActorRendererMethods = {
-    sendLoadoutSync(client, healed = false) {
+    getLobbyGrowthMultiplier(sim) {
+        if (!sim) return 0;
+        const hostMetaGrowth = Number(sim.metaStats?.growth) || 0;
+        const localTotalGrowth = Number(sim.stats?.growth) || 0;
+        const localItemGrowth = Math.max(0, localTotalGrowth - hostMetaGrowth);
+        const remoteCount = this.remotePeers ? this.remotePeers.size : 0;
+        const partySize = Math.max(1, 1 + remoteCount);
+        let sumItemGrowth = localItemGrowth;
+        if (this.remotePeers) {
+            for (const peer of this.remotePeers.values()) {
+                const peerItemG = Number(peer.itemGrowth);
+                if (Number.isFinite(peerItemG) && peerItemG > 0) {
+                    sumItemGrowth += peerItemG;
+                }
+            }
+        }
+        return hostMetaGrowth + (sumItemGrowth / partySize);
+    },
+
+    sendLoadoutSync(client, healed = false, extra = null) {
         if (!client || !client.sim || this.remotePeers.size === 0) return;
         const sim = client.sim;
         try {
             client.updateHud?.(true);
         } catch (err) {}
         const hud = client.store?.getSnapshot()?.hud;
+        const hostMetaGrowth = Number(sim.metaStats?.growth) || 0;
+        const itemGrowth = Math.max(0, (Number(sim.stats?.growth) || 0) - hostMetaGrowth);
 
         const weapons = (sim.weapons || []).map((w, idx) => {
             const hw = hud?.weapons?.[idx];
@@ -67,11 +88,16 @@ export const mpActorRendererMethods = {
         this.send({
             type: 'coop_loadout',
             slot: this.localSlot,
+            level: Math.max(1, Math.round(Number(sim.level) || 1)),
             weapons,
             passives,
             gear,
             inventory,
             appearance,
+            stats: sim.stats ? { ...sim.stats } : null,
+            itemGrowth: Number(itemGrowth.toFixed(4)),
+            usedItemId: extra?.usedItemId || null,
+            hpDelta: Number.isFinite(Number(extra?.hpDelta)) ? Math.round(Number(extra.hpDelta)) : 0,
             hp: Math.round(sim.player.hp),
             maxHp: Math.round(sim.player.maxHp),
             healed: Boolean(healed)
@@ -79,7 +105,20 @@ export const mpActorRendererMethods = {
     },
 
     async bakeRemotePeerAppearance(client, peer, appearance) {
-        if (!client || !client.assets || !peer || !appearance || !Array.isArray(appearance.equipment)) return;
+        if (!client || !client.assets || !peer || !appearance) return;
+        if (Array.isArray(appearance) && client.getSimAppearance && client.sim) {
+            try {
+                appearance = client.getSimAppearance({
+                    ...client.sim,
+                    characterId: peer.characterId || peer.entity?.characterId || 'warrior',
+                    weapons: peer.weapons || [],
+                    gear: {}
+                });
+            } catch (err) {
+                appearance = null;
+            }
+        }
+        if (!appearance || !Array.isArray(appearance.equipment)) return;
         const equipKey = appearance.equipment.join(',');
         const dynKey = `player_dynamic_${peer.slot}`;
         if (peer.lastEquipKey === equipKey && client.assets.models.has(dynKey)) {
@@ -120,13 +159,36 @@ export const mpActorRendererMethods = {
     },
 
     applyRemoteLoadout(msg) {
+        if (!msg || typeof msg !== 'object') return;
         const client = window.gameClient;
-        if (!client || !client.sim || !msg || typeof msg !== 'object') return;
+        const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, this.role === 'host' ? 2 : 1);
+        if (!client || !client.sim || !this.gameStarted || !this.remotePeers || !this.remotePeers.has(senderSlot)) {
+            if (!this._pendingLoadouts) this._pendingLoadouts = new Map();
+            this._pendingLoadouts.set(senderSlot, msg);
+            return;
+        }
         const sim = client.sim;
-        const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, 0);
         const peer = this.remotePeers.get(senderSlot);
         if (!peer || !peer.entity) return;
         const p2 = peer.entity;
+        peer._loadoutReceived = true;
+
+        if (Number.isFinite(Number(msg.level))) {
+            const lvl = Math.max(1, Math.min(999, Math.round(Number(msg.level))));
+            peer.level = lvl;
+            p2.level = lvl;
+            const dStat = this.damageStats?.get(senderSlot);
+            if (dStat) dStat.level = lvl;
+        }
+
+        if (msg.stats && typeof msg.stats === 'object') {
+            peer.stats = { ...msg.stats };
+        }
+        if (Number.isFinite(Number(msg.itemGrowth))) {
+            peer.itemGrowth = Math.max(0, Number(msg.itemGrowth));
+        } else if (peer.stats && Number.isFinite(Number(peer.stats.growth))) {
+            peer.itemGrowth = Math.max(0, Number(peer.stats.growth) - (Number(sim.metaStats?.growth) || 0));
+        }
 
         if (Number.isFinite(Number(msg.maxHp))) {
             const newMaxHp = Math.max(1, Math.min(1000, Math.round(Number(msg.maxHp))));
@@ -135,12 +197,59 @@ export const mpActorRendererMethods = {
             }
             p2.maxHp = newMaxHp;
         }
-        if (msg.healed && Number.isFinite(Number(msg.hp))) {
+        if (Number.isFinite(Number(msg.hpDelta)) && Number(msg.hpDelta) !== 0) {
+            p2.hp = Math.max(1, Math.min(p2.maxHp, Math.round(p2.hp + Number(msg.hpDelta))));
+        } else if (msg.healed && Number.isFinite(Number(msg.hp))) {
             p2.hp = Math.max(p2.hp, Math.min(p2.maxHp, Math.round(Number(msg.hp))));
+        }
+
+        if (this.role === 'host' && msg.usedItemId && client.sim) {
+            if (msg.usedItemId === 'bonecrusher') {
+                const attractKey = 'attracted_s' + peer.slot;
+                const speedKey = 'speed_s' + peer.slot;
+                for (const pickup of client.sim.pickups) {
+                    if (pickup.kind === 'bones' || pickup.kind === 'big_bones') {
+                        pickup[attractKey] = true;
+                        pickup[speedKey] = Math.max(pickup[speedKey] || 0, 0.15);
+                    }
+                }
+            } else if (msg.usedItemId === 'red_chinchompa' || msg.usedItemId === 'black_chinchompa') {
+                const isBlack = msg.usedItemId === 'black_chinchompa';
+                const baseDmg = isBlack ? 85 : 40;
+                const baseRadius = isBlack ? 5.5 : 4.2;
+                const spotAnim = isBlack ? 157 : 156;
+                const areaMult = 1 + (Number(peer.stats?.area) || Number(sim.stats?.area) || 0);
+                const radius = baseRadius * areaMult;
+                const prevAttacker = this._activeAttackerSlot;
+                const savedStats = sim.stats;
+                this._activeAttackerSlot = peer.slot;
+                if (peer.stats) sim.stats = { ...savedStats, ...peer.stats };
+                try {
+                    if (typeof sim.addEffect === 'function') {
+                        sim.addEffect(spotAnim, p2.x, p2.y, 60);
+                    }
+                    let effects = 0;
+                    for (const enemy of sim.enemies) {
+                        if (enemy.dead) continue;
+                        if (Math.hypot(enemy.x - p2.x, enemy.y - p2.y) <= radius + (enemy.radius || 0.4)) {
+                            sim.damageEnemy(enemy, baseDmg, 0.35, p2.x, p2.y);
+                            if (effects < 8 && typeof sim.addEffect === 'function') {
+                                sim.addEffect(spotAnim, enemy.x, enemy.y, 60);
+                                effects++;
+                            }
+                        }
+                    }
+                } finally {
+                    sim.stats = savedStats;
+                    this._activeAttackerSlot = prevAttacker;
+                }
+            }
         }
 
         if (Array.isArray(msg.weapons) && msg.weapons.length > 0 && msg.weapons.length <= 8) {
             const savedWeapons = sim.weapons;
+            const savedAppVer = sim.appearanceVersion;
+            const prevWeaponsById = new Map((peer.weapons || []).map(pw => [pw.def?.id || pw.id, pw]));
             const built = [];
             try {
                 for (const w of msg.weapons) {
@@ -151,7 +260,13 @@ export const mpActorRendererMethods = {
                     if (sim.weapons.length > 0) {
                         const inst = sim.weapons[0];
                         inst.level = Math.max(1, Math.min(99, Math.round(Number(w.level) || 1)));
-                        inst.cooldown = Math.min(inst.cooldown || 10, 10);
+                        const prevW = prevWeaponsById.get(cleanId) || prevWeaponsById.get(w.id);
+                        if (prevW) {
+                            inst.cooldown = prevW.cooldown;
+                            inst.uses = prevW.uses || 0;
+                        } else {
+                            inst.cooldown = Math.min(inst.cooldown || 10, 10);
+                        }
                         built.push(inst);
                     }
                 }
@@ -159,6 +274,7 @@ export const mpActorRendererMethods = {
                 console.warn(`[Multiplayer] Error syncing slot ${senderSlot} weapons:`, err);
             } finally {
                 sim.weapons = savedWeapons;
+                sim.appearanceVersion = savedAppVer;
             }
             if (built.length > 0) {
                 peer.weapons = built;

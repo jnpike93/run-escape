@@ -23,11 +23,10 @@ const PRESERVED_ASSETS = new Set([
     "tile-coords.js",
     "debug-mode.js",
     "quest-complete.ogg",
-    "module.wasm",
 ]);
 
 const OBSOLETE_HASHED_RE =
-    /^(index|MapViewerApp|RenderDataWorker|module)-.*\.(js|css|wasm)(\.map)?$/;
+    /^(index|MapViewerApp|RenderDataWorker|module|favicon)-.*\.(js|css|wasm|ico)(\.map)?$/;
 
 function main() {
     if (!fs.existsSync(DIST_ASSETS_DIR)) {
@@ -38,7 +37,7 @@ function main() {
     fs.mkdirSync(ROOT_ASSETS_DIR, { recursive: true });
 
     // Determine active cache-busting query string (?v=X.Y)
-    let versionQuery = "?v=8.4";
+    let versionQuery = "?v=8.5";
     const argVer = process.argv.find((a) => a.startsWith("--version="));
     if (argVer) {
         versionQuery = `?v=${argVer.split("=")[1]}`;
@@ -66,8 +65,10 @@ function main() {
         }
     }
 
-    // 2. Copy all built files (excluding .map sourcemaps) from dist/assets/ into root assets/
-    const distEntries = fs.readdirSync(DIST_ASSETS_DIR).filter((e) => !e.endsWith(".map"));
+    // 2. Copy all built files (excluding .map sourcemaps and hashed favicons) from dist/assets/ into root assets/
+    const distEntries = fs
+        .readdirSync(DIST_ASSETS_DIR)
+        .filter((e) => !e.endsWith(".map") && !/^favicon-.*\.ico$/.test(e));
     let newIndexJs = null;
     let newIndexCss = null;
 
@@ -139,6 +140,16 @@ function main() {
     if (fs.existsSync(mpPath)) {
         const mpCode = fs.readFileSync(mpPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
         fs.writeFileSync(mpPath, mpCode, "utf8");
+    }
+
+    const mpDir = path.join(ROOT_ASSETS_DIR, "multiplayer");
+    if (fs.existsSync(mpDir)) {
+        for (const entry of fs.readdirSync(mpDir)) {
+            if (!entry.endsWith(".js")) continue;
+            const subPath = path.join(mpDir, entry);
+            const subCode = fs.readFileSync(subPath, "utf8").replace(/\?v=[0-9.]+/g, versionQuery);
+            fs.writeFileSync(subPath, subCode, "utf8");
+        }
     }
 
     console.log(

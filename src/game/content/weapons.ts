@@ -3,8 +3,8 @@ import { CombatStyle, SpecialAttackDef, WeaponDef, WeaponLevel } from "./types";
 // Builds a weapon's level table from its first level and what each later level
 // changes, so each level only states its differences.
 function levels(
-    base: Omit<WeaponLevel, "description"> & { description?: string },
-    ...changes: (Partial<WeaponLevel> & { description: string })[]
+    base: Omit<WeaponLevel, "description"> & { description?: string; heal?: number },
+    ...changes: (Partial<WeaponLevel> & { description: string; heal?: number })[]
 ): WeaponLevel[] {
     const result: WeaponLevel[] = [{ description: "", ...base }];
     for (const change of changes) {
@@ -567,29 +567,21 @@ export const WEAPONS: WeaponDef[] = [
                 damage: 11,
                 cooldown: 1.8,
                 amount: 1,
-                area: 3,
+                area: 2.3,
                 pierce: 0,
                 speed: 0,
                 duration: 0,
                 knockback: 0.25,
-                castSpotAnim: 376,
                 impactSpotAnim: 376,
                 objId: 25489,
             },
-            { area: 3.4, description: "+13% radius (3.4 tiles)." },
+            { area: 2.6, description: "+13% radius." },
             { damage: 14, description: "+3 damage." },
             { cooldown: 1.55, description: "+16% attack speed (1.55s cooldown)." },
             { damage: 18, description: "+4 damage." },
-            { area: 3.9, description: "+15% radius (3.9 tiles)." },
+            { area: 2.9, description: "+12% radius." },
             { damage: 23, description: "+5 damage." },
-            {
-                name: "Blood Barrage",
-                cooldown: 1.3,
-                damage: 28,
-                castSpotAnim: 377,
-                impactSpotAnim: 377,
-                description: "Upgrades to Blood Barrage: +19% attack speed (1.3s cooldown) and +5 damage.",
-            },
+            { damage: 17, heal: 2, description: "+3 damage, +1 heal." },
         ),
         evolution: { into: "blood_barrage", requiresPassive: "rapid_heal" },
         pairedPassive: "rapid_heal",
@@ -658,7 +650,7 @@ export const WEAPONS: WeaponDef[] = [
         name: "Blood Barrage",
         kind: "aura",
         description:
-            "Evolved Blood Burst. Erupts Blood Barrage fountains around you and on every enemy hit, draining life (25% chance per hit to heal 25% of damage dealt, up to 2 HP).",
+            "Drains the life of every enemy around you, healing you each cast.",
         iconObjId: 25489,
         playerSeq: 1979,
         sound: 168,
@@ -672,12 +664,11 @@ export const WEAPONS: WeaponDef[] = [
             damage: 38,
             cooldown: 1.1,
             amount: 1,
-            area: 4.5,
+            area: 3.8,
             pierce: 0,
             speed: 0,
             duration: 0,
             knockback: 0.35,
-            castSpotAnim: 377,
             impactSpotAnim: 377,
             objId: 25489,
             description: "Evolved from Blood Burst. Massive crimson barrage that drains up to 2 HP per hit.",

@@ -9,7 +9,7 @@ import {
     sanitizeRoomId,
     sanitizeCharacter,
     sanitizeSlot
-} from './mp-constants.js?v=8.1';
+} from './mp-constants.js?v=8.5';
 
 export const mpTransportMethods = {
     getSortedRemotePeers() {
@@ -34,7 +34,13 @@ export const mpTransportMethods = {
 
     connect(roomId) {
         if (this.ws) {
-            try { this.ws.close(); } catch(e) {}
+            try {
+                this.ws.onopen = null;
+                this.ws.onmessage = null;
+                this.ws.onclose = null;
+                this.ws.onerror = null;
+                this.ws.close();
+            } catch(e) {}
         }
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
@@ -50,9 +56,11 @@ export const mpTransportMethods = {
         const wsUrl = `${proto}//${window.location.host}/ws?room=${encodeURIComponent(safeRoom)}`;
         console.log('[Multiplayer] Connecting to:', wsUrl);
 
-        this.ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(wsUrl);
+        this.ws = ws;
 
-        this.ws.onopen = () => {
+        ws.onopen = () => {
+            if (this.ws !== ws) return;
             console.log('[Multiplayer] WebSocket connected');
             this.heartbeatInterval = setInterval(() => {
                 this.send({ type: 'ping' });
@@ -60,7 +68,8 @@ export const mpTransportMethods = {
             this.checkLocalReady();
         };
 
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
+            if (this.ws !== ws) return;
             try {
                 const msg = JSON.parse(event.data);
                 this.handleMessage(msg);
@@ -69,7 +78,8 @@ export const mpTransportMethods = {
             }
         };
 
-        this.ws.onclose = () => {
+        ws.onclose = () => {
+            if (this.ws !== ws) return;
             console.log('[Multiplayer] WebSocket closed');
             if (this.heartbeatInterval) {
                 clearInterval(this.heartbeatInterval);
@@ -82,7 +92,8 @@ export const mpTransportMethods = {
             this.updateLobbyUI();
         };
 
-        this.ws.onerror = (err) => {
+        ws.onerror = (err) => {
+            if (this.ws !== ws) return;
             console.error('[Multiplayer] WebSocket error:', err);
         };
     }
@@ -122,7 +133,7 @@ export const mpTransportMethods = {
             if (!this.lobbyPlayers.has(s)) {
                 this.lobbyPlayers.set(s, {
                     slot: s,
-                    name: `Player ${s}`,
+                    name: (this.getRememberedPlayerName && this.getRememberedPlayerName(s)) || ('Player ' + s),
                     character: SLOT_DEFAULT_CHARS[s] || 'warrior',
                     ready: false,
                     isHost: s === this.hostSlot
@@ -151,7 +162,7 @@ export const mpTransportMethods = {
                 break;
 
             case 'welcome': {
-                if (this.role !== null) break;
+                if (this.gameStarted) break;
                 if (msg.role !== 'host' && msg.role !== 'guest') break;
                 this.role = msg.role;
                 this.localSlot = sanitizeSlot(msg.slot, msg.role === 'host' ? 1 : 2);
@@ -162,8 +173,14 @@ export const mpTransportMethods = {
                     const cleanRoom = sanitizeRoomId(msg.room);
                     if (cleanRoom) this.roomId = cleanRoom;
                 }
-                if (!this.localNameCustomized) {
-                    this.localName = `Player ${this.localSlot}`;
+                const remembered = this.getRememberedPlayerName ? this.getRememberedPlayerName(this.localSlot) : '';
+                if (remembered) {
+                    this.localName = remembered;
+                    this.localNameDraft = remembered;
+                    this.localNameCustomized = true;
+                } else if (!this.localNameCustomized) {
+                    this.localName = 'Player ' + this.localSlot;
+                    this.localNameDraft = this.localName;
                 }
                 this.lobbyPlayers.clear();
                 this.syncLocalToLobbyPlayers();
@@ -182,7 +199,7 @@ export const mpTransportMethods = {
                 if (!this.lobbyPlayers.has(joinedSlot)) {
                     this.lobbyPlayers.set(joinedSlot, {
                         slot: joinedSlot,
-                        name: `Player ${joinedSlot}`,
+                        name: (this.getRememberedPlayerName && this.getRememberedPlayerName(joinedSlot)) || ('Player ' + joinedSlot),
                         character: SLOT_DEFAULT_CHARS[joinedSlot] || 'warrior',
                         ready: false,
                         isHost: joinedSlot === this.hostSlot
@@ -258,8 +275,27 @@ export const mpTransportMethods = {
 
             case 'lobby_update': {
                 const senderSlot = sanitizeSlot(msg.senderSlot || msg.slot, this.role === 'host' ? 2 : 1);
-                const incomingName = sanitizeName(msg.name) || `Player ${senderSlot}`;
+                const incomingName = sanitizeName(msg.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(senderSlot)) || `Player ${senderSlot}`;
                 const hostUnlocked = this.getUnlockedCharacters();
+
+                if (this.savePlayerNameForSlot && !/^Player\s+[1-4]$/i.test(incomingName)) {
+                    this.savePlayerNameForSlot(senderSlot, incomingName);
+                }
+
+                if (this.gameStarted) {
+                    const activePeer = this.remotePeers.get(senderSlot);
+                    if (activePeer && incomingName) {
+                        activePeer.name = incomingName;
+                        this.lastPartyHudFastKey = '';
+                    }
+                }
+
+                if (msg.difficultyMult !== undefined) {
+                    const dm = Number(msg.difficultyMult);
+                    if (Number.isFinite(dm) && dm >= 0.5 && dm <= 10) {
+                        this.difficultyMult = dm;
+                    }
+                }
 
                 if (this.role === 'host') {
                     if (senderSlot !== this.localSlot) {
@@ -305,10 +341,21 @@ export const mpTransportMethods = {
                             if (s < 1 || s > 4) continue;
                             nextSlots.add(s);
                             if (p.isHost) this.hostSlot = s;
+                            const pName = sanitizeName(p.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(s)) || `Player ${s}`;
+                            if (this.savePlayerNameForSlot && !/^Player\s+[1-4]$/i.test(pName)) {
+                                this.savePlayerNameForSlot(s, pName);
+                            }
+                            if (this.gameStarted) {
+                                const activePeer = this.remotePeers.get(s);
+                                if (activePeer && pName) {
+                                    activePeer.name = pName;
+                                    this.lastPartyHudFastKey = '';
+                                }
+                            }
                             if (s === this.localSlot) continue;
                             this.lobbyPlayers.set(s, {
                                 slot: s,
-                                name: sanitizeName(p.name) || `Player ${s}`,
+                                name: pName,
                                 character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
                                 ready: Boolean(p.ready),
                                 isHost: Boolean(p.isHost)
@@ -337,35 +384,73 @@ export const mpTransportMethods = {
             case 'game_start': {
                 if (this.role !== 'guest' || this.gameStarted) break;
                 if (!msg.config || typeof msg.config !== 'object') break;
+                const cfg = msg.config;
                 this.gameStarted = true;
-                const rawPlayers = Array.isArray(msg.config.players) ? msg.config.players : [];
-                const sanitizedPlayers = rawPlayers
+                const rawPlayers = Array.isArray(cfg.players) ? cfg.players : [];
+                const dedupedMap = new Map();
+                rawPlayers
                     .filter(p => p && typeof p === 'object')
                     .slice(0, 4)
-                    .map((p, idx) => {
+                    .forEach((p, idx) => {
                         const s = sanitizeSlot(p.slot, idx + 1);
-                        return {
+                        const pName = sanitizeName(p.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(s)) || `Player ${s}`;
+                        if (this.savePlayerNameForSlot && !/^Player\s+[1-4]$/i.test(pName)) {
+                            this.savePlayerNameForSlot(s, pName);
+                        }
+                        dedupedMap.set(s, {
                             slot: s,
-                            name: sanitizeName(p.name) || `Player ${s}`,
+                            name: pName,
                             character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
                             isHost: Boolean(p.isHost)
-                        };
+                        });
                     });
+                const sanitizedPlayers = Array.from(dedupedMap.values()).sort((a, b) => a.slot - b.slot);
+
+                if (!sanitizedPlayers.some(p => p.slot === this.localSlot)) {
+                    const matched =
+                        sanitizedPlayers.find(p => !p.isHost && p.slot !== 1 && p.name === this.localName) ||
+                        sanitizedPlayers.find(p => !p.isHost && p.slot !== 1);
+                    if (matched) {
+                        this.localSlot = matched.slot;
+                    }
+                }
+
+                const cleanUpgrades = {};
+                if (cfg.upgrades && typeof cfg.upgrades === 'object') {
+                    for (const [k, v] of Object.entries(cfg.upgrades)) {
+                        if (typeof k === 'string' && k.length <= 40 && Number.isFinite(Number(v))) {
+                            cleanUpgrades[k] = Math.max(0, Math.min(20, Math.round(Number(v))));
+                        }
+                    }
+                }
+                const cleanArmoury = {};
+                if (cfg.armoury && typeof cfg.armoury === 'object') {
+                    for (const [k, v] of Object.entries(cfg.armoury)) {
+                        if (typeof k === 'string' && k.length <= 40) {
+                            cleanArmoury[k] = Boolean(v);
+                        }
+                    }
+                }
 
                 this.gameConfig = {
-                    seed: Number.isFinite(Number(msg.config.seed)) ? (Number(msg.config.seed) >>> 0) : 1,
-                    mapId: sanitizeMapId(msg.config.mapId, 'lumbridge'),
-                    endless: Boolean(msg.config.endless),
+                    seed: Number.isFinite(Number(cfg.seed)) ? (Number(cfg.seed) >>> 0) : 1,
+                    mapId: sanitizeMapId(cfg.mapId, 'lumbridge'),
+                    endless: Boolean(cfg.endless),
+                    difficultyMult: Number.isFinite(Number(cfg.difficultyMult))
+                        ? Math.max(0.5, Math.min(10, Number(cfg.difficultyMult)))
+                        : (this.difficultyMult || 1.0),
                     partySize: Math.max(2, Math.min(4, sanitizedPlayers.length || 2)),
                     players: sanitizedPlayers,
-                    unlockedItems: Array.isArray(msg.config.unlockedItems)
-                        ? msg.config.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
-                        : []
+                    unlockedItems: Array.isArray(cfg.unlockedItems)
+                        ? cfg.unlockedItems.filter(id => typeof id === 'string').slice(0, 200)
+                        : [],
+                    upgrades: cleanUpgrades,
+                    armoury: cleanArmoury
                 };
                 this.selectedMapId = this.gameConfig.mapId;
                 this.selectedEndless = this.gameConfig.endless;
+                this.difficultyMult = this.gameConfig.difficultyMult;
                 console.log('[Multiplayer] Game Starting with 2-4P config:', this.gameConfig);
-                this.closeLobbyModal();
                 this.launchCoopRun(this.gameConfig);
                 break;
             }
@@ -499,6 +584,50 @@ export const mpTransportMethods = {
 ,
 
     returnToLobby() {
+        const prevPlayers = new Map();
+        if (Array.isArray(this.gameConfig?.players)) {
+            for (const p of this.gameConfig.players) {
+                if (!p) continue;
+                const s = sanitizeSlot(p.slot, 1);
+                const pName = sanitizeName(p.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(s)) || `Player ${s}`;
+                if (this.savePlayerNameForSlot && !/^Player\s+[1-4]$/i.test(pName)) {
+                    this.savePlayerNameForSlot(s, pName);
+                }
+                prevPlayers.set(s, {
+                    slot: s,
+                    name: pName,
+                    character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
+                    ready: true,
+                    isHost: Boolean(p.isHost || s === this.hostSlot)
+                });
+            }
+        }
+        for (const [s, peer] of this.remotePeers.entries()) {
+            const pName = sanitizeName(peer.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(s)) || `Player ${s}`;
+            if (this.savePlayerNameForSlot && !/^Player\s+[1-4]$/i.test(pName)) {
+                this.savePlayerNameForSlot(s, pName);
+            }
+            prevPlayers.set(s, {
+                slot: s,
+                name: pName,
+                character: sanitizeCharacter(peer.characterId, SLOT_DEFAULT_CHARS[s] || 'warrior'),
+                ready: true,
+                isHost: s === this.hostSlot
+            });
+        }
+        for (const [s, lp] of prevPlayers.entries()) {
+            if (!this.lobbyPlayers.has(s)) {
+                this.lobbyPlayers.set(s, lp);
+            } else {
+                const existing = this.lobbyPlayers.get(s);
+                if (!existing.name || /^Player\s+[1-4]$/i.test(existing.name)) {
+                    existing.name = lp.name;
+                }
+            }
+        }
+        this.localName = (this.getRememberedPlayerName && this.getRememberedPlayerName(this.localSlot)) || this.localName;
+        this.localNameDraft = this.localName;
+
         this.lastLeaderboard = null;
         this.gameStarted = false;
         this._gameOverSent = false;
@@ -506,6 +635,7 @@ export const mpTransportMethods = {
         this.localPauseState = null;
         this.spectateSlot = null;
         this.remotePeers.clear();
+        this.invalidateSortedRemotePeers();
         this.removePauseOverlay();
         window._hideOsrsPrayerBar?.();
         const hud = document.getElementById('coop-party-hud');

@@ -541,7 +541,7 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                         className="ui-button ui-button-big"
                         onClick={() => client.showScreen("quests")}
                     >
-                        Quests
+                        Slayer Tasks
                     </button>
                     <button
                         className="ui-button ui-button-big"
@@ -1402,9 +1402,9 @@ function QuestTracker({
             <button
                 className="ui-quest-tracker-title"
                 onClick={() => client.toggleQuestTracker()}
-                title="Show or hide the quests (Q)"
+                title="Show or hide slayer tasks (Q)"
             >
-                Quests {open ? "▾" : "▸"}
+                Slayer Tasks {open ? "▾" : "▸"}
             </button>
             {open &&
                 quests.map((quest) => (
@@ -1534,7 +1534,7 @@ function PauseModal({
                     <div className="ui-pause-column">
                         {hud.quests.length > 0 && (
                             <>
-                                <h3 className="ui-pause-heading">Quests</h3>
+                                <h3 className="ui-pause-heading">Slayer Tasks</h3>
                                 <div className="ui-pause-list">
                                     {hud.quests.map((quest) => (
                                         <div
@@ -1638,7 +1638,7 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                 )}
                 {result?.quests.map((quest) => (
                     <p key={quest.name} className="ui-unlocked">
-                        Quest complete: {quest.name}! <Coins amount={quest.coins} />
+                        Slayer task complete: {quest.name}! <Coins amount={quest.coins} />
                     </p>
                 ))}
                 {result && (
@@ -1712,6 +1712,7 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                     <th style={{ textAlign: "left", padding: "2px 4px" }}>
                                         Player
                                     </th>
+                                    <th style={{ textAlign: "right", padding: "2px 4px" }}>Lv</th>
                                     <th style={{ textAlign: "right", padding: "2px 4px" }}>
                                         Damage
                                     </th>
@@ -1744,6 +1745,15 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                                 >
                                                     ({row.charName})
                                                 </span>
+                                            </td>
+                                            <td
+                                                style={{
+                                                    textAlign: "right",
+                                                    padding: "2px 4px",
+                                                    color: "#00ff00",
+                                                }}
+                                            >
+                                                {row.level || 1}
                                             </td>
                                             <td
                                                 style={{

@@ -149,18 +149,23 @@ function sourceEntryIndexHtmlPlugin(): Plugin {
         transformIndexHtml: {
             order: "pre",
             handler(html) {
-                if (html.includes("/src/index.tsx")) {
-                    return html;
+                let out = html;
+                if (!out.includes("/src/index.tsx")) {
+                    out = out
+                        .replace(
+                            /<script\s+type="module"\s+crossorigin\s+src="\.\/assets\/index-[^"]+\.js[^"]*"><\/script>/,
+                            '<script type="module" src="/src/index.tsx"></script>',
+                        )
+                        .replace(
+                            /\s*<link\s+rel="stylesheet"\s+crossorigin\s+href="\.\/assets\/index-[^"]+\.css[^"]*">\s*/,
+                            "\n    ",
+                        );
                 }
-                return html
-                    .replace(
-                        /<script\s+type="module"\s+crossorigin\s+src="\.\/assets\/index-[^"]+\.js[^"]*"><\/script>/,
-                        '<script type="module" src="/src/index.tsx"></script>',
-                    )
-                    .replace(
-                        /\s*<link\s+rel="stylesheet"\s+crossorigin\s+href="\.\/assets\/index-[^"]+\.css[^"]*">\s*/,
-                        "\n    ",
-                    );
+                out = out.replace(
+                    /\s*<script\s+type="module"\s+src="\.\/assets\/(?:multiplayer|tile-coords|cooks-assistant|debug-mode)\.js[^"]*"><\/script>/g,
+                    "",
+                );
+                return out;
             },
         },
     };

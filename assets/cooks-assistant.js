@@ -5,6 +5,8 @@
 // Relies on window.__runEscapeItems (exposed by index-*.js) to register the quest items.
 (() => {
     'use strict';
+    if (window.__runEscapeCooksAssistantLoaded) return;
+    window.__runEscapeCooksAssistantLoaded = true;
 
     const QUEST_ID = 'cooks_assistant';
     const QUEST_NAME = "Cook's Assistant";
