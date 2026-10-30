@@ -39,9 +39,10 @@
         "preview": "vite preview",
         "lint": "prettier --write \"./**/*.{js,ts,jsx,tsx,css,md}\"",
         "download-caches": "node scripts/download-caches.cjs",
-        "export-textures": "npx tsx scripts/cache/export-textures.ts",
-        "export-height-map": "npx tsx scripts/cache/export-height-map.ts",
-        "slim-cache": "npx tsx scripts/cache/slim-cache.ts"
+        "export-textures": "node ./node_modules/tsx/dist/cli.mjs scripts/cache/export-textures.ts",
+        "export-height-map": "node ./node_modules/tsx/dist/cli.mjs scripts/cache/export-height-map.ts",
+        "slim-cache": "node ./node_modules/tsx/dist/cli.mjs scripts/cache/slim-cache.ts",
+        "verify-slim-cache": "node ./node_modules/tsx/dist/cli.mjs scripts/cache/slim-cache.ts --verify"
     },
     "browserslist": {
         "production": [

@@ -8,10 +8,30 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Download Full `osrs-241_2026-09-30` Local Cache, Rebuild Authentic Slim Cache (`fa564245`) & Restore Genuine Models (`10555` Penance Skirt)
+### [2026-10-30] Prevent Slim-Cache Verification Timeouts (`npm run verify-slim-cache` in 5s, 8x Faster `slim-cache`, Worker Guard)
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-JOj9ctmV.js` (`?v=8.5`, MapViewer `MapViewerApp-BqlUigRJ.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-o5mm7YQ2.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Eliminated slim-cache verification and generation timeouts by guarding `expose(worker)` in `RenderDataWorker.ts` when imported in Node, adding a 5-second `npm run verify-slim-cache` (`--verify` / `--verify-full`) mode to `scripts/cache/slim-cache.ts`, optimizing `loadWhatTheGameLoads` in `scripts/cache/slim-cache.ts` (cutting full slim-cache generation from 389s to ~50s while reading the exact same 14,343 cache groups), and invoking `tsx` directly via `node ./node_modules/tsx/dist/cli.mjs` in `package.json`.
+
+**Changes implemented**:
+- **Worker IPC Guard (`src/mapviewer/worker/RenderDataWorker.ts`)**:
+  - Guarded `expose(worker)` with `if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope)` and re-exported `createWorkerState` and `clearWorkerStateCaches` from `./WorkerState` so importing `RenderDataWorker.ts` in Node CLI scripts never attaches a permanent `process` listener that hangs the event loop.
+- **Fast Slim-Cache Verification & Generation (`scripts/cache/slim-cache.ts`, `scripts/cache/load-util.ts`, `package.json`, `AGENTS.md`)**:
+  - Added `--verify` (`npm run verify-slim-cache`, ~5s) and `--verify-full` (~25s) modes to `scripts/cache/slim-cache.ts` with explicit `process.exit(0)` and missing-archive detection.
+  - Stubbed CPU-only WebGL vertex packing (`SceneBuffer`), software minimap rasterization (`MapImageRenderer`), per-frame vertex matrix transforms (`SeqModelAnimator.prototype.animate`, `LocModelLoader.prototype.transformModel`), and scene lighting (`Scene.prototype.light`) in `scripts/cache/slim-cache.ts`, deduplicated NPC/player animation bakes, and built one merged `Scene` per map (`loadSceneLocEntities`), producing the identical 14,343 group reads (`osrs-241_2026-09-30-slim-fa564245`) in ~25s per pass instead of ~195s.
+  - Updated `package.json` cache scripts to invoke `node ./node_modules/tsx/dist/cli.mjs` directly rather than `npx tsx` on Windows.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (verified 3,472 groups in 5.63s), `npm test` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Download Full `osrs-241_2026-09-30` Local Cache, Rebuild Authentic Slim Cache (`fa564245`) & Restore Genuine Models (`10555` Penance Skirt)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `7cb4ce6`
 **Bundle**: `index-aozrqZGM.js` (`?v=8.5`, MapViewer `MapViewerApp-B3h7dzLA.js`, Worker `RenderDataWorker-CmraDDTI.js`, WASM loader `module-BBylQNgT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
 
 **Scope**: Downloaded the full 182 MiB OSRS 241 cache (`caches/osrs-241_2026-09-30/`) locally and added `/caches/osrs-241_2026-09-30/` to `.gitignore` for local cache searching (`scripts/cache/find-objs.ts`, `scripts/cache/find-npcs.ts`) and slim-cache regeneration. Removed all temporary slim-cache model/sprite/sequence substitute overrides (`ObjType.post`, `NpcType.post`, `SpotAnimType.post`, `SeqType.post`, and `chivalry.iconSpriteId: undefined`) and regenerated `caches/osrs-241_2026-09-30-slim-fa564245` (26.0 MB) from the full cache so **Penance fighter** wears genuine OSRS item `10555` (`Penance skirt`, `maleModel: 19252`, `model: 19194`) on his legs (`EquipSlot.LEGS`) and all custom + upstream `0.17.0` items, NPCs, bosses, sequences, and sprites use their authentic cache archives.

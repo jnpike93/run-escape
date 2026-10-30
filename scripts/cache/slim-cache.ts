@@ -39,10 +39,9 @@ import { WEAPONS } from "../../src/game/content/weapons";
 import { LoadedCache } from "../../src/mapviewer/Caches";
 import { ActorBakeLoader } from "../../src/mapviewer/webgl/actor/ActorBakeLoader";
 import { BakeRequest } from "../../src/mapviewer/webgl/actor/ActorBakeTypes";
-import { SdMapDataLoader } from "../../src/mapviewer/webgl/loader/SdMapDataLoader";
+import { SceneBuffer } from "../../src/mapviewer/webgl/buffer/SceneBuffer";
 import { getSdTextureIds } from "../../src/mapviewer/webgl/loader/TextureIndex";
 import { ItemIconLoader } from "../../src/mapviewer/worker/ItemIconLoader";
-import { loadMinimapData } from "../../src/mapviewer/worker/MinimapData";
 import { RegionDataLoader } from "../../src/mapviewer/worker/RegionDataLoader";
 import { RenderDataLoader } from "../../src/mapviewer/worker/RenderDataLoader";
 import { SoundLoader } from "../../src/mapviewer/worker/SoundLoader";
@@ -58,12 +57,19 @@ import { CacheInfo } from "../../src/rs/cache/CacheInfo";
 import { MemoryStore } from "../../src/rs/cache/store/MemoryStore";
 import { Sector } from "../../src/rs/cache/store/Sector";
 import { SectorCluster } from "../../src/rs/cache/store/SectorCluster";
+import { LocModelLoader } from "../../src/rs/config/loctype/LocModelLoader";
+import { SeqType } from "../../src/rs/config/seqtype/SeqType";
+import { MapImageRenderer } from "../../src/rs/map/MapImageRenderer";
+import { Model } from "../../src/rs/model/Model";
 import {
     EquipSlot,
     PlayerAppearance,
     createAppearance,
 } from "../../src/rs/model/player/PlayerModelLoader";
+import { SeqModelAnimator } from "../../src/rs/model/seq/SeqModelAnimator";
 import { Scene } from "../../src/rs/scene/Scene";
+import { getIdFromTag } from "../../src/rs/scene/entity/EntityTag";
+import { LocEntity } from "../../src/rs/scene/entity/LocEntity";
 import { Hasher } from "../../src/util/Hasher";
 import { loadCache, loadCacheInfos } from "./load-util";
 
@@ -74,7 +80,14 @@ const MAP_MARGIN = 2;
 
 const SECTOR_SIZE = Sector.SIZE;
 
-const outDir = (process.argv[2] ?? "dist/caches").replace(/\/?$/, "/");
+const args = process.argv.slice(2);
+const verifyOnly = args.includes("--verify");
+const verifyFull = args.includes("--verify-full");
+const posArgs = args.filter((a) => !a.startsWith("--"));
+const outDir = (posArgs[0] ?? (verifyOnly || verifyFull ? "caches" : "dist/caches")).replace(
+    /\/?$/,
+    "/",
+);
 
 // The map loaders draw minimap images on an OffscreenCanvas, which Node
 // doesn't have. Only what they read from the cache matters here.
@@ -95,6 +108,41 @@ class NodeOffscreenCanvas {
     }
 }
 Object.assign(globalThis, { ImageData: NodeImageData, OffscreenCanvas: NodeOffscreenCanvas });
+
+// Skip CPU-only WebGL vertex packing, software minimap rasterization, and
+// per-frame vertex matrix transforms that do not read from the cache store.
+SceneBuffer.prototype.addTerrain = () => 0;
+SceneBuffer.prototype.addModel = () => {};
+SceneBuffer.prototype.addModelGroup = () => {};
+SceneBuffer.prototype.addModelAnimFrame = () => [0, 0, 0];
+SceneBuffer.prototype.addLocAnimatedGroups = () => [];
+MapImageRenderer.prototype.renderMinimap = () => new Int32Array(0);
+MapImageRenderer.prototype.renderMinimapHd = () => new Int32Array(0);
+Scene.prototype.light = () => {};
+SeqModelAnimator.prototype.animate = function (
+    model: Model,
+    seqType: SeqType,
+    frame: number,
+): Model {
+    if (seqType.isSkeletalSeq()) {
+        this.skeletalSeqLoader?.load(seqType.skeletalId);
+    } else if (seqType.frameIds && seqType.frameIds.length > 0) {
+        this.seqFrameLoader.load(seqType.frameIds[frame]);
+    }
+    return model;
+};
+LocModelLoader.prototype.transformModel = function (
+    model: Model,
+    seqType: SeqType,
+    frame: number,
+): Model {
+    if (seqType.isSkeletalSeq()) {
+        this.skeletalSeqLoader?.load(seqType.skeletalId);
+    } else if (seqType.frameIds && seqType.frameIds.length > 0) {
+        this.seqFrameLoader.load(seqType.frameIds[frame]);
+    }
+    return model;
+};
 
 // Every group read, as "index:archive"
 const reads = new Set<string>();
@@ -206,18 +254,86 @@ function playerRequest(key: string, appearance: PlayerAppearance, seqIds: number
     return { kind: "player", key, appearance, seqIds };
 }
 
-// The map loader logs every square
-async function quietly<T>(load: () => Promise<T>): Promise<T> {
-    const { log, time, timeEnd } = console;
-    console.log = console.time = console.timeEnd = () => {};
-    try {
-        return await load();
-    } finally {
-        Object.assign(console, { log, time, timeEnd });
+function loadSceneLocEntities(
+    state: WorkerState,
+    scene: Scene,
+    borderSize: number,
+    minLevel: number,
+): void {
+    const { locTypeLoader, locModelLoader, varManager } = state;
+    const maxLevel = minLevel;
+    const seenAnimKeys = new Set<number>();
+    const checkEntity = (entity: unknown, tag: bigint) => {
+        if (!entity) return;
+        locTypeLoader.load(getIdFromTag(tag));
+        if (!(entity instanceof LocEntity)) return;
+        let locType = locTypeLoader.load(entity.id);
+        if (locType.transforms) {
+            const transformed = locType.transform(varManager, locTypeLoader);
+            if (!transformed) return;
+            locType = transformed;
+        }
+        if (entity.seqId !== -1) {
+            const key = entity.rotation + (entity.type << 3) + (locType.id << 10);
+            if (seenAnimKeys.has(key)) return;
+            seenAnimKeys.add(key);
+            const seqType = locModelLoader.seqTypeLoader.load(entity.seqId);
+            const frameCount = seqType.isSkeletalSeq()
+                ? seqType.getSkeletalDuration()
+                : (seqType.frameIds?.length ?? 0);
+            for (let i = 0; i < frameCount; i++) {
+                locModelLoader.getModelAnimated(
+                    locType,
+                    entity.type,
+                    entity.rotation,
+                    entity.seqId,
+                    i,
+                );
+            }
+        } else {
+            locModelLoader.getModelAnimated(locType, entity.type, entity.rotation, -1, -1);
+        }
+    };
+
+    const endX = scene.sizeX - borderSize;
+    const endY = scene.sizeY - borderSize;
+    for (let level = minLevel; level < scene.levels; level++) {
+        for (let x = borderSize; x < endX; x++) {
+            for (let y = borderSize; y < endY; y++) {
+                const tile = scene.tiles[level][x][y];
+                if (
+                    !tile ||
+                    (tile.minLevel > maxLevel && !scene.isPlayerLevel(level, x, y, maxLevel))
+                ) {
+                    continue;
+                }
+                if (level > maxLevel && scene.isInside(maxLevel, x, y)) {
+                    continue;
+                }
+                if (tile.floorDecoration) {
+                    checkEntity(tile.floorDecoration.entity, tile.floorDecoration.tag);
+                }
+                if (tile.wall) {
+                    checkEntity(tile.wall.entity0, tile.wall.tag);
+                    checkEntity(tile.wall.entity1, tile.wall.tag);
+                }
+                if (tile.wallDecoration) {
+                    checkEntity(tile.wallDecoration.entity0, tile.wallDecoration.tag);
+                    checkEntity(tile.wallDecoration.entity1, tile.wallDecoration.tag);
+                }
+                for (const loc of tile.locs) {
+                    if (loc.startX !== x || loc.startY !== y) continue;
+                    checkEntity(loc.entity, loc.tag);
+                }
+            }
+        }
     }
 }
 
-async function loadWhatTheGameLoads(cache: LoadedCache): Promise<void> {
+async function loadWhatTheGameLoads(
+    cache: LoadedCache,
+    includeMapScenes: boolean = true,
+): Promise<void> {
     const state = createWorkerState(cache, [], [], undefined as unknown as Cache);
     const load = async <I, D>(loader: RenderDataLoader<I, D>, input: I): Promise<void> => {
         loader.init();
@@ -226,16 +342,42 @@ async function loadWhatTheGameLoads(cache: LoadedCache): Promise<void> {
     };
 
     // The renderer's texture array
-    for (const id of getSdTextureIds(state.textureLoader)) {
+    const allTextureIds = new Set<number>(getSdTextureIds(state.textureLoader));
+    for (const id of allTextureIds) {
         state.textureLoader.getPixelsArgb(id, 128, true, 1.0);
     }
 
-    const playerSeqs = [...Object.values(PLAYER_SEQS), ...getPlayerAttackSeqs()];
+    const baseReqs = GameAssets.getBaseRequests();
+    const playerSeqSet = new Set<number>([...Object.values(PLAYER_SEQS), ...getPlayerAttackSeqs()]);
+    const npcSeqMap = new Map<number, Set<number>>();
+    const otherReqs: BakeRequest[] = [];
+    for (const req of baseReqs) {
+        if (req.kind === "player") {
+            for (const seqId of req.seqIds) playerSeqSet.add(seqId);
+            otherReqs.push({ ...req, seqIds: [] });
+        } else if (req.kind === "npc") {
+            let set = npcSeqMap.get(req.npcId);
+            if (!set) {
+                set = new Set<number>();
+                npcSeqMap.set(req.npcId, set);
+            }
+            for (const seqId of req.seqIds) set.add(seqId);
+        } else {
+            otherReqs.push(req);
+        }
+    }
+    const dedupedNpcReqs: BakeRequest[] = [...npcSeqMap.entries()].map(([npcId, seqs]) => ({
+        kind: "npc",
+        key: `npc:${npcId}`,
+        npcId,
+        seqIds: [...seqs],
+    }));
+
     const playerRequests: BakeRequest[] = [
-        // Every body kit
-        playerRequest("bare", createAppearance(), playerSeqs),
+        // Every body kit + all player sequences
+        playerRequest("bare", createAppearance(), [...playerSeqSet]),
         ...CHARACTERS.map((character) =>
-            playerRequest(character.id, getCharacterAppearance(character.id), playerSeqs),
+            playerRequest(character.id, getCharacterAppearance(character.id), []),
         ),
         ...getWornObjs().map(([slot, objId]) =>
             playerRequest(`${slot}:${objId}`, createAppearance({ [slot]: objId }), []),
@@ -248,12 +390,8 @@ async function loadWhatTheGameLoads(cache: LoadedCache): Promise<void> {
         { kind: "obj", key: "quest:obj:1933", objId: 1933, count: 1 },
     ];
     const bakeLoader = new ActorBakeLoader();
-    const allBakeRequests = [...GameAssets.getBaseRequests(), ...questRequests, ...playerRequests];
-    const BAKE_CHUNK_SIZE = 40;
-    for (let i = 0; i < allBakeRequests.length; i += BAKE_CHUNK_SIZE) {
-        const requests = allBakeRequests.slice(i, i + BAKE_CHUNK_SIZE);
-        await load(bakeLoader, { requests, loadedTextureIds: new Set<number>() });
-    }
+    const allBakeRequests = [...dedupedNpcReqs, ...otherReqs, ...questRequests, ...playerRequests];
+    await load(bakeLoader, { requests: allBakeRequests, loadedTextureIds: allTextureIds });
 
     await load(new SoundLoader(), { ids: getGameSoundIds() });
     // The hitsplats, and the passives with an interface sprite for an icon
@@ -270,38 +408,54 @@ async function loadWhatTheGameLoads(cache: LoadedCache): Promise<void> {
         ),
     });
 
-    const mapLoader = new SdMapDataLoader();
-    for (const map of ALL_MAPS) {
-        const region = getArenaRegion(map);
-        await load(new RegionDataLoader(), region);
+    const borderSize = 6;
+    if (includeMapScenes) {
+        const regionLoader = new RegionDataLoader();
+        regionLoader.init();
+        for (const map of ALL_MAPS) {
+            const region = getArenaRegion(map);
+            await regionLoader.load(state, region);
 
-        const { baseX, baseY, sizeX, sizeY, plane } = region;
-        const firstX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE);
-        const firstY = Math.floor(baseY / Scene.MAP_SQUARE_SIZE);
-        const lastX = Math.ceil((baseX + sizeX) / Scene.MAP_SQUARE_SIZE) - 1;
-        const lastY = Math.ceil((baseY + sizeY) / Scene.MAP_SQUARE_SIZE) - 1;
-        for (let mapX = firstX - MAP_MARGIN; mapX <= lastX + MAP_MARGIN; mapX++) {
-            for (let mapY = firstY - MAP_MARGIN; mapY <= lastY + MAP_MARGIN; mapY++) {
-                // GameWebGLRenderer's settings
-                await quietly(() =>
-                    load(mapLoader, {
-                        mapX,
-                        mapY,
-                        minLevel: plane,
-                        maxLevel: plane,
-                        loadObjs: false,
-                        loadNpcs: false,
-                        smoothTerrain: false,
-                        minimizeDrawCalls: false,
-                        loadedTextureIds: new Set<number>(),
-                    }),
-                );
-            }
+            const { baseX, baseY, sizeX, sizeY, plane } = region;
+            const firstX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const firstY = Math.floor(baseY / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const lastX = Math.ceil((baseX + sizeX) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+            const lastY = Math.ceil((baseY + sizeY) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+
+            const fullBaseX = firstX * Scene.MAP_SQUARE_SIZE - borderSize;
+            const fullBaseY = firstY * Scene.MAP_SQUARE_SIZE - borderSize;
+            const fullSizeX = (lastX - firstX + 1) * Scene.MAP_SQUARE_SIZE + borderSize * 2;
+            const fullSizeY = (lastY - firstY + 1) * Scene.MAP_SQUARE_SIZE + borderSize * 2;
+
+            const scene = state.sceneBuilder.buildScene(
+                fullBaseX,
+                fullBaseY,
+                fullSizeX,
+                fullSizeY,
+                false,
+            );
+            loadSceneLocEntities(state, scene, borderSize, plane);
         }
-        // The minimap's images
-        for (let mapX = firstX; mapX <= lastX; mapX++) {
-            for (let mapY = firstY; mapY <= lastY; mapY++) {
-                await loadMinimapData(state, mapX, mapY, plane, true);
+        clearWorkerStateCaches(state);
+    } else {
+        const seenMapArchiveSquares = new Set<string>();
+        for (const map of ALL_MAPS) {
+            const region = getArenaRegion(map);
+            const { baseX, baseY, sizeX, sizeY } = region;
+            const firstX = Math.floor((baseX - borderSize) / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const firstY = Math.floor((baseY - borderSize) / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const lastX =
+                Math.ceil((baseX + sizeX + borderSize) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+            const lastY =
+                Math.ceil((baseY + sizeY + borderSize) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+            for (let mx = firstX; mx <= lastX; mx++) {
+                for (let my = firstY; my <= lastY; my++) {
+                    const key = `${mx}:${my}`;
+                    if (seenMapArchiveSquares.has(key)) continue;
+                    seenMapArchiveSquares.add(key);
+                    state.sceneBuilder.getTerrainData(mx, my);
+                    state.sceneBuilder.getLocData(mx, my);
+                }
             }
         }
     }
@@ -454,6 +608,33 @@ async function main(): Promise<void> {
     const started = performance.now();
     await Hasher.init();
 
+    if (verifyOnly || verifyFull) {
+        const slimInfo = loadCacheInfos(outDir).find(
+            (c) => c.slimOf === GAME_CACHE_NAME || c.name.startsWith(GAME_CACHE_NAME + "-slim-"),
+        );
+        if (!slimInfo) {
+            throw new Error(`No slim cache for ${GAME_CACHE_NAME} found in ${outDir}caches.json`);
+        }
+        const slim = loadCache(slimInfo, outDir);
+        reads.clear();
+        await loadWhatTheGameLoads(slim, verifyFull);
+        const missing = [...reads].filter((key) => {
+            const [indexId, archiveId] = parseKey(key);
+            return (
+                indexId !== CacheIndex.META_INDEX_ID &&
+                getGroupSize(slim.files, indexId, archiveId) === 0
+            );
+        });
+        if (missing.length > 0) {
+            throw new Error(`Missing from the slim cache: ${missing.join(", ")}`);
+        }
+        const seconds = ((performance.now() - started) / 1000).toFixed(2);
+        console.log(
+            `Verified ${slimInfo.name} (${reads.size} groups read, ${verifyFull ? "full" : "fast"} mode) in ${seconds}s`,
+        );
+        process.exit(0);
+    }
+
     const fullInfo = loadCacheInfos().find((c) => c.name === GAME_CACHE_NAME);
     if (!fullInfo) {
         throw new Error(`Cache ${GAME_CACHE_NAME} not found in caches/caches.json`);
@@ -512,6 +693,7 @@ async function main(): Promise<void> {
 
     const seconds = ((performance.now() - started) / 1000).toFixed(0);
     console.log(`Wrote ${outDir}${name} (${formatMb(size).trim()}) in ${seconds}s`);
+    process.exit(0);
 }
 
 main().catch((e) => {

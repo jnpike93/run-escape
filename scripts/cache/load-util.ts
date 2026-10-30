@@ -5,8 +5,9 @@ import { CacheFiles } from "../../src/rs/cache/CacheFiles";
 import { CacheInfo, getLatestCache } from "../../src/rs/cache/CacheInfo";
 import { detectCacheType } from "../../src/rs/cache/CacheType";
 
-export function loadCacheInfos(): CacheInfo[] {
-    const json = fs.readFileSync("./caches/caches.json", "utf8");
+export function loadCacheInfos(cachesDir = "./caches/"): CacheInfo[] {
+    const dir = cachesDir.replace(/\/?$/, "/");
+    const json = fs.readFileSync(dir + "caches.json", "utf8");
     const infos: CacheInfo[] = JSON.parse(json);
     const fullDir = "./caches/osrs-241_2026-09-30/";
     if (
