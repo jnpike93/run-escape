@@ -11,24 +11,24 @@
 ### [2026-10-30] Add Level & Run Point System across Leaderboard, Results, Map Select & Co-Op
 
 **Model**: Gemini (Antigravity)
-**Commit**: (pending - see git log)
-**Bundle**: `index-ocKLJ9RE.js` (`?v=8.5`, MapViewer `MapViewerApp-Dpc9dsNx.js`, WASM loader `module-D1kqqTqY.js`)
+**Commit**: `44aa956` (updated in follow-up commit)
+**Bundle**: `index-Dr6qKGiO.js` (`?v=8.5`, MapViewer `MapViewerApp-5oVuIFE3.js`, WASM loader `module-CyeDrdpA.js`)
 
-**Scope**: Added a deterministic Level & Run Point System so players can compare their point counts per level, per run, in Co-Op, and overall across all maps.
+**Scope**: Added a deterministic per-level best-run Top Score system so players can compare their best run point scores per level, on the post-run Results screen, and in Co-Op.
 
 **Changes implemented**:
 - **Core Point Calculation & Save Tracking (`src/game/core/custom/customSave.ts`, `src/game/core/save.ts`, `src/game/core/save.test.ts`)**:
-  - Extended `MapBestRecord` with `totalKills`, `bossesKilled`, and `points`.
-  - Implemented `getMapDifficultyMultiplier`, `calculateRunPointsBreakdown`, `calculateRunPoints`, `calculateLevelPointsBreakdown`, `calculateLevelPoints`, `getTotalPoints`, `getCampaignPoints`, and `getFunMapPoints`.
-  - Formula combines **Monster Kill Score** (`kills * (10 + min(300, kills / minutes) * 0.04)`), **Survival & Level Progression** (`effectiveSec * 2 + (level - 1) * 75`, with normal runs capped at `bossAt` to prevent boss stalling), **Boss & Clear Speed Bonus** (`bosses * 500 + 5,000 victory + max(0, 3,000 - (winSeconds - bossAt) * 25)`), **Endless Round Bonus** (`(R - 1) * 4,000 + (R - 1)^2 * 1,000`), and **Lifetime Slayer Mastery** (`+2` base pts per cumulative kill beyond single-run best + `+1,000` per extra win), all multiplied by the **Map Difficulty Multiplier** (`0.6 * hp + 0.4 * damage`, ranging from `1.00x` Lumbridge to `3.00x` Fight Caves and `3.33x` The Inferno).
-  - Retroactively computes level points for existing saves via `calculateLevelPointsBreakdown`.
+  - Extended `MapBestRecord` with `bossesKilled` and `points` (best single-run top score on that level).
+  - Implemented `getMapDifficultyMultiplier`, `calculateRunPointsBreakdown`, `calculateRunPoints`, `calculateLevelPointsBreakdown`, and `calculateLevelPoints`.
+  - Formula combines **Monster Kill Score** (`kills * (10 + min(300, kills / minutes) * 0.04)`), **Survival & Level Progression** (`effectiveSec * 2 + (level - 1) * 75`, with normal runs capped at `bossAt` to prevent boss stalling), **Boss & Clear Speed Bonus** (`bosses * 500 + 5,000 victory + max(0, 3,000 - (winSeconds - bossAt) * 25)`), and **Endless Round Bonus** (`(R - 1) * 4,000 + (R - 1)^2 * 1,000`), all multiplied by the **Map Difficulty Multiplier** (`0.6 * hp + 0.4 * damage`, ranging from `1.00x` Lumbridge to `3.00x` Fight Caves and `3.33x` The Inferno).
+  - Retroactively computes best-run level top scores for existing saves via `calculateLevelPointsBreakdown`.
 - **UI & Client Integration (`src/game/ui/LeaderboardScreen.tsx`, `src/game/ui/GameUi.tsx`, `src/game/client/GameClient.ts`, `src/game/client/GameStore.ts`)**:
-  - Added a Total Points summary banner, category point totals, per-level point column, and hover breakdown tooltips to `LeaderboardScreen.tsx`.
-  - Added `Run points` and a `"New high score in <Map>!"` banner to `ResultModal`, `Level points` to `MapDetails`, and `Points` to `TitleScreen`.
+  - Added a per-level top score column and hover breakdown tooltips to `LeaderboardScreen.tsx`.
+  - Added `Run points` and a `"New high score in <Map>!"` banner to `ResultModal`, and `Top score` to `MapDetails`.
 - **Co-Op Run Leaderboard Points (`src/custom/multiplayer/mp-hud-leaderboard.js`, `src/game/ui/CoopGameOverSection.tsx`, `src/custom/multiplayer/multiplayer.test.ts`)**:
   - Added individual player point scoring (`killPts + dmgPts + lvlPts + clearPts` scaled by map and Co-Op difficulty) and a `Points` column to the Co-Op post-run leaderboard.
 - **Custom Changelog (`docs/CHANGELOG.md`)**:
-  - Documented the Level & Run Point System under `Co-Op Multiplayer & Leaderboards` and rebuilt the production bundle.
+  - Documented the Level Top Score System under `Co-Op Multiplayer & Leaderboards` and rebuilt the production bundle.
 
 **Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (55/55 passed in `save.test.ts`, `multiplayer.test.ts`, `changelog.test.ts`), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
 
@@ -174,7 +174,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-ocKLJ9RE.js`](../assets/index-ocKLJ9RE.js) | `index.html`, `MapViewerApp-Dpc9dsNx.js`, `module-D1kqqTqY.js` |
+| **Main Engine Bundle** | [`assets/index-Dr6qKGiO.js`](../assets/index-Dr6qKGiO.js) | `index.html`, `MapViewerApp-5oVuIFE3.js`, `module-CyeDrdpA.js` |
 | **Backend & Server Config** | [`server/`](../server/) | `server/serve.py`, `server/test_serve.py`, `server/nginx.conf`, `server/ecosystem.config.cjs` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
@@ -185,10 +185,10 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | NOT loaded from `index.html` (security fix - load manually in dev only) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-Dpc9dsNx.js`](../assets/MapViewerApp-Dpc9dsNx.js) | `assets/index-ocKLJ9RE.js` |
-| **Render Worker** | [`assets/RenderDataWorker-BZS73kvJ.js`](../assets/RenderDataWorker-BZS73kvJ.js) | `assets/index-ocKLJ9RE.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-5oVuIFE3.js`](../assets/MapViewerApp-5oVuIFE3.js) | `assets/index-Dr6qKGiO.js` |
+| **Render Worker** | [`assets/RenderDataWorker-BZS73kvJ.js`](../assets/RenderDataWorker-BZS73kvJ.js) | `assets/index-Dr6qKGiO.js` |
 | **Worker WASM Loader** | [`assets/module-DQGm7-d_.js`](../assets/module-DQGm7-d_.js) | `assets/RenderDataWorker-BZS73kvJ.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-D1kqqTqY.js`](../assets/module-D1kqqTqY.js) | `assets/index-ocKLJ9RE.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-CyeDrdpA.js`](../assets/module-CyeDrdpA.js) | `assets/index-Dr6qKGiO.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
 ### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-mmaGS3Nd.js`)

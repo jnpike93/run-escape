@@ -1,6 +1,6 @@
 import { getArmouryCost, getUpgradeLine } from "../../content/armoury";
 import { CHARACTERS } from "../../content/characters";
-import { ALL_MAPS, FUN_MAPS, MAPS, MAP_BY_ID } from "../../content/maps";
+import { ALL_MAPS, MAPS, MAP_BY_ID } from "../../content/maps";
 import type { RunSummary, SaveData } from "../save";
 
 const VALID_SECRET_CODES = new Set(["dipperthedog", "barkelly", "l33th4x0r"]);
@@ -11,7 +11,6 @@ export type MapBestRecord = {
     kills: number;
     level: number;
     characterId?: string;
-    totalKills?: number;
     bossesKilled?: number;
     points?: number;
 };
@@ -21,7 +20,6 @@ export type LevelPointsBreakdown = {
     progressionPoints: number;
     clearPoints: number;
     endlessPoints: number;
-    masteryPoints: number;
     difficultyMultiplier: number;
     totalPoints: number;
 };
@@ -64,7 +62,6 @@ export function calculateRunPointsBreakdown(run: RunSummary): LevelPointsBreakdo
     const extraRounds = run.endless ? Math.max(0, round - 1) : 0;
     const endlessPoints =
         extraRounds > 0 ? extraRounds * 4000 + extraRounds * extraRounds * 1000 : 0;
-    const masteryPoints = 0;
     const totalPoints = Math.round(
         (killPoints + progressionPoints + clearPoints + endlessPoints) * difficultyMultiplier,
     );
@@ -73,7 +70,6 @@ export function calculateRunPointsBreakdown(run: RunSummary): LevelPointsBreakdo
         progressionPoints,
         clearPoints,
         endlessPoints,
-        masteryPoints,
         difficultyMultiplier,
         totalPoints,
     };
@@ -107,14 +103,12 @@ export function calculateLevelPointsBreakdown(
             progressionPoints: 0,
             clearPoints: 0,
             endlessPoints: 0,
-            masteryPoints: 0,
             difficultyMultiplier,
             totalPoints: 0,
         };
     }
     const bossAt = map?.events?.find((ev) => ev.kind === "finalBoss")?.at ?? 900;
     const bestKills = Math.max(0, Math.floor(num(mb?.kills, 0)));
-    const totalKills = Math.max(bestKills, Math.floor(num(mb?.totalKills, bestKills)));
     const bestSec = Math.max(num(mb?.seconds, 0), endSec, wins > 0 ? bossAt : 0);
     const clearSec =
         num(mb?.winSeconds, 0) > 0 ? num(mb?.winSeconds, 0) : wins > 0 ? bossAt + 30 : 0;
@@ -146,12 +140,8 @@ export function calculateLevelPointsBreakdown(
     const extraRounds = Math.max(0, Math.floor(endRound) - 1);
     const endlessPoints =
         extraRounds > 0 ? extraRounds * 4000 + extraRounds * extraRounds * 1000 : 0;
-    const extraKills = Math.max(0, totalKills - bestKills);
-    const extraWins = Math.max(0, wins - 1);
-    const masteryPoints = extraKills * 2 + extraWins * 1000;
     const computedTotal = Math.round(
-        (killPoints + progressionPoints + clearPoints + endlessPoints + masteryPoints) *
-            difficultyMultiplier,
+        (killPoints + progressionPoints + clearPoints + endlessPoints) * difficultyMultiplier,
     );
     const totalPoints = Math.max(Math.floor(num(mb?.points, 0)), computedTotal);
     return {
@@ -159,7 +149,6 @@ export function calculateLevelPointsBreakdown(
         progressionPoints,
         clearPoints,
         endlessPoints,
-        masteryPoints,
         difficultyMultiplier,
         totalPoints,
     };
@@ -171,18 +160,6 @@ export function calculateLevelPoints(
     pendingRun?: RunSummary,
 ): number {
     return calculateLevelPointsBreakdown(save, mapId, pendingRun).totalPoints;
-}
-
-export function getTotalPoints(save: SaveData): number {
-    return ALL_MAPS.reduce((sum, m) => sum + calculateLevelPoints(save, m.id), 0);
-}
-
-export function getCampaignPoints(save: SaveData): number {
-    return MAPS.reduce((sum, m) => sum + calculateLevelPoints(save, m.id), 0);
-}
-
-export function getFunMapPoints(save: SaveData): number {
-    return FUN_MAPS.reduce((sum, m) => sum + calculateLevelPoints(save, m.id), 0);
 }
 
 export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>): void {
@@ -220,9 +197,6 @@ export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>)
                             ? best.characterId
                             : undefined,
                 };
-                if (typeof best.totalKills === "number" && isFinite(best.totalKills)) {
-                    rec.totalKills = Math.max(0, Math.floor(best.totalKills));
-                }
                 if (typeof best.bossesKilled === "number" && isFinite(best.bossesKilled)) {
                     rec.bossesKilled = Math.max(0, Math.floor(best.bossesKilled));
                 }
@@ -238,7 +212,6 @@ export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>)
 export function recordCustomRunStats(save: SaveData, run: RunSummary): void {
     save.mapBest ??= {};
     const b = save.mapBest[run.mapId] ?? { seconds: 0, winSeconds: 0, kills: 0, level: 0 };
-    b.totalKills = (b.totalKills ?? b.kills ?? 0) + Math.max(0, Math.floor(run.kills ?? 0));
     b.bossesKilled = Math.max(
         b.bossesKilled ?? 0,
         Array.isArray(run.bossesKilled) ? run.bossesKilled.length : 0,
@@ -252,10 +225,9 @@ export function recordCustomRunStats(save: SaveData, run: RunSummary): void {
     }
     b.kills = Math.max(b.kills ?? 0, run.kills ?? 0);
     b.level = Math.max(b.level ?? 0, run.level ?? 0);
-    save.mapBest[run.mapId] = b;
     const runPts = calculateRunPoints(run);
-    const levelPts = calculateLevelPoints(save, run.mapId, run);
-    b.points = Math.max(b.points ?? 0, runPts, levelPts);
+    b.points = Math.max(b.points ?? 0, runPts);
+    save.mapBest[run.mapId] = b;
 }
 
 export function getArmourySpent(save: SaveData): number {

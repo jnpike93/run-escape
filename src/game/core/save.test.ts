@@ -17,15 +17,12 @@ import {
     exportSave,
     getArmourySpent,
     getArmouryStep,
-    getCampaignPoints,
     getEarnedUnlocks,
     getFinishedQuests,
-    getFunMapPoints,
     getMapDifficultyMultiplier,
     getMetaStats,
     getNextUpgradeCost,
     getQuestProgress,
-    getTotalPoints,
     importSave,
     isEndlessRecord,
     isEndlessUnlocked,
@@ -660,10 +657,9 @@ describe("level and run points", () => {
         expect(barPts).toBeLessThan(infPts);
     });
 
-    test("calculateLevelPoints and getTotalPoints accumulate mastery and work retroactively", () => {
+    test("calculateLevelPoints tracks the best single-run top score per level and works retroactively", () => {
         const save = createSave();
         expect(calculateLevelPoints(save, "lumbridge")).toBe(0);
-        expect(getTotalPoints(save)).toBe(0);
 
         recordRun(
             save,
@@ -678,33 +674,34 @@ describe("level and run points", () => {
         const firstPts = calculateLevelPoints(save, "lumbridge");
         expect(firstPts).toBeGreaterThan(0);
         expect(save.mapBest.lumbridge.points).toBe(firstPts);
-        expect(save.mapBest.lumbridge.totalKills).toBe(1000);
         expect(save.mapBest.lumbridge.bossesKilled).toBe(2);
 
-        // Second run accumulates totalKills and repeat win mastery points
+        // A weaker second run does not inflate or lower the level's top score
+        recordRun(
+            save,
+            run("lumbridge", {
+                victory: false,
+                seconds: 300,
+                kills: 200,
+                level: 12,
+                bossesKilled: [],
+            }),
+        );
+        expect(calculateLevelPoints(save, "lumbridge")).toBe(firstPts);
+
+        // A stronger run updates the level's top score
         recordRun(
             save,
             run("lumbridge", {
                 victory: true,
-                seconds: 920,
-                kills: 800,
-                level: 32,
+                seconds: 905,
+                kills: 1800,
+                level: 42,
                 bossesKilled: ["count_draynor", "wise_old_man"],
             }),
         );
-        const secondBreakdown = calculateLevelPointsBreakdown(save, "lumbridge");
-        expect(save.mapBest.lumbridge.totalKills).toBe(1800);
-        expect(secondBreakdown.masteryPoints).toBe(800 * 2 + 1000);
-        expect(secondBreakdown.totalPoints).toBeGreaterThan(firstPts);
-
-        // Campaign vs fun map points sum into getTotalPoints
-        recordRun(
-            save,
-            run("grand_exchange", { endless: true, round: 2, seconds: 1200, kills: 1500 }),
-        );
-        expect(getCampaignPoints(save)).toBe(calculateLevelPoints(save, "lumbridge"));
-        expect(getFunMapPoints(save)).toBe(calculateLevelPoints(save, "grand_exchange"));
-        expect(getTotalPoints(save)).toBe(getCampaignPoints(save) + getFunMapPoints(save));
+        const thirdBreakdown = calculateLevelPointsBreakdown(save, "lumbridge");
+        expect(thirdBreakdown.totalPoints).toBeGreaterThan(firstPts);
 
         // Retroactive calculation on legacy saves with only mapVictories or endlessBest
         const legacy = migrateSave({
@@ -717,6 +714,8 @@ describe("level and run points", () => {
         // Export and import preserve mapBest point fields cleanly
         const roundTrip = importSave(exportSave(save));
         expect(roundTrip.mapBest.lumbridge).toEqual(save.mapBest.lumbridge);
-        expect(getTotalPoints(roundTrip)).toBe(getTotalPoints(save));
+        expect(calculateLevelPoints(roundTrip, "lumbridge")).toBe(
+            calculateLevelPoints(save, "lumbridge"),
+        );
     });
 });

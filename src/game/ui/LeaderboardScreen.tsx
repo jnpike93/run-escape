@@ -6,12 +6,7 @@ import { formatTime } from "../client/GameView";
 import { CHARACTERS } from "../content/characters";
 import { FUN_MAPS, MAPS } from "../content/maps";
 import { MapDef } from "../content/types";
-import {
-    calculateLevelPointsBreakdown,
-    getCampaignPoints,
-    getFunMapPoints,
-    getTotalPoints,
-} from "../core/save";
+import { calculateLevelPointsBreakdown } from "../core/save";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
 
@@ -19,9 +14,6 @@ type Props = { ui: UiSnapshot; client: GameClient };
 
 export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
     const save = ui.save;
-    const totalPoints = getTotalPoints(save);
-    const campaignPoints = getCampaignPoints(save);
-    const funPoints = getFunMapPoints(save);
     useEffect(() => {
         const onKey = (f: KeyboardEvent) => {
             if (f.code === "Escape") {
@@ -44,11 +36,11 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
         const statusClass = wins > 0 ? "done" : bestSec > 0 ? "started" : "new";
         const breakdown = calculateLevelPointsBreakdown(save, m.id);
         const pts = breakdown.totalPoints;
-        const totalMapKills = Math.max(mb?.totalKills ?? 0, mb?.kills ?? 0);
+        const bestKills = mb?.kills ?? 0;
         const pointsTooltip =
             pts > 0
-                ? `${m.name} Point Breakdown (${breakdown.difficultyMultiplier}x difficulty):\n• Best Run Kills (${(mb?.kills ?? 0).toLocaleString()}): +${breakdown.killPoints.toLocaleString()} base\n• Survival & Level: +${breakdown.progressionPoints.toLocaleString()} base\n• Bosses & Clear Speed: +${breakdown.clearPoints.toLocaleString()} base${breakdown.endlessPoints > 0 ? `\n• Endless Rounds: +${breakdown.endlessPoints.toLocaleString()} base` : ""}${breakdown.masteryPoints > 0 ? `\n• Slayer Mastery (${totalMapKills.toLocaleString()} total kills, ${wins} wins): +${breakdown.masteryPoints.toLocaleString()} base` : ""}\n= ${pts.toLocaleString()} pts`
-                : `${m.name} (${breakdown.difficultyMultiplier}x difficulty): Play a run to earn points!`;
+                ? `${m.name} Top Score (${breakdown.difficultyMultiplier}x difficulty):\n• Best Run Kills (${bestKills.toLocaleString()}): +${breakdown.killPoints.toLocaleString()} base\n• Survival & Level: +${breakdown.progressionPoints.toLocaleString()} base\n• Bosses & Clear Speed: +${breakdown.clearPoints.toLocaleString()} base${breakdown.endlessPoints > 0 ? `\n• Endless Rounds: +${breakdown.endlessPoints.toLocaleString()} base` : ""}\n= ${pts.toLocaleString()} pts`
+                : `${m.name} (${breakdown.difficultyMultiplier}x difficulty): Play a run to set a top score!`;
         return (
             <div
                 key={m.id}
@@ -99,12 +91,12 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
                     }}
                 >
                     {m.fun
-                        ? totalMapKills > 0
-                            ? `${totalMapKills.toLocaleString()} kills`
+                        ? bestKills > 0
+                            ? `${bestKills.toLocaleString()} kills`
                             : "Fun map"
                         : `${wins} ${wins === 1 ? "win" : "wins"}${
-                              totalMapKills > 0
-                                  ? ` · ${totalMapKills.toLocaleString()}☠`
+                              bestKills > 0
+                                  ? ` · ${bestKills.toLocaleString()}☠`
                                   : eb
                                     ? ` · R${eb.round}`
                                     : ""
@@ -120,7 +112,7 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
                         textAlign: "right",
                     }}
                 >
-                    {pts.toLocaleString()} pts
+                    {pts > 0 ? `${pts.toLocaleString()} pts` : "--"}
                 </span>
             </div>
         );
@@ -130,49 +122,16 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
             <div className="ui-panel rs-border rs-background ui-quests">
                 <h2>Leaderboard</h2>
                 <p className="ui-subtle">
-                    Your point score, best survival time, fastest boss clear, and total monsters
-                    slain for every level. Hover any level's score for its point breakdown.
+                    Your top run score, best survival time, fastest boss clear, and furthest endless
+                    run for every level.
                 </p>
-                <div
-                    style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "12px",
-                        padding: "8px 12px",
-                        marginBottom: "8px",
-                        background: "rgba(0, 0, 0, 0.35)",
-                        border: "1px solid #5a5245",
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                    }}
-                >
-                    <span>
-                        Total Points:{" "}
-                        <strong style={{ color: "#ffff00", fontSize: "16px" }}>
-                            {totalPoints.toLocaleString()} pts
-                        </strong>
-                    </span>
-                    <span style={{ color: "#ff981f" }}>
-                        Monsters Slain: <strong>{save.totalKills.toLocaleString()} ☠</strong>
-                    </span>
-                    <span style={{ color: "#c8aa6e" }}>
-                        Campaign: <strong>{campaignPoints.toLocaleString()} pts</strong> · Fun &
-                        Endless: <strong>{funPoints.toLocaleString()} pts</strong>
-                    </span>
-                </div>
                 <div className="ui-quest-list">
                     <section className="ui-quest-group">
-                        <h3 className="ui-quest-group-name">
-                            Campaign Levels — {campaignPoints.toLocaleString()} pts
-                        </h3>
+                        <h3 className="ui-quest-group-name">Campaign Levels</h3>
                         {MAPS.map(renderRow)}
                     </section>
                     <section className="ui-quest-group">
-                        <h3 className="ui-quest-group-name">
-                            Fun & Endless Levels — {funPoints.toLocaleString()} pts
-                        </h3>
+                        <h3 className="ui-quest-group-name">Fun & Endless Levels</h3>
                         {FUN_MAPS.map(renderRow)}
                     </section>
                 </div>
@@ -181,9 +140,8 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
                         Back
                     </button>
                     <span className="ui-quests-count">
-                        Points {totalPoints.toLocaleString()} · Kills{" "}
-                        {save.totalKills.toLocaleString()} · Runs {save.runs} · Wins{" "}
-                        {save.victories} · Best Level {save.bestLevel}
+                        Runs {save.runs} · Wins {save.victories} · Overall Best{" "}
+                        {formatTime(save.bestSeconds)} · Best Level {save.bestLevel}
                     </span>
                     <Coins amount={save.coins} />
                 </div>

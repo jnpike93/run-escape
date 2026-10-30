@@ -36,7 +36,6 @@ import {
     SaveData,
     calculateLevelPoints,
     getNextUpgradeCost,
-    getTotalPoints,
     importSave,
     isEndlessUnlocked,
     isMapUnlocked,
@@ -468,9 +467,8 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                     <div className="ui-title-stats">
                         <Coins amount={save.coins} />
                         <div>
-                            Points {getTotalPoints(save).toLocaleString()} · Runs {save.runs} · Wins{" "}
-                            {save.victories} · Best {formatTime(save.bestSeconds)} · Best level{" "}
-                            {save.bestLevel}
+                            Runs {save.runs} · Wins {save.victories} · Best{" "}
+                            {formatTime(save.bestSeconds)} · Best level {save.bestLevel}
                         </div>
                     </div>
                 </div>
@@ -749,7 +747,7 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
     const endless = save.endlessBest[map.id];
     const mapPoints = calculateLevelPoints(save, map.id);
     const mb = (save as any).mapBest?.[map.id];
-    const totalMapKills = Math.max(mb?.totalKills ?? 0, mb?.kills ?? 0);
+    const bestKills = mb?.kills ?? 0;
     return (
         <div className="ui-select-details">
             <div className="ui-select-details-head">
@@ -769,8 +767,8 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                     </div>
                     {mapPoints > 0 && (
                         <div className="ui-card-style" style={{ color: "#ffff00" }}>
-                            Level points: {mapPoints.toLocaleString()} pts
-                            {totalMapKills > 0 ? ` · Kills: ${totalMapKills.toLocaleString()}` : ""}
+                            Top score: {mapPoints.toLocaleString()} pts
+                            {bestKills > 0 ? ` · Best kills: ${bestKills.toLocaleString()}` : ""}
                         </div>
                     )}
                     {(((save as any).mapBest?.[map.id]?.seconds ?? 0) > 0 ||
