@@ -1571,6 +1571,7 @@ describe("maps", () => {
         expect(enemiesOn("god_wars")).toContain("aviansie");
         expect(enemiesOn("prifddinas")).toContain("crystalline_bat");
         expect(enemiesOn("inferno")).toContain("jal_nib");
+        expect(enemiesOn("barbarian_village")).toContain("barbarian_villager");
     });
 
     test("enemies are tougher on each later map", () => {
@@ -1579,7 +1580,8 @@ describe("maps", () => {
             return sim.spawnEnemy(getEnemy("goblin"), "normal", { x: 1040.5, y: 1036.5 })!.maxHp;
         };
         for (let i = 1; i < MAPS.length; i++) {
-            if (MAPS[i].id !== "fight_caves") expect(goblinHp(MAPS[i].id)).toBeGreaterThan(goblinHp(MAPS[i - 1].id));
+            if (MAPS[i].id !== "fight_caves" && MAPS[i].id !== "barbarian_village")
+                expect(goblinHp(MAPS[i].id)).toBeGreaterThan(goblinHp(MAPS[i - 1].id));
         }
     });
 

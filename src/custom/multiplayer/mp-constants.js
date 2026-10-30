@@ -56,6 +56,7 @@ export const ALL_REGIONS = [
     { id: 'god_wars', name: 'God Wars Dungeon', bosses: 'Zilyana, Kree\'arra, K\'ril, Graardor & Nex', difficulty: '3.25x Base HP / 1.95x Dmg' },
     { id: 'prifddinas', name: 'Prifddinas', bosses: 'Zulrah, Zalcano, Crystalline & Corrupted Hunllef', difficulty: '3.5x Base HP / 2.5x Dmg' },
     { id: 'inferno', name: 'The Inferno', bosses: 'JalTok-Jad, Champions & Triple JalTok-Jads', difficulty: '3.75x Base HP / 2.7x Dmg' },
+    { id: 'barbarian_village', name: 'Barbarian Village', bosses: 'Minotaur Warlord, Haakon the Champion & Gunthor the Brave', difficulty: '1.35x Base HP / 1.2x Dmg' },
     { id: 'fight_caves', name: 'Fight Caves (Jad & Zuk)', bosses: 'TzTok-Jad (6:00) & TzKal-Zuk (12:00 - Prayer Switch Required!)', difficulty: 'One-Shot Unless Praying (Q/E/R)' },
     { id: 'grand_exchange', name: 'Grand Exchange (Fun)', bosses: 'The Doubler, Lure Master, Bot Farmer & Melodox', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'east_varrock', name: 'East Varrock Ditch (Fun)', bosses: 'Clan Leader, Rune 2h Pure & Wildy Mage', difficulty: 'Endless Fun Map (1.0x Base)' },

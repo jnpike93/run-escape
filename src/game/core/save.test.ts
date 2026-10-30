@@ -24,6 +24,7 @@ import {
     getNextUpgradeCost,
     getQuestProgress,
     importSave,
+    isCustomMap,
     isEndlessRecord,
     isEndlessUnlocked,
     isMapUnlocked,
@@ -119,7 +120,7 @@ describe("save", () => {
         for (let i = 1; i < MAPS.length; i++) {
             // Each opens when the one before it is beaten, and not before
             for (const later of MAPS.slice(i)) {
-                expect(isMapUnlocked(save, later.id)).toBe(later.id === "fight_caves");
+                expect(isMapUnlocked(save, later.id)).toBe(isCustomMap(later.id));
             }
             won(MAPS[i - 1].id);
             expect(isMapUnlocked(save, MAPS[i].id)).toBe(true);

@@ -1,9 +1,15 @@
 import { getArmouryCost, getUpgradeLine } from "../../content/armoury";
 import { CHARACTERS } from "../../content/characters";
+import { CUSTOM_MAPS } from "../../content/custom/customMaps";
 import { ALL_MAPS, MAPS, MAP_BY_ID } from "../../content/maps";
 import type { RunSummary, SaveData } from "../save";
 
 const VALID_SECRET_CODES = new Set(["dipperthedog", "barkelly", "l33th4x0r"]);
+const CUSTOM_MAP_IDS = new Set(CUSTOM_MAPS.map((m) => m.id));
+
+export function isCustomMap(mapId: string): boolean {
+    return CUSTOM_MAP_IDS.has(mapId);
+}
 
 export type MapBestRecord = {
     seconds: number;

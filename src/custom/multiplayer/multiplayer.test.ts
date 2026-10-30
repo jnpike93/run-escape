@@ -109,8 +109,9 @@ describe("Multiplayer difficulty scaling & sanitization (mp-constants)", () => {
 
     test("Sanitizes maps, characters, names, room IDs, slots, and HTML", () => {
         expect(ALL_CHARACTERS.length).toBeGreaterThanOrEqual(35);
-        expect(ALL_REGIONS.length).toBeGreaterThanOrEqual(19);
+        expect(ALL_REGIONS.length).toBeGreaterThanOrEqual(20);
         expect(sanitizeMapId("FIGHT_CAVES")).toBe("fight_caves");
+        expect(sanitizeMapId("BARBARIAN_VILLAGE")).toBe("barbarian_village");
         expect(sanitizeMapId("invalid_map", "lumbridge")).toBe("lumbridge");
         expect(sanitizeCharacter("DIPPER")).toBe("dipper");
         expect(sanitizeCharacter("unknown", "warrior")).toBe("warrior");

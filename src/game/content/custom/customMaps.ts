@@ -1,7 +1,114 @@
 import { MapDef } from "../types";
-import { paced } from "../waves";
+import { RUN_LENGTH, paced } from "../waves";
 
 export const CUSTOM_MAPS: MapDef[] = [
+    {
+        id: "barbarian_village",
+        name: "Barbarian Village",
+        description:
+            "Gunnarsgrunn's barbarians, axe-throwers, shieldmaidens and berserkers, Ice Mountain wolves " +
+            "and Dwarven Mine scorpions, and the minotaurs, giant spiders, shades and ankou of the " +
+            "Stronghold of Security beneath the village. The Minotaur Warlord and Haakon the Champion " +
+            "come one by one, and Chieftain Gunthor the Brave leads the charge at the end.",
+        // Rune battleaxe
+        iconObjId: 1373,
+        // Barbarian Village, the Stronghold of Security entrance, Ice Mountain,
+        // Edgeville and the River Lum bridge (map squares 47-49 x 52-54)
+        arena: { baseX: 47 * 64, baseY: 52 * 64, sizeX: 3 * 64, sizeY: 3 * 64 },
+        // In the village courtyard, between the Stronghold entrance and the longhall
+        spawn: { x: 3082.5, y: 3423.5 },
+        difficulty: { hp: 1.35, damage: 1.2 },
+        waves: paced([
+            [
+                { id: "dungeon_rat", weight: 3 },
+                { id: "village_goblin", weight: 2 },
+            ],
+            [
+                { id: "village_goblin", weight: 3 },
+                { id: "barbarian_villager", weight: 2 },
+            ],
+            [
+                { id: "barbarian_villager", weight: 3 },
+                { id: "ice_wolf", weight: 1 },
+            ],
+            [
+                { id: "barbarian_villager", weight: 3 },
+                { id: "ice_wolf", weight: 2 },
+            ],
+            [
+                { id: "mine_scorpion", weight: 3 },
+                { id: "barbarian_villager", weight: 2 },
+                { id: "barbarian_axeman", weight: 1 },
+            ],
+            [
+                { id: "stronghold_minotaur", weight: 3 },
+                { id: "mine_scorpion", weight: 2 },
+            ],
+            [
+                { id: "zombie", weight: 3 },
+                { id: "stronghold_minotaur", weight: 2 },
+                { id: "barbarian_axeman", weight: 1 },
+            ],
+            [
+                { id: "zombie", weight: 2 },
+                { id: "skeleton", weight: 2 },
+            ],
+            [
+                { id: "barbarian_shieldmaiden", weight: 3 },
+                { id: "skeleton", weight: 2 },
+                { id: "barbarian_axeman", weight: 1 },
+            ],
+            [
+                { id: "pit_spider", weight: 3 },
+                { id: "barbarian_shieldmaiden", weight: 2 },
+            ],
+            [
+                { id: "stronghold_shade", weight: 3 },
+                { id: "skeleton", weight: 1 },
+            ],
+            [
+                { id: "sepulchre_ankou", weight: 3 },
+                { id: "stronghold_shade", weight: 1 },
+            ],
+            [
+                { id: "zombie", weight: 2 },
+                { id: "skeleton", weight: 2 },
+                { id: "sepulchre_ankou", weight: 2 },
+            ],
+            [
+                { id: "pit_spider", weight: 2 },
+                { id: "barbarian_berserker", weight: 2 },
+                { id: "barbarian_axeman", weight: 1 },
+            ],
+            [
+                { id: "barbarian_berserker", weight: 3 },
+                { id: "sepulchre_ankou", weight: 2 },
+                { id: "stronghold_shade", weight: 2 },
+                { id: "pit_spider", weight: 2 },
+            ],
+        ]),
+        events: [
+            { at: 100, kind: "elite", enemyId: "village_goblin" },
+            { at: 150, kind: "elite", enemyId: "barbarian_villager" },
+            { at: 200, kind: "elite", enemyId: "ice_wolf" },
+            { at: 250, kind: "elite", enemyId: "mine_scorpion" },
+            { at: 300, kind: "boss", enemyId: "minotaur_warlord", hp: 2100 },
+            { at: 360, kind: "ring", enemyId: "stronghold_minotaur", count: 30 },
+            { at: 420, kind: "elite", enemyId: "zombie" },
+            { at: 480, kind: "elite", enemyId: "skeleton" },
+            { at: 540, kind: "elite", enemyId: "barbarian_shieldmaiden" },
+            { at: 600, kind: "boss", enemyId: "haakon_the_champion", hp: 4000 },
+            { at: 620, kind: "ring", enemyId: "sepulchre_ankou", count: 44 },
+            { at: 660, kind: "elite", enemyId: "pit_spider" },
+            { at: 720, kind: "elite", enemyId: "stronghold_shade" },
+            { at: 780, kind: "elite", enemyId: "barbarian_shieldmaiden" },
+            { at: 840, kind: "ring", enemyId: "barbarian_berserker", count: 56 },
+            { at: 870, kind: "elite", enemyId: "barbarian_berserker" },
+            { at: RUN_LENGTH, kind: "finalBoss", enemyId: "gunthor_the_brave", hp: 9500 },
+        ],
+        finalBossWarning: "War horns echo from the longhall... Gunthor the Brave is coming!",
+        victoryText: "Chieftain Gunthor the Brave is defeated!",
+    },
     {
         id: "fight_caves",
         name: "Fight Caves",

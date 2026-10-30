@@ -21,6 +21,7 @@ import {
     calculateRunPointsBreakdown,
     getArmourySpent,
     getMapDifficultyMultiplier,
+    isCustomMap,
     migrateCustomSaveFields,
     recordCustomRunStats,
     refundArmoury,
@@ -33,6 +34,7 @@ export {
     calculateRunPointsBreakdown,
     getArmourySpent,
     getMapDifficultyMultiplier,
+    isCustomMap,
     refundArmoury,
     type LevelPointsBreakdown,
     type MapBestRecord,
@@ -447,7 +449,7 @@ export function applyUnlocks(save: SaveData, run?: RunSummary): void {
 // has been beaten. The fun maps are open from the start.
 export function isMapUnlocked(save: SaveData, mapId: string): boolean {
     if (
-        mapId === "fight_caves" ||
+        isCustomMap(mapId) ||
         isFunMap(mapId) ||
         !!save?.unlockedCodes?.includes("l33th4x0r")
     ) {

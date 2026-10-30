@@ -14,6 +14,7 @@ the version in the corner), so it's written for players.
 
 ### Maps, Bosses, Quests & Adventurers
 
+- **Barbarian Village**: Battle through **Barbarian Village (Gunnarsgrunn)** against barbarian villagers, axe-throwers, shieldmaidens, berserkers, Ice Mountain wolves, Dwarven Mine scorpions, and the minotaurs, giant spiders, shades, and ankou of the Stronghold of Security. Face **The Minotaur Warlord** at 5:00, **Haakon the Champion** at 10:00, and **Chieftain Gunthor the Brave** at 15:00.
 - **Fight Caves & Protection Prayers**: Enter the **Fight Caves** map and use **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks from TzTok-Jad and TzKal-Zuk.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge for bonus XP, coins, and a guaranteed chest.
 - **Slayer Tasks & Slayer Masters**: The checklist tab and HUD tracker feature **Slayer Tasks** grouped by OSRS Slayer Masters (**Turael**, **Mazchna**, **Krystilia**, **Sumona**, **Vannaka**, **Duradel**, **Konar quo Maten**, **Chaeldar**, **Aya**, **Nieve**, **Steve**, **TzHaar-Ket-Keh**, and **Spria**).
