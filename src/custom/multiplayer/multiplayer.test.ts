@@ -824,5 +824,126 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
             (globalThis as any).window = prevWindow;
         }
     });
+
+    test.each([
+        ["Regular (1x)", 1.0],
+        ["Nightmare (3x)", 3.0],
+    ])(
+        "Real Sim Co-Op integration on Barrows (%s): monsters spawn, chase via FlowField, and attack players",
+        async (_label, difficultyMult) => {
+            const { Sim } = await import("../../game/core/Sim");
+            const { ArenaGrid } = await import("../../game/core/world/ArenaGrid");
+            const { getMap } = await import("../../game/content/maps");
+            const { getEnemy } = await import("../../game/content/enemies");
+
+            const prevWindow = (globalThis as any).window;
+            const prevCrypto = (globalThis as any).crypto;
+            try {
+                const map = getMap("barrows");
+                const sizeX = map.arena.sizeX;
+                const sizeY = map.arena.sizeY;
+                const grid = new ArenaGrid({
+                    baseX: map.arena.baseX,
+                    baseY: map.arena.baseY,
+                    sizeX,
+                    sizeY,
+                    plane: map.arena.plane ?? 0,
+                    flags: new Int32Array(sizeX * sizeY),
+                    heights: new Int16Array((sizeX + 1) * (sizeY + 1)),
+                });
+
+                const sim = new Sim({
+                    grid,
+                    mapId: "barrows",
+                    characterId: "warrior",
+                    seed: 12345,
+                });
+
+                const sentMessages: any[] = [];
+                const client: any = {
+                    sim,
+                    getEnemyDef: getEnemy,
+                    input: {},
+                    store: { getSnapshot: () => ({ overlay: "none" }) },
+                    syncOverlay() {},
+                    updateHud() {},
+                    handleEvents() {},
+                };
+
+                (globalThis as any).window = {
+                    gameClient: client,
+                    crypto: {
+                        getRandomValues(arr: Uint32Array) {
+                            arr[0] = 42;
+                            return arr;
+                        },
+                    },
+                };
+
+                const hostCtx: any = {
+                    ...mpSyncEngineMethods,
+                    ...mpPickupsMethods,
+                    role: "host",
+                    localSlot: 1,
+                    hostSlot: 1,
+                    localName: "HostPlayer",
+                    difficultyMult,
+                    gameConfig: { difficultyMult },
+                    remotePeers: new Map(),
+                    damageStats: new Map(),
+                    charStances: new Map(),
+                    invalidateSortedRemotePeers() {},
+                    removePauseOverlay() {},
+                    bakeRemotePeerAppearance() {},
+                    stepRemotePlayer() {},
+                    syncLocalPauseState() {},
+                    sendLoadoutSync() {},
+                    getLocalPauseState: () => null,
+                    buildLeaderboard: () => [],
+                    showToast() {},
+                    send(msg: any) {
+                        sentMessages.push(msg);
+                    },
+                };
+
+                hostCtx.setupInGameHooks("warrior", [
+                    { slot: 1, name: "HostPlayer", character: "warrior", isHost: true },
+                    { slot: 2, name: "GuestPlayer", character: "ranger", isHost: false },
+                ]);
+
+                // Step 150 ticks (3 seconds) - wave director must spawn monsters beyond the initial 5 rats
+                // and stepEnemies must move them toward the party without throwing FlowField.update errors
+                for (let t = 0; t < 150; t++) {
+                    sim.step(0, 0);
+                }
+
+                expect(sim.enemies.length).toBeGreaterThan(5);
+                const movedEnemies = sim.enemies.filter(
+                    (e) => !e.dead && (Math.abs(e.x - e.prevX) > 0 || Math.abs(e.y - e.prevY) > 0),
+                );
+                expect(movedEnemies.length).toBeGreaterThan(0);
+
+                // Place a rat directly on the Host player and verify it attacks and deals damage
+                const rat = sim.spawnEnemy(getEnemy("rat"), "normal", {
+                    x: sim.player.x + 0.2,
+                    y: sim.player.y,
+                })!;
+                expect(rat).toBeDefined();
+                const hpBefore = sim.player.hp;
+                sim.player.invulnerable = 0;
+                rat.attackCooldown = 0;
+                sim.step(0, 0);
+                expect(sim.player.hp).toBeLessThan(hpBefore);
+
+                // Verify Host broadcasted sync_world packets with enemies to Guests
+                const syncMsgs = sentMessages.filter((m) => m.type === "sync_world");
+                expect(syncMsgs.length).toBeGreaterThan(0);
+                expect(syncMsgs[syncMsgs.length - 1].enemies.length).toBeGreaterThan(5);
+            } finally {
+                (globalThis as any).window = prevWindow;
+                (globalThis as any).crypto = prevCrypto;
+            }
+        },
+    );
 });
 

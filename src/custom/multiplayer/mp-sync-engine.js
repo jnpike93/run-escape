@@ -164,8 +164,15 @@ export const mpSyncEngineMethods = {
         const localOffset = SPAWN_OFFSETS[this.localSlot] || { dx: 0, dy: 0 };
         p1.x = spawnX + localOffset.dx;
         p1.y = spawnY + localOffset.dy;
+        if (sim.grid && typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(Math.floor(p1.x), Math.floor(p1.y))) {
+            p1.x = spawnX;
+            p1.y = spawnY;
+        }
         p1.prevX = p1.x;
         p1.prevY = p1.y;
+        if (sim.flowField && typeof sim.flowField.update === 'function' && sim.grid) {
+            sim.flowField.update(sim.grid, Math.floor(p1.x), Math.floor(p1.y));
+        }
 
         sim.remotePlayers = [];
         for (const pInfo of partyPlayers) {
@@ -173,8 +180,12 @@ export const mpSyncEngineMethods = {
             const slot = sanitizeSlot(pInfo.slot, 2);
             if (slot === this.localSlot || this.remotePeers.has(slot)) continue;
             const offset = SPAWN_OFFSETS[slot] || { dx: 1.0, dy: 0 };
-            const sx = spawnX + offset.dx;
-            const sy = spawnY + offset.dy;
+            let sx = spawnX + offset.dx;
+            let sy = spawnY + offset.dy;
+            if (sim.grid && typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(Math.floor(sx), Math.floor(sy))) {
+                sx = spawnX;
+                sy = spawnY;
+            }
             const charId = sim.map?.fun?.character || sanitizeCharacter(pInfo.character, 'warrior');
 
             const entity = {
@@ -206,6 +217,9 @@ export const mpSyncEngineMethods = {
                 flash: 0,
                 frozen: 0,
                 invulnerable: 0,
+                poisonDamage: 0,
+                poisonEnd: -1,
+                lastHitTick: -999,
                 characterId: charId,
                 hasDynamicModel: false
             };
@@ -681,6 +695,36 @@ export const mpSyncEngineMethods = {
                 };
             }
 
+            // Helper: update a player's BFS FlowField with the correct (grid, tileX, tileY) argument order
+            const updateEntityFlowField = (flowField, entity, force = false) => {
+                if (!flowField || typeof flowField.update !== 'function' || !sim.grid || !entity) return;
+                let tileX = Math.floor(entity.x);
+                let tileY = Math.floor(entity.y);
+                if (typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(tileX, tileY)) {
+                    let best = Infinity;
+                    const fromX = tileX;
+                    const fromY = tileY;
+                    for (let d = 1; d <= 3 && best === Infinity; d++) {
+                        for (let y = fromY - d; y <= fromY + d; y++) {
+                            for (let x = fromX - d; x <= fromX + d; x++) {
+                                if (Math.max(Math.abs(x - fromX), Math.abs(y - fromY)) !== d || sim.grid.isSolid(x, y)) {
+                                    continue;
+                                }
+                                const distance = Math.hypot(x + 0.5 - entity.x, y + 0.5 - entity.y);
+                                if (distance < best) {
+                                    best = distance;
+                                    tileX = x;
+                                    tileY = y;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (force || flowField.targetX < 0 || tileX !== flowField.targetX || tileY !== flowField.targetY) {
+                    flowField.update(sim.grid, tileX, tileY);
+                }
+            };
+
             // Helper: collect all living players with their dedicated BFS FlowFields
             const getLivingPlayerTargets = () => {
                 const targets = [];
@@ -696,6 +740,7 @@ export const mpSyncEngineMethods = {
                     if (peer.entity && peer.entity.hp > 0 && peer.entity.deathTick === -1 && !peer.entity.spectating) {
                         if (!peer.flowField && sim.flowField && sim.flowField.constructor) {
                             peer.flowField = new sim.flowField.constructor(sim.flowField.size);
+                            peer.flowField.ditchY = sim.flowField.ditchY;
                         }
                         targets.push({
                             slot: peer.slot,
@@ -729,8 +774,8 @@ export const mpSyncEngineMethods = {
                     try {
                         for (let attempt = 0; attempt < 28; attempt++) {
                             const anchor = living[sim.rng.int(living.length)];
-                            if (anchor.flowField && anchor.flowField.targetX < 0 && typeof anchor.flowField.update === 'function' && sim.grid) {
-                                anchor.flowField.update(Math.floor(anchor.entity.x), Math.floor(anchor.entity.y), sim.grid);
+                            if (anchor.flowField) {
+                                updateEntityFlowField(anchor.flowField, anchor.entity, false);
                             }
                             sim.player = anchor.entity;
                             sim.flowField = anchor.flowField;
@@ -840,12 +885,8 @@ export const mpSyncEngineMethods = {
                         sim.enemies = t.bucket;
                         sim.player = t.entity;
                         sim.flowField = t.flowField || savedFlowField;
-                        if (t.flowField && typeof t.flowField.update === 'function' && sim.grid) {
-                            const tx = Math.floor(t.entity.x);
-                            const ty = Math.floor(t.entity.y);
-                            if (sim.tick % 8 === 0 || t.flowField.targetX !== tx || t.flowField.targetY !== ty) {
-                                t.flowField.update(tx, ty, sim.grid);
-                            }
+                        if (t.flowField) {
+                            updateEntityFlowField(t.flowField, t.entity, sim.tick % 8 === 0);
                         }
                         origStepEnemies();
                         if (t.bucket.length > initialLen) {
