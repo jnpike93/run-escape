@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-BVZZQOP0.js`](../assets/index-BVZZQOP0.js) | `index.html`, `MapViewerApp-nN8IR_T3.js`, `module-RmiAZVN8.js` |
+| **Main Engine Bundle** | [`assets/index-_XaPOUDC.js`](../assets/index-_XaPOUDC.js) | `index.html`, `MapViewerApp-BmOUVpXD.js`, `module-CgKfmabq.js` |
 | **Custom Runtime Source** | [`src/custom/`](../src/custom/) | Canonical hand-authored scripts & assets synced into `assets/` by `scripts/sync_dist.cjs` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, synced from `src/custom/multiplayer.js`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | Synced from `src/custom/multiplayer/mp-*.js` |
@@ -21,17 +21,19 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`, synced from `src/custom/tile-coords.js`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, synced from `src/custom/debug-mode.js`) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-nN8IR_T3.js`](../assets/MapViewerApp-nN8IR_T3.js) | `assets/index-BVZZQOP0.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-BVZZQOP0.js` |
-| **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-RmiAZVN8.js`](../assets/module-RmiAZVN8.js) | `assets/index-BVZZQOP0.js` (`module-yzz5kVyQ.wasm`) |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-BmOUVpXD.js`](../assets/MapViewerApp-BmOUVpXD.js) | `assets/index-_XaPOUDC.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DcR-K3gg.js`](../assets/RenderDataWorker-DcR-K3gg.js) | `assets/index-_XaPOUDC.js` |
+| **Worker WASM Loader** | [`assets/module-BDqjycDY.js`](../assets/module-BDqjycDY.js) | `assets/RenderDataWorker-DcR-K3gg.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-CgKfmabq.js`](../assets/module-CgKfmabq.js) | `assets/index-_XaPOUDC.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-BVZZQOP0.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-_XaPOUDC.js`)
 When adding new features or merging upstream changes into `src/` and rebuilding `assets/index-*.js`, follow these upstream-friendly boundaries and preserve all global hooks:
 1. **Modular Custom Feature Directories (Upstream-Friendly Boundaries)**:
-   - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), and secret codes (`secretCodes.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `GameClient.ts`) via 1-line imports/spreads.
-   - [`src/game/ui/`](../src/game/ui/): Standalone custom UI components ([`LeaderboardScreen.tsx`](../src/game/ui/LeaderboardScreen.tsx), [`CoopGameOverSection.tsx`](../src/game/ui/CoopGameOverSection.tsx)) imported by [`GameUi.tsx`](../src/game/ui/GameUi.tsx).
+   - [`src/game/content/custom/`](../src/game/content/custom/): All custom characters (`customCharacters.ts`), maps (`customMaps.ts`), enemies/bosses (`customEnemies.ts`), secret codes (`secretCodes.ts`), and in-place content array overrides (`customOverrides.ts`) live here and are linked into upstream files (`characters.ts`, `maps.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, `weapons.ts`, `GameClient.ts`) via 1-line `applyCustom*(...)` calls or spreads.
+   - [`src/game/core/custom/`](../src/game/core/custom/): Custom simulation hooks (`pickupRecovery.ts`, `customSimHooks.ts`) and custom save/Armoury helpers (`customSave.ts`) delegated from `Sim.ts` and `save.ts`.
+   - [`src/game/client/custom/`](../src/game/client/custom/) & [`src/mapviewer/worker/customNpcIcon.ts`](../src/mapviewer/worker/customNpcIcon.ts): Custom 3D dog actor & Co-Op event resolution helpers (`dogActors.ts`) and custom negative-ID NPC item icon rendering (`customNpcIcon.ts`).
+   - [`src/game/ui/`](../src/game/ui/): Standalone custom UI components ([`LeaderboardScreen.tsx`](../src/game/ui/LeaderboardScreen.tsx), [`CoopGameOverSection.tsx`](../src/game/ui/CoopGameOverSection.tsx), [`CustomSettingsControls.tsx`](../src/game/ui/CustomSettingsControls.tsx)) imported by [`GameUi.tsx`](../src/game/ui/GameUi.tsx).
    - [`src/custom/`](../src/custom/): Canonical hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`), prayer icons (`prayer/*.png`), and multiplayer unit tests (`multiplayer/multiplayer.test.ts`). `npm run build` copies `src/custom/` into `assets/` (excluding `*.test.*`) via [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs).
    - [`src/game/types/globals.d.ts`](../src/game/types/globals.d.ts): Typed `Window` declarations for all global bridges between `src/game/` and `src/custom/`.
    - [`docs/CHANGELOG.md`](../docs/CHANGELOG.md) vs root [`CHANGELOG.md`](../CHANGELOG.md): Keep root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` identical to `upstream/main`; write all custom notes in `docs/CHANGELOG.md` (`src/game/ui/changelog.ts` combines both).
@@ -65,6 +67,17 @@ When adding new features or merging upstream changes into `src/` and rebuilding 
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Extract Core, Content, Client, UI, and Worker Custom Modules for Conflict-Free Upstream Merges
+- **Commit / PR**: Modularize `src/game/core/custom/`, `customOverrides.ts`, `dogActors.ts`, `CustomSettingsControls.tsx`, and `customNpcIcon.ts` (`?v=8.5`)
+- **Files Modified**: `src/game/core/custom/pickupRecovery.ts`, `src/game/core/custom/customSimHooks.ts`, `src/game/core/custom/customSave.ts`, `src/game/content/custom/customOverrides.ts`, `src/game/client/custom/dogActors.ts`, `src/game/ui/CustomSettingsControls.tsx`, `src/mapviewer/worker/customNpcIcon.ts`, `src/game/core/Sim.ts`, `src/game/core/save.ts`, `src/game/content/characters.ts`, `src/game/content/enemies.ts`, `src/game/content/items.ts`, `src/game/content/passives.ts`, `src/game/content/shop.ts`, `src/game/content/quests.ts`, `src/game/content/weapons.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/game/ui/GameUi.tsx`, `src/game/ui/QuestScreen.tsx`, `src/mapviewer/worker/ItemIconLoader.ts`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-_XaPOUDC.js`, `assets/MapViewerApp-BmOUVpXD.js`, `assets/RenderDataWorker-DcR-K3gg.js`, `assets/module-BDqjycDY.js`, `assets/module-CgKfmabq.js`)
+- **What Changed**:
+  1. Extracted `src/game/content/custom/customOverrides.ts` (`applyCustomCharacters`, `applyCustomEnemies`, `applyCustomItems`, `applyCustomPassives`, `applyCustomShopUpgrades`, `applyCustomQuests`, `applyCustomWeapons`) and restored the upstream array definitions in `characters.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, and `weapons.ts` to match `upstream/main` verbatim plus a 2-line `applyCustom*(...)` hook.
+  2. Extracted `src/game/core/custom/pickupRecovery.ts`, `src/game/core/custom/customSimHooks.ts`, and `src/game/core/custom/customSave.ts`, reducing inline custom diffs in `Sim.ts` by ~240 lines and in `save.ts` by ~66 lines.
+  3. Extracted `src/game/client/custom/dogActors.ts`, `src/game/ui/CustomSettingsControls.tsx`, and `src/mapviewer/worker/customNpcIcon.ts`, reducing inline diffs in `GameUi.tsx` by ~122 lines, `GameClient.ts`/`GameView.ts` by ~45 lines, and `ItemIconLoader.ts` to +4 lines.
+- **Notes / Invariants for Future Agents**:
+  - Never modify existing entries inline inside `characters.ts`, `enemies.ts`, `items.ts`, `passives.ts`, `shop.ts`, `quests.ts`, or `weapons.ts`; add overrides in `src/game/content/custom/customOverrides.ts`.
 
 ### 2026-10-29 - Antigravity - Cover All Impassable Terrain Edge Cases for Loot Recovery
 - **Commit / PR**: Full terrain/obstacle reachability for pickup recovery (`?v=8.5`)

@@ -1,7 +1,7 @@
 # Mandatory Agent Instructions (Claude Code / AI Assistants)
 
 Before reading, modifying, or merging any code in this repository, you MUST read and obey:
-1. [`AGENTS.md`](./AGENTS.md) - Mandatory operating protocol, upstream-friendly modular architecture (`src/game/content/custom/`, `src/custom/`, standalone `src/game/ui/` components, `src/game/types/globals.d.ts`, untouched root `CHANGELOG.md` / `package-lock.json`), TypeScript source-first build workflow (`npm run build` via `scripts/sync_dist.cjs`), and verification commands.
+1. [`AGENTS.md`](./AGENTS.md) - Mandatory operating protocol, upstream-friendly modular architecture (`src/game/content/custom/`, `src/game/core/custom/`, `src/game/client/custom/`, `src/custom/`, standalone `src/game/ui/` components, `src/game/types/globals.d.ts`, untouched root `CHANGELOG.md` / `package-lock.json`), TypeScript source-first build workflow (`npm run build` via `scripts/sync_dist.cjs`), and verification commands.
 2. [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md) - Active bundle hash registry, TypeScript engine hook map, and cross-agent handoff log.
 3. [`.jules/sentinel.md`](./.jules/sentinel.md) - Security invariants for `serve.py`.
 

@@ -1,5 +1,5 @@
 import { NPC_IDLE_SEQ, NPC_WALK_SEQ } from "../../mapviewer/webgl/actor/ActorBakeTypes";
-import { CUSTOM_ENEMIES } from "./custom/customEnemies";
+import { applyCustomEnemies } from "./custom/customOverrides";
 import { FUN_ENEMIES } from "./fun/enemies";
 import { BossAttackDef, EnemyDef, PlayerEffectDef } from "./types";
 
@@ -3268,46 +3268,43 @@ export const ENEMIES: EnemyDef[] = [
         deathSeq: 2654,
         hp: 15500,
         damage: 0,
-        speed: 1.4,
+        speed: 1.5,
         radius: 0.45,
         xp: 3000,
         sounds: HUMAN_SOUNDS,
         // Five tiles across in OSRS
         scale: 0.55,
         knockbackResist: 1,
-        spawnMessage:
-            "TzTok-Jad rises from the lava! Switch Protection Prayers (Q: Magic, E: Ranged, R: Melee)!",
+        spawnMessage: "TzTok-Jad rises out of the volcano!",
         boss: {
-            attackInterval: 2.8,
-            recovery: 2.2,
-            enragedRecovery: 1.2,
+            attackInterval: 2,
             enrage: {
-                message: "TzTok-Jad summons the healers!",
+                message: "TzTok-Jad is enraged!",
                 shout: "JalYt, you will burn!",
             },
             attacks: [
                 {
                     name: "Stomp",
                     kind: "swing",
-                    damage: 99,
-                    windup: 1.5,
+                    damage: 9,
+                    windup: 0.9,
                     cooldown: 0,
                     range: 3.6,
-                    radius: 3.6,
+                    radius: 3.4,
                     weight: 4,
                     sound: 2500,
                 },
                 {
                     name: "Magic",
                     kind: "projectile",
-                    damage: 99,
-                    windup: 1.6,
+                    damage: 8,
+                    windup: 1.2,
                     cooldown: 0,
-                    range: 18,
-                    minRange: 2.5,
-                    weight: 4,
+                    range: 16,
+                    minRange: 3,
+                    weight: 3,
                     speed: 9,
-                    homing: 1.2,
+                    homing: 0.9,
                     castSpotAnim: 447,
                     spotAnim: 448,
                     impactSpotAnim: 157,
@@ -3318,13 +3315,13 @@ export const ENEMIES: EnemyDef[] = [
                 {
                     name: "Rockfall",
                     kind: "blast",
-                    damage: 99,
-                    windup: 1.6,
+                    damage: 8,
+                    windup: 1.4,
                     cooldown: 0,
-                    range: 18,
-                    minRange: 2.5,
-                    radius: 2.2,
-                    weight: 4,
+                    range: 16,
+                    minRange: 3,
+                    radius: 1.8,
+                    weight: 3,
                     impactSpotAnim: 451,
                     seq: 2652,
                     sound: 2500,
@@ -3335,20 +3332,19 @@ export const ENEMIES: EnemyDef[] = [
                     damage: 1,
                     windup: 1,
                     cooldown: 18,
-                    range: 18,
+                    range: 16,
                     weight: 2,
                     summon: { enemyId: "yt_hurkot", count: 4 },
                     sound: 2500,
-                    enraged: true,
                 },
                 {
                     name: "Rockstorm",
                     kind: "blast",
-                    damage: 99,
-                    windup: 1.6,
+                    damage: 7,
+                    windup: 1.3,
                     cooldown: 5,
-                    range: 18,
-                    radius: 2,
+                    range: 16,
+                    radius: 1.6,
                     count: 5,
                     spread: 3.5,
                     weight: 4,
@@ -7987,8 +7983,8 @@ export const ENEMIES: EnemyDef[] = [
 
     // The fun maps' players (fun/enemies.ts)
     ...FUN_ENEMIES,
-    ...CUSTOM_ENEMIES,
 ];
+applyCustomEnemies(ENEMIES);
 
 export const ENEMY_BY_ID: Map<string, EnemyDef> = new Map(ENEMIES.map((e) => [e.id, e]));
 

@@ -4,6 +4,7 @@ import { Rasterizer3D } from "../../rs/graphics/Rasterizer3D";
 import { Model } from "../../rs/model/Model";
 import { RenderDataLoader, RenderDataResult } from "./RenderDataLoader";
 import { WorkerState } from "./RenderDataWorker";
+import { renderNpcItemIcon } from "./customNpcIcon";
 
 // Inventory icons drawn the way the client draws them: the item's model posed
 // by its 2D view angles and zoom, rasterized in software with painter's
@@ -253,51 +254,7 @@ function getStackObjId(state: WorkerState, objId: number, count: number): number
 
 export function renderItemIcon(state: WorkerState, objId: number, count: number): Int32Array {
     if (objId < 0) {
-        const pixels = new Int32Array(ICON_WIDTH * ICON_HEIGHT);
-        const npcType = state.npcTypeLoader.load(-objId);
-        const model =
-            state.npcModelLoader.getModel(npcType, 6561, 0) ||
-            state.npcModelLoader.getModel(npcType, -1, -1);
-        if (!model) {
-            return pixels;
-        }
-        Rasterizer2D.setRaster(pixels, ICON_WIDTH, ICON_HEIGHT);
-        Rasterizer2D.setClip(0, 0, ICON_WIDTH, ICON_HEIGHT);
-        Rasterizer3D.setClip();
-        Rasterizer3D.setViewport(18, 16);
-        Rasterizer3D.rasterGouraudLowRes = false;
-        Rasterizer3D.rasterAlpha = 0;
-        model.calculateBoundsCylinder();
-        let bh = 0;
-        let br = 0;
-        for (let c = 0; c < model.verticesCount; c++) {
-            const vy = -model.verticesY[c];
-            if (vy > bh) {
-                bh = vy;
-            }
-            const vx = model.verticesX[c];
-            const vz = model.verticesZ[c];
-            const rd = Math.sqrt(vx * vx + vz * vz);
-            if (rd > br) {
-                br = rd;
-            }
-        }
-        const ext = Math.max(bh, br * 1.85, 20);
-        const zoom = Math.round((ext * 512) / 25);
-        const xan = 190;
-        const yan = 1740;
-        const sin = (SINE[xan & 2047] * zoom) >> 16;
-        const cos = (COSINE[xan & 2047] * zoom) >> 16;
-        if (projectModel(model, yan, 0, xan, 0, ((bh / 2) | 0) + sin + 2, cos + 2)) {
-            drawModel(model, (id) => state.textureLoader.getAverageHsl(id));
-        }
-        outlineAndShadow(pixels, ICON_WIDTH, ICON_HEIGHT);
-        for (let i = 0; i < pixels.length; i++) {
-            if (pixels[i] !== 0) {
-                pixels[i] |= 0xff000000;
-            }
-        }
-        return pixels;
+        return renderNpcItemIcon(state, objId);
     }
     const pixels = new Int32Array(ICON_WIDTH * ICON_HEIGHT);
     const stackId = getStackObjId(state, objId, count);

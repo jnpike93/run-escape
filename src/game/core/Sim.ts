@@ -99,6 +99,13 @@ import { ArenaGrid } from "./world/ArenaGrid";
 import { findFreeSpot, isCircleFree, moveCircle } from "./world/Collision";
 import { FlowField, canStep } from "./world/FlowField";
 import { endlessLevelForXp, endlessXpForLevel, runLevelForXp, runXpForLevel } from "./xp";
+import {
+    applyCoopLampXp,
+    resolveCustomBossPrayerHit,
+    stepCustomRegen,
+    stepFactionProjectileHit,
+} from "./custom/customSimHooks";
+import { findReachablePickupSpot, stepPickupSlide } from "./custom/pickupRecovery";
 
 export const TICKS_PER_SECOND = 50;
 
@@ -892,27 +899,9 @@ export class Sim {
                 });
                 break;
             }
-            case "xp": {
-                const mp =
-                    typeof window !== "undefined" ? (window as any).multiplayer : undefined;
-                const isCoop = Boolean(
-                    mp?.gameStarted && mp?.remotePeers && mp.remotePeers.size > 0,
-                );
-                const playerCount = isCoop ? Math.max(1, 1 + mp.remotePeers.size) : 1;
-                const levelsToGrant = use.levels / playerCount;
-                const xpGain =
-                    (this.xpForNextLevel - this.xpForThisLevel) * levelsToGrant;
-                this.xp += xpGain;
-                if (isCoop && typeof mp.send === "function") {
-                    mp.send({
-                        type: "coop_pickup",
-                        kind: "lamp_xp",
-                        levels: levelsToGrant,
-                        xpGained: xpGain,
-                    });
-                }
+            case "xp":
+                applyCoopLampXp(this, use.levels);
                 break;
-            }
         }
     }
 
@@ -1082,27 +1071,7 @@ export class Sim {
     }
 
     private stepRegen(): void {
-        const player = this.player;
-        const hitPaused =
-            this.tick < (player.regenPausedUntil ?? 0) ||
-            this.tick - player.lastHitTick < 5 * TICKS_PER_SECOND;
-        const rapidHeal = hitPaused
-            ? (this.passives.find((p) => p.id === "rapid_heal")?.value ?? 0)
-            : 0;
-        const statRegen = Math.max(0, this.stats.regen - rapidHeal) / 60;
-        let buffRegen = 0;
-        for (const buff of this.buffs) {
-            buffRegen += (buff as { regenPerSec?: number }).regenPerSec ?? 0;
-        }
-        const totalRegen = statRegen + buffRegen;
-        if (totalRegen > 0 && player.hp < player.maxHp) {
-            this.regenAccumulator += totalRegen / TICKS_PER_SECOND;
-            if (this.regenAccumulator >= 1) {
-                const amount = Math.floor(this.regenAccumulator);
-                this.regenAccumulator -= amount;
-                this.heal(amount);
-            }
-        }
+        stepCustomRegen(this, TICKS_PER_SECOND);
     }
 
     // Poison hits once a second until it wears off; armour doesn't help
@@ -2780,63 +2749,8 @@ export class Sim {
                 projectile.life = 0;
                 continue;
             }
-            if (projectile.life > 0 && projectile.faction !== undefined) {
-                let hitFoe: Enemy | undefined;
-                this.enemyHash.query(projectile.x, projectile.y, projectile.radius + 1.5, (other) => {
-                    if (
-                        hitFoe ||
-                        other.uid === projectile.enemyUid ||
-                        other.dead ||
-                        other.boss ||
-                        other.elite ||
-                        other.def.faction === undefined ||
-                        other.def.faction === projectile.faction
-                    ) {
-                        return;
-                    }
-                    if (
-                        Math.hypot(other.x - projectile.x, other.y - projectile.y) <=
-                        projectile.radius + other.radius
-                    ) {
-                        hitFoe = other;
-                    }
-                });
-                if (hitFoe) {
-                    projectile.life = 0;
-                    if (projectile.attack.impactSpotAnim !== undefined) {
-                        this.addEffect(projectile.attack.impactSpotAnim, hitFoe.x, hitFoe.y, 0, 30);
-                    }
-                    if (hitFoe.shieldEnd > this.tick) {
-                        this.showBlocked(hitFoe);
-                        continue;
-                    }
-                    const amount = Math.max(
-                        1,
-                        Math.round(projectile.damage * FACTION_DAMAGE * this.rng.range(0.85, 1.15)),
-                    );
-                    hitFoe.hp -= amount;
-                    hitFoe.flash = 5;
-                    if (!hitFoe.aggro) {
-                        const shooter = this.enemies.find(
-                            (e) => e.uid === projectile.enemyUid && !e.dead,
-                        );
-                        if (shooter) {
-                            hitFoe.foe ??= shooter;
-                        }
-                    }
-                    this.events.push({
-                        type: "damage",
-                        x: hitFoe.x,
-                        y: hitFoe.y,
-                        amount,
-                        enemyUid: hitFoe.uid,
-                        enemyId: hitFoe.def.id,
-                    });
-                    if (hitFoe.hp <= 0) {
-                        this.killEnemy(hitFoe, "enemy");
-                    }
-                    continue;
-                }
+            if (stepFactionProjectileHit(this, projectile, FACTION_DAMAGE)) {
+                continue;
             }
             const reach = projectile.radius + player.radius;
             if (
@@ -2896,42 +2810,16 @@ export class Sim {
         if (showImpact && attack.impactSpotAnim !== undefined) {
             this.addEffect(attack.impactSpotAnim, player.x, player.y, 0, 30);
         }
-        let ignoreArmor = attack.ignoreArmor;
-        if (enemyId === "tztok_jad" || enemyId === "tzkal_zuk") {
-            const reqPrayer =
-                attack.name === "Magic"
-                    ? "magic"
-                    : attack.name === "Stomp" || attack.name === "Slam"
-                      ? "melee"
-                      : "ranged";
-            const win = typeof window !== "undefined" ? (window as any) : undefined;
-            const activePrayer =
-                player.slot &&
-                win?.multiplayer?.gameStarted &&
-                player.slot !== win.multiplayer.localSlot
-                    ? (player.activePrayer ?? null)
-                    : (player.activePrayer ?? win?._osrsPrayer ?? null);
-            if (activePrayer === reqPrayer) {
-                this.events.push({
-                    type: "playerHit",
-                    amount: 0,
-                    blocked: true,
-                    enemyId,
-                    elite: false,
-                    sound: 163,
-                    slot: player.slot,
-                });
-                return;
-            }
-            damage = Math.max(99, player.maxHp * 10);
-            ignoreArmor = true;
+        const prayerHit = resolveCustomBossPrayerHit(this, enemyId, attack, damage);
+        if (prayerHit.blocked) {
+            return;
         }
         const amount = this.damagePlayer(
-            damage,
+            prayerHit.damage,
             enemyId,
             false,
             attack.hitSound,
-            ignoreArmor,
+            prayerHit.ignoreArmor,
         );
         const lifesteal = enemy?.def.boss?.lifesteal ?? 0;
         if (enemy && lifesteal > 0 && !enemy.dead) {
@@ -4674,93 +4562,6 @@ export class Sim {
         this.events.push({ type: "casketDropped", tier, x, y });
     }
 
-    private isBlockedByStationaryEnemy(x: number, y: number): boolean {
-        for (const enemy of this.enemies) {
-            if (
-                !enemy.dead &&
-                enemy.def.stationary &&
-                Math.hypot(x - enemy.x, y - enemy.y) < enemy.radius + PLAYER_RADIUS
-            ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private isPickupSpotReachable(x: number, y: number): boolean {
-        const tileX = Math.floor(x);
-        const tileY = Math.floor(y);
-        if (!this.grid.contains(tileX, tileY) || this.grid.isSolid(tileX, tileY)) {
-            return false;
-        }
-        const playerPiece = this.grid.getPiece(this.flowField.targetX, this.flowField.targetY);
-        if (playerPiece >= 0 && this.grid.getPiece(tileX, tileY) !== playerPiece) {
-            return false;
-        }
-        if (this.flowField.contains(tileX, tileY) && !this.flowField.isReachable(tileX, tileY)) {
-            return false;
-        }
-        if (!isCircleFree(this.grid, x, y, PLAYER_RADIUS)) {
-            return false;
-        }
-        if (this.isBlockedByStationaryEnemy(x, y)) {
-            return false;
-        }
-        return true;
-    }
-
-    // Finds the nearest reachable walkable spot for a pickup dropped over trees,
-    // rocks, water, lava, chasms, walls, ditches, or stationary obstacles,
-    // preferring tiles closer to the player.
-    private findReachablePickupSpot(x: number, y: number): { x: number; y: number } {
-        if (this.isPickupSpotReachable(x, y)) {
-            return { x, y };
-        }
-        const startX = Math.floor(x);
-        const startY = Math.floor(y);
-        if (this.isPickupSpotReachable(startX + 0.5, startY + 0.5)) {
-            return { x: startX + 0.5, y: startY + 0.5 };
-        }
-        const player = this.player;
-        const offsetX = (x - startX - 0.5) * 0.5;
-        const offsetY = (y - startY - 0.5) * 0.5;
-        let bestX = player.x;
-        let bestY = player.y;
-        let bestScore = Infinity;
-        for (let r = 1; r <= 32; r++) {
-            for (let dy = -r; dy <= r; dy++) {
-                for (let dx = -r; dx <= r; dx++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) {
-                        continue;
-                    }
-                    const tx = startX + dx;
-                    const ty = startY + dy;
-                    let cx = tx + 0.5 + offsetX;
-                    let cy = ty + 0.5 + offsetY;
-                    if (!this.isPickupSpotReachable(cx, cy)) {
-                        cx = tx + 0.5;
-                        cy = ty + 0.5;
-                        if (!this.isPickupSpotReachable(cx, cy)) {
-                            continue;
-                        }
-                    }
-                    const distDrop = Math.hypot(cx - x, cy - y);
-                    const distPlayer = Math.hypot(cx - player.x, cy - player.y);
-                    const score = distDrop + distPlayer * 0.25;
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestX = cx;
-                        bestY = cy;
-                    }
-                }
-            }
-            if (bestScore < Infinity) {
-                break;
-            }
-        }
-        return { x: bestX, y: bestY };
-    }
-
     dropPickup(
         kind: PickupKind,
         x: number,
@@ -4768,7 +4569,7 @@ export class Sim {
         value: number,
         extra: Pick<Pickup, "tier" | "powerUp"> = {},
     ): void {
-        const safe = this.findReachablePickupSpot(x, y);
+        const safe = findReachablePickupSpot(this, x, y, PLAYER_RADIUS);
         const needsSlide = Math.hypot(safe.x - x, safe.y - y) > 0.01;
         if (kind === "bones" && this.pickups.length >= MAX_PICKUPS) {
             // Too many lying around: the pile furthest from the player comes
@@ -4870,35 +4671,10 @@ export class Sim {
                     pickup.x += (dx / distance) * move;
                     pickup.y += (dy / distance) * move;
                 }
-            } else {
-                if (
-                    pickup.targetX === undefined &&
-                    !this.isPickupSpotReachable(pickup.x, pickup.y)
-                ) {
-                    const safe = this.findReachablePickupSpot(pickup.x, pickup.y);
-                    pickup.targetX = safe.x;
-                    pickup.targetY = safe.y;
-                }
-                if (pickup.targetX !== undefined && pickup.targetY !== undefined) {
-                    const tx = pickup.targetX - pickup.x;
-                    const ty = pickup.targetY - pickup.y;
-                    const td = Math.hypot(tx, ty);
-                    pickup.speed = Math.min(pickup.speed + 0.025, 0.35);
-                    if (td <= pickup.speed) {
-                        pickup.x = pickup.targetX;
-                        pickup.y = pickup.targetY;
-                        pickup.targetX = undefined;
-                        pickup.targetY = undefined;
-                        pickup.speed = 0;
-                    } else {
-                        pickup.x += (tx / td) * pickup.speed;
-                        pickup.y += (ty / td) * pickup.speed;
-                    }
-                } else if (pickup.pileUid !== 0) {
-                    this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
-                    if (pickup.value < 0) {
-                        continue;
-                    }
+            } else if (!stepPickupSlide(this, pickup, PLAYER_RADIUS) && pickup.pileUid !== 0) {
+                this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
+                if (pickup.value < 0) {
+                    continue;
                 }
             }
             if (distance < 0.6) {

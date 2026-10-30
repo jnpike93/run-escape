@@ -1,3 +1,4 @@
+import { applyCustomShopUpgrades } from "./custom/customOverrides";
 import { ShopUpgradeDef } from "./types";
 
 // Permanent upgrades bought with banked coins, themed as skills.
@@ -14,7 +15,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "defence",
         name: "Defence",
-        description: "+1 flat damage reduction",
+        description: "Take 1 less damage",
         stat: "armor",
         perRank: 1,
         maxRank: 3,
@@ -24,7 +25,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
         id: "hitpoints",
         name: "Hitpoints",
         // A fifth of the player's 25 base hitpoints a rank
-        description: "+20% max hitpoints (+5 base HP)",
+        description: "+5 max hitpoints",
         stat: "maxHp",
         perRank: 0.2,
         maxRank: 5,
@@ -33,7 +34,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "prayer",
         name: "Prayer",
-        description: "+1.5 HP regen / min",
+        description: "Heal 1.5 hitpoints a minute",
         stat: "regen",
         perRank: 1.5,
         maxRank: 5,
@@ -42,7 +43,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "attack",
         name: "Attack",
-        description: "+2.5% attack speed",
+        description: "Weapons 2.5% faster",
         stat: "cooldown",
         perRank: 0.025,
         maxRank: 2,
@@ -51,7 +52,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "magic",
         name: "Magic",
-        description: "+5% attack size (reach & AoE)",
+        description: "+5% area",
         stat: "area",
         perRank: 0.05,
         maxRank: 2,
@@ -69,7 +70,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "herblore",
         name: "Herblore",
-        description: "+15% effect & DoT duration",
+        description: "+15% effect duration",
         stat: "duration",
         perRank: 0.15,
         maxRank: 2,
@@ -78,7 +79,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "fletching",
         name: "Fletching",
-        description: "+1 projectile per attack",
+        description: "One more projectile",
         stat: "amount",
         perRank: 1,
         maxRank: 1,
@@ -105,7 +106,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "slayer",
         name: "Slayer",
-        description: "+10% drop rate & rarity luck",
+        description: "+10% luck",
         stat: "luck",
         perRank: 0.1,
         maxRank: 3,
@@ -114,7 +115,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "farming",
         name: "Farming",
-        description: "+3% XP gain",
+        description: "+3% experience",
         stat: "growth",
         perRank: 0.03,
         maxRank: 5,
@@ -123,7 +124,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
     {
         id: "mining",
         name: "Mining",
-        description: "+10% coin gain",
+        description: "+10% coins",
         stat: "greed",
         perRank: 0.1,
         maxRank: 5,
@@ -148,6 +149,7 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
         baseCost: 10000,
     },
 ];
+applyCustomShopUpgrades(SHOP_UPGRADES);
 
 export const SHOP_UPGRADE_BY_ID: Map<string, ShopUpgradeDef> = new Map(
     SHOP_UPGRADES.map((u) => [u.id, u]),

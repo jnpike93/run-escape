@@ -1,16 +1,15 @@
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
-import { CUSTOM_CHARACTERS } from "./custom/customCharacters";
+import { applyCustomCharacters } from "./custom/customOverrides";
 import { DURIAL_COLORS, DURIAL_EQUIPMENT, DURIAL_KITS, FUN_ITEMS } from "./fun/enemies";
 import { CharacterDef } from "./types";
 
 // The first three are there from the start. Each map brings two more: one for
 // beating it, one for a task done there.
 export const CHARACTERS: CharacterDef[] = [
-    ...CUSTOM_CHARACTERS,
     {
         id: "warrior",
         name: "Warrior",
-        description: "Starts with a bronze scimitar. +1 flat damage reduction.",
+        description: "Starts with a bronze scimitar. Takes 1 less damage.",
         style: "melee",
         startingWeapon: "scimitar",
         equipment: {
@@ -23,7 +22,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "wizard",
         name: "Wizard",
-        description: "Starts with Fire Strike. +5% attack speed.",
+        description: "Starts with Fire Strike. Weapons are 5% faster.",
         style: "magic",
         startingWeapon: "fire_spells",
         equipment: {
@@ -37,7 +36,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "ranger",
         name: "Ranger",
-        description: "Starts with bronze throwing knives. +10% movement speed.",
+        description: "Starts with bronze throwing knives. Moves 10% faster.",
         style: "ranged",
         startingWeapon: "throwing_knives",
         equipment: {
@@ -51,7 +50,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "monk",
         name: "Monk",
-        description: "Starts with Saradomin Strike. +15% attack speed.",
+        description: "Starts with Saradomin Strike. Weapons are 15% faster.",
         style: "magic",
         startingWeapon: "saradomin_strike",
         // Monk's robes and a holy symbol
@@ -70,7 +69,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "barbarian",
         name: "Barbarian",
-        description: "Starts with a bronze 2h sword. +20% max hitpoints.",
+        description: "Starts with a bronze 2h sword. 20% more hitpoints.",
         style: "melee",
         startingWeapon: "two_handed_sword",
         // Fremennik gear and a berserker helm
@@ -86,7 +85,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "ancient_mage",
         name: "Ancient mage",
-        description: "Starts with Ice Burst. +15% attack size (reach & AoE).",
+        description: "Starts with Ice Burst. Weapons cover 15% more area.",
         style: "magic",
         startingWeapon: "ice_burst",
         // Zaros's robes, from treasure trails
@@ -103,7 +102,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "hunter",
         name: "Hunter",
-        description: "Starts with a shortbow. +50% pickup range.",
+        description: "Starts with a shortbow. Picks things up from 50% further away.",
         style: "ranged",
         startingWeapon: "shortbow",
         // Larupia hunter gear
@@ -118,7 +117,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "rogue",
         name: "Rogue",
-        description: "Starts with bronze throwing knives. +25% coin gain and +10% drop rate & rarity luck.",
+        description: "Starts with bronze throwing knives. Finds 25% more coins and is luckier.",
         style: "ranged",
         startingWeapon: "throwing_knives",
         // The Rogues' Den outfit
@@ -135,7 +134,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "dragon_slayer",
         name: "Dragon slayer",
-        description: "Starts with a bronze scimitar. +15% damage.",
+        description: "Starts with a bronze scimitar. Hits 15% harder.",
         style: "melee",
         startingWeapon: "scimitar",
         // Rune, and the anti-dragon shield from the Dragon Slayer quest
@@ -151,7 +150,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "nomad",
         name: "Nomad",
-        description: "Starts with bronze throwing axes. +5% movement speed and +10% damage.",
+        description: "Starts with bronze throwing axes. Moves 5% faster and hits 10% harder.",
         style: "ranged",
         startingWeapon: "throwing_axes",
         // Desert robes
@@ -166,7 +165,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "menaphite",
         name: "Menaphite",
-        description: "Starts with Smoke Burst. +15% XP gain.",
+        description: "Starts with Smoke Burst. Gains 15% more experience.",
         style: "magic",
         startingWeapon: "smoke_burst",
         // Menaphite robes
@@ -181,7 +180,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "seer",
         name: "Seer",
-        description: "Starts with elemental runes. +25% effect & DoT duration.",
+        description: "Starts with elemental runes. Effects last 25% longer.",
         style: "magic",
         startingWeapon: "elemental_runes",
         // A farseer helm and skeletal robes
@@ -196,7 +195,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "berserker",
         name: "Berserker",
-        description: "Starts with a bronze 2h sword. +0.5 flat damage reduction and +3 recoil damage.",
+        description: "Starts with a bronze 2h sword. Takes 0.5 less damage and hits back for 3.",
         style: "melee",
         startingWeapon: "two_handed_sword",
         // A helm of neitiznot, yak-hide armour and Fremennik boots
@@ -212,7 +211,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "obby_mauler",
         name: "Obby mauler",
-        description: "Starts with a Tzhaar-ket-om. +10% damage and +10% max hitpoints.",
+        description: "Starts with a Tzhaar-ket-om. Hits 10% harder and has 10% more hitpoints.",
         style: "melee",
         startingWeapon: "tzhaar_ket_om",
         // Obsidian armour and a fire cape
@@ -228,7 +227,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "pirate",
         name: "Pirate",
-        description: "Starts with bronze throwing knives. +1 reroll per run and +5% drop rate & rarity luck.",
+        description: "Starts with bronze throwing knives. One more reroll a run, and 5% luckier.",
         style: "ranged",
         startingWeapon: "throwing_knives",
         // A pirate's bandana, stripy shirt, leggings and boots
@@ -261,7 +260,7 @@ export const CHARACTERS: CharacterDef[] = [
         id: "shayzien_soldier",
         name: "Shayzien soldier",
         description:
-            "Starts with a bronze scimitar. +0.5 flat damage reduction and +3 HP regen / min.",
+            "Starts with a bronze scimitar. Takes 0.5 less damage and heals 3 hitpoints a minute.",
         style: "melee",
         startingWeapon: "scimitar",
         // Shayzien armour
@@ -278,7 +277,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "gladiator",
         name: "Gladiator",
-        description: "Starts with a dual macuahuitl. +10% attack speed and +5% damage.",
+        description: "Starts with a dual macuahuitl. Weapons are 10% faster and hit 5% harder.",
         style: "melee",
         startingWeapon: "dual_macuahuitl",
         // Sunfire fanatic armour
@@ -294,7 +293,7 @@ export const CHARACTERS: CharacterDef[] = [
         id: "javelineer",
         name: "Javelineer",
         description:
-            "Starts with an eclipse atlatl. +20% projectile speed and +10% attack size.",
+            "Starts with an eclipse atlatl. Projectiles fly 20% faster, and areas are 10% bigger.",
         style: "ranged",
         startingWeapon: "eclipse_atlatl",
         // Eclipse moon armour
@@ -443,7 +442,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "scammer",
         name: "Scammer",
-        description: "Starts with bronze throwing knives. +50% coin gain and +10% drop rate & rarity luck. Trust them.",
+        description: "Starts with bronze throwing knives. 50% more coins, and luckier. Trust them.",
         style: "ranged",
         startingWeapon: "throwing_knives",
         // A partyhat and gilded armour, to look trustworthy
@@ -459,7 +458,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "f2p_pker",
         name: "F2P pker",
-        description: "Starts with a bronze 2h sword. +10% damage and +5% movement speed.",
+        description: "Starts with a bronze 2h sword. Hits 10% harder and moves 5% faster.",
         style: "melee",
         startingWeapon: "two_handed_sword",
         // Rune, green d'hide and a team cape: nothing members get
@@ -477,7 +476,7 @@ export const CHARACTERS: CharacterDef[] = [
         id: "durial321",
         name: "Durial321",
         description:
-            "Starts with the Abyssal whip, but -30% max hitpoints. Everyone plays him in Falador.",
+            "Starts with the Abyssal whip, but has 30% less hitpoints. Everyone plays him in Falador.",
         style: "melee",
         startingWeapon: "abyssal_whip",
         equipment: DURIAL_EQUIPMENT,
@@ -490,7 +489,7 @@ export const CHARACTERS: CharacterDef[] = [
     {
         id: "lms_sweat",
         name: "LMS sweat",
-        description: "Starts with Ice Burst. +10% attack speed and +10% attack size.",
+        description: "Starts with Ice Burst. Weapons are 10% faster, and areas are 10% bigger.",
         style: "magic",
         startingWeapon: "ice_burst",
         // The Last Man Standing mage loadout
@@ -544,6 +543,7 @@ export const CHARACTERS: CharacterDef[] = [
         unlock: { kind: "killBoss", mapId: "pest_control", enemyId: "purple_portal" },
     },
 ];
+applyCustomCharacters(CHARACTERS);
 
 export const CHARACTER_BY_ID: Map<string, CharacterDef> = new Map(CHARACTERS.map((c) => [c.id, c]));
 

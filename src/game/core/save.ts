@@ -12,6 +12,15 @@ import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
 import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
+import {
+    MapBestRecord,
+    getArmourySpent,
+    migrateCustomSaveFields,
+    recordCustomRunStats,
+    refundArmoury,
+} from "./custom/customSave";
+
+export { getArmourySpent, refundArmoury, type MapBestRecord };
 
 // Progress kept between runs: banked coins, permanent upgrades, unlocks and
 // records. Versioned so older saves can be upgraded when the format changes.
@@ -26,14 +35,6 @@ export const SAVE_VERSION = 6;
 // Characters taken out of the game for now; saves keep them unlocked for when
 // they're back
 const RETIRED_CHARACTERS = ["dwarf"];
-
-export type MapBestRecord = {
-    seconds: number;
-    winSeconds: number;
-    kills: number;
-    level: number;
-    characterId?: string;
-};
 
 export type SaveData = {
     version: number;
@@ -110,13 +111,6 @@ export function migrateSave(raw: unknown): SaveData {
         typeof value === "number" && isFinite(value) ? value : fallback;
     save.coins = num(data.coins, 0);
     save.totalCoins = num(data.totalCoins, save.coins);
-    if (Array.isArray(data.unlockedCodes)) {
-        for (const s of data.unlockedCodes) {
-            if (typeof s === "string" && !save.unlockedCodes.includes(s)) {
-                save.unlockedCodes.push(s);
-            }
-        }
-    }
     if (data.upgrades && typeof data.upgrades === "object") {
         for (const [id, rank] of Object.entries(data.upgrades)) {
             const upgrade = SHOP_UPGRADE_BY_ID.get(id);
@@ -127,13 +121,10 @@ export function migrateSave(raw: unknown): SaveData {
     }
     save.upgradesSpent = num(data.upgradesSpent, estimateSpent(save.upgrades));
     if (Array.isArray(data.unlockedCharacters)) {
-        for (const s of data.unlockedCharacters) {
-            const known =
-                (s !== "dipper" || save.unlockedCodes.includes("dipperthedog")) &&
-                (s !== "elias" || save.unlockedCodes.includes("barkelly")) &&
-                (CHARACTERS.some((c) => c.id === s) || RETIRED_CHARACTERS.includes(s));
-            if (known && !save.unlockedCharacters.includes(s)) {
-                save.unlockedCharacters.push(s);
+        for (const id of data.unlockedCharacters) {
+            const known = CHARACTERS.some((c) => c.id === id) || RETIRED_CHARACTERS.includes(id);
+            if (known && !save.unlockedCharacters.includes(id)) {
+                save.unlockedCharacters.push(id);
             }
         }
     }
@@ -156,24 +147,7 @@ export function migrateSave(raw: unknown): SaveData {
         // From before there were maps: every win was in Lumbridge
         save.mapVictories[MAPS[0].id] = save.victories;
     }
-    if (data.mapBest && typeof data.mapBest === "object") {
-        for (const [id, best] of Object.entries(data.mapBest)) {
-            if (
-                (ALL_MAPS.some((m) => m.id === id) || MAPS.some((m) => m.id === id)) &&
-                best &&
-                typeof best === "object"
-            ) {
-                save.mapBest[id] = {
-                    seconds: num(best.seconds, 0),
-                    winSeconds: num(best.winSeconds, 0),
-                    kills: num(best.kills, 0),
-                    level: num(best.level, 0),
-                    characterId:
-                        typeof best.characterId === "string" ? best.characterId : undefined,
-                };
-            }
-        }
-    }
+    migrateCustomSaveFields(save, data);
     save.totalKills = num(data.totalKills, 0);
     save.bestSeconds = num(data.bestSeconds, 0);
     save.bestLevel = num(data.bestLevel, 0);
@@ -318,18 +292,7 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
     save.totalKills += run.kills;
     save.bestSeconds = Math.max(save.bestSeconds, run.seconds);
     save.bestLevel = Math.max(save.bestLevel, run.level);
-    save.mapBest ??= {};
-    const b = save.mapBest[run.mapId] ?? { seconds: 0, winSeconds: 0, kills: 0, level: 0 };
-    if (run.seconds > (b.seconds ?? 0)) {
-        b.seconds = run.seconds;
-        b.characterId = run.characterId ?? b.characterId;
-    }
-    if (run.victory && (!b.winSeconds || run.seconds < b.winSeconds)) {
-        b.winSeconds = run.seconds;
-    }
-    b.kills = Math.max(b.kills ?? 0, run.kills ?? 0);
-    b.level = Math.max(b.level ?? 0, run.level ?? 0);
-    save.mapBest[run.mapId] = b;
+    recordCustomRunStats(save, run);
     if (run.endless && isEndlessRecord(save, run)) {
         save.endlessBest[run.mapId] = { round: run.round ?? 1, seconds: run.seconds };
     }
@@ -506,27 +469,6 @@ export function buyArmouryUpgrade(save: SaveData, itemId: string): boolean {
     save.coins -= step.cost;
     save.armoury[itemId] = (save.armoury[itemId] ?? 0) + 1;
     return true;
-}
-
-export function getArmourySpent(save: SaveData): number {
-    let spent = 0;
-    for (const [itemId, count] of Object.entries(save.armoury)) {
-        const line = getUpgradeLine(itemId);
-        const steps = Math.min(count, line.length - 1);
-        for (let i = 1; i <= steps; i++) {
-            spent += getArmouryCost(line[i]);
-        }
-    }
-    return spent;
-}
-
-export function refundArmoury(save: SaveData): void {
-    const spent = getArmourySpent(save);
-    if (spent <= 0) {
-        return;
-    }
-    save.coins += spent;
-    save.armoury = {};
 }
 
 // A save as a file, to keep or to carry to another browser

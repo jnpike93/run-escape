@@ -4,8 +4,9 @@ All AI coding agents operating in this repository MUST follow these rules withou
 
 1. **Pre-Flight Requirement**: Read `AGENTS.md`, `docs/AGENT_NOTES.md`, and `.jules/sentinel.md` before proposing or applying changes.
 2. **Upstream-Friendly Modularization**:
-   - Add custom characters, maps, enemies, and secret codes in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`) and spread/delegate them via single lines in upstream files.
-   - Add custom UI screens/modals/tables as standalone components in `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`) to keep `GameUi.tsx` diffs minimal.
+   - Add custom characters, maps, enemies, secret codes, and in-place content overrides in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`, `customOverrides.ts`) and spread/delegate them via single lines in upstream files.
+   - Add custom simulation and save logic in `src/game/core/custom/` (`pickupRecovery.ts`, `customSimHooks.ts`, `customSave.ts`) and custom client/worker helpers in `src/game/client/custom/dogActors.ts` and `src/mapviewer/worker/customNpcIcon.ts`.
+   - Add custom UI screens/modals/controls as standalone components in `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`, `CustomSettingsControls.tsx`) to keep `GameUi.tsx` diffs minimal.
    - Edit hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`) in `src/custom/`; `npm run build` copies `src/custom/` into `assets/` via `scripts/sync_dist.cjs`.
    - Declare global `window.*` bridges in `src/game/types/globals.d.ts`.
    - Leave root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched so `upstream/main` fast-forwards cleanly; write custom changelog entries only in `docs/CHANGELOG.md`. Maintain LF (`\n`) line endings per `.gitattributes`.

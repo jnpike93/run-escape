@@ -44,6 +44,7 @@ import { ChangelogPanel } from "./ChangelogPanel";
 import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
 import { CoopDamageLeaderboardTable, CoopGameOverButtons } from "./CoopGameOverSection";
+import { PauseHoverInfoBox, SecretCodeSection, UiScaleButtons } from "./CustomSettingsControls";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
 import { LeaderboardScreen } from "./LeaderboardScreen";
@@ -299,17 +300,6 @@ function SettingsPanel({
     client,
     onClose,
 }: ScreenProps & { onClose: () => void }): JSX.Element {
-    const [codeOpen, setCodeOpen] = useState(false);
-    const [codeVal, setCodeVal] = useState("");
-    const [codeMsg, setCodeMsg] = useState<{ ok: boolean; message: string }>();
-    const submitCode = (s: React.FormEvent) => {
-        s?.preventDefault?.();
-        const r = (client as any).redeemCode(codeVal);
-        setCodeMsg(r);
-        if (r?.ok) {
-            setCodeVal("");
-        }
-    };
     return (
         <div className="ui-panel rs-border rs-background ui-settings">
             <h2>Settings</h2>
@@ -321,39 +311,7 @@ function SettingsPanel({
                 <section className="ui-settings-section">
                     <h3>Game</h3>
                     <Setting name="UI Scale" text="Scale menus, HUD and Co-Op lobby">
-                        <div style={{ display: "flex", gap: "4px" }}>
-                            {(
-                                [
-                                    ["auto", "Auto"],
-                                    [1, "1x"],
-                                    [1.25, "1.25x"],
-                                    [1.5, "1.5x"],
-                                    [1.75, "1.75x"],
-                                    [2, "2x"],
-                                ] as const
-                            ).map(([h, d]) => {
-                                const selected = ((ui.display as any)?.uiScale ?? "auto") === h;
-                                return (
-                                    <button
-                                        key={String(h)}
-                                        className={
-                                            "ui-button ui-button-small" +
-                                            (selected ? " ui-card-selected" : "")
-                                        }
-                                        style={{
-                                            padding: "4px 8px",
-                                            color: selected ? "#ffff00" : undefined,
-                                        }}
-                                        onClick={(u) => {
-                                            (client as any).setUiScale(h);
-                                            u.currentTarget.blur();
-                                        }}
-                                    >
-                                        {d}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        <UiScaleButtons ui={ui} client={client} />
                     </Setting>
                     <Setting
                         name="Camera spin"
@@ -380,61 +338,7 @@ function SettingsPanel({
                 <section className="ui-settings-section">
                     <h3>Save & Codes</h3>
                     <SaveSetting ui={ui} client={client} />
-                    <Setting name="Secret code" text="Redeem a code to unlock hidden content">
-                        <button
-                            className="ui-button ui-button-small"
-                            onClick={(s) => {
-                                setCodeOpen((v) => !v);
-                                setCodeMsg(undefined);
-                                s.currentTarget.blur();
-                            }}
-                        >
-                            {codeOpen ? "Hide" : "Code"}
-                        </button>
-                    </Setting>
-                    {codeOpen && (
-                        <form
-                            onSubmit={submitCode}
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "6px",
-                                padding: "6px 0",
-                            }}
-                        >
-                            <div style={{ display: "flex", gap: "6px" }}>
-                                <input
-                                    type="text"
-                                    value={codeVal}
-                                    onChange={(s) => setCodeVal(s.target.value)}
-                                    placeholder="Enter secret code..."
-                                    autoComplete="off"
-                                    style={{
-                                        flex: 1,
-                                        background: "#110d08",
-                                        color: "#ff981f",
-                                        border: "1px solid #5a4a32",
-                                        padding: "5px 8px",
-                                        fontFamily: "inherit",
-                                        fontSize: "14px",
-                                    }}
-                                />
-                                <button type="submit" className="ui-button ui-button-small">
-                                    Unlock
-                                </button>
-                            </div>
-                            {codeMsg && (
-                                <div
-                                    style={{
-                                        fontSize: "13px",
-                                        color: codeMsg.ok ? "#00ff00" : "#ff4444",
-                                    }}
-                                >
-                                    {codeMsg.message}
-                                </div>
-                            )}
-                        </form>
-                    )}
+                    <SecretCodeSection client={client} />
                 </section>
             </div>
             <div className="ui-row">
@@ -1437,30 +1341,7 @@ function PauseModal({
                                 </div>
                             </>
                         )}
-                        <div
-                            style={{
-                                minHeight: "38px",
-                                margin: "6px 0",
-                                padding: "6px 10px",
-                                background: "rgba(16, 12, 8, 0.85)",
-                                border: "1px solid #5a4a35",
-                                borderRadius: "3px",
-                                fontSize: "13px",
-                                lineHeight: "1.35",
-                                color: hoverInfo ? "#f0e6d2" : "#887862",
-                            }}
-                        >
-                            {hoverInfo ? (
-                                <>
-                                    <strong style={{ color: hoverInfo.color || "#ff981f" }}>
-                                        {hoverInfo.name}:{" "}
-                                    </strong>
-                                    <span>{hoverInfo.text}</span>
-                                </>
-                            ) : (
-                                "Mouse over any weapon, passive, or equipment item above to see what it does."
-                            )}
-                        </div>
+                        <PauseHoverInfoBox hoverInfo={hoverInfo} />
                         <h3 className="ui-pause-heading">Settings</h3>
                         <SoundSettings ui={ui} client={client} />
                         <AutoPauseSetting ui={ui} client={client} />

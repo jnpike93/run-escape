@@ -58,6 +58,7 @@ import { ChoiceView, GameStore, HudView, QuestTrackView, Screen } from "./GameSt
 import { GameView } from "./GameView";
 import { getBuffViews, getChestView, getGearViews, getInventoryViews } from "./ItemViews";
 import { Minimap } from "./Minimap";
+import { getPlayerOrDogModel, isDogCharacter } from "./custom/dogActors";
 import { Overlay, ScreenPoint } from "./Overlay";
 
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
@@ -1018,15 +1019,9 @@ export class GameClient implements GameFrameHandler {
             return;
         }
         // Title screen: just the character
-        const cId = this.store && this.store.getSnapshot().characterId;
-        const isDipper = cId === "dipper";
-        const isElias = cId === "elias";
-        const isDog = isDipper || isElias;
-        const model = isDipper
-            ? this.assets.get("corgi") || this.assets.getPlayer()
-            : isElias
-              ? this.assets.get("chihuahua") || this.assets.getPlayer()
-              : this.assets.getPlayer();
+        const cId = this.store?.getSnapshot().characterId;
+        const isDog = isDogCharacter(cId);
+        const model = getPlayerOrDogModel(this.assets, cId);
         if (model) {
             const anim = isDog
                 ? model.getAnim(6561) || model.anims[0]

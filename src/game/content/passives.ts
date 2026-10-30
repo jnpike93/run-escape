@@ -1,4 +1,5 @@
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
+import { applyCustomPassives } from "./custom/customOverrides";
 import { CAPPED_STATS } from "./endless";
 import { RARITIES, Rarity } from "./rarity";
 import { PassiveDef } from "./types";
@@ -9,7 +10,7 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "piety",
         name: "Piety",
-        description: "Increases all weapon damage.",
+        description: "Hit harder.",
         stat: "might",
         perLevel: 0.05,
         effect: "damage",
@@ -23,10 +24,10 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "protect_melee",
         name: "Protect from Melee",
-        description: "Reduces damage taken from every hit by a flat amount.",
+        description: "Take less damage from every hit.",
         stat: "armor",
         perLevel: 1,
-        effect: "flat damage reduction",
+        effect: "armour",
         unit: "flat",
         maxLevel: 5,
         rarity: "uncommon",
@@ -35,10 +36,10 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "rapid_heal",
         name: "Rapid Heal",
-        description: "Passively regenerates hitpoints over time (+2.5 HP/min base per level; disabled for 5s when hit).",
+        description: "Slowly heal over time.",
         stat: "regen",
-        perLevel: 2.5,
-        effect: "HP regen / min",
+        perLevel: 1.5,
+        effect: "hitpoints a minute",
         unit: "flat",
         maxLevel: 5,
         rarity: "common",
@@ -66,10 +67,10 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "ring_of_wealth",
         name: "Ring of wealth",
-        description: "Increases drop rates, casket/level-up rarity rolls, and coin gain.",
+        description: "Luckier rolls and more coins.",
         stat: "luck",
         perLevel: 0.08,
-        effect: "drop rate, rarity luck & coin gain",
+        effect: "luck and coins",
         unit: "percent",
         maxLevel: 5,
         rarity: "rare",
@@ -92,10 +93,10 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "tome_of_fire",
         name: "Tome of fire",
-        description: "Increases attack speed across all weapons.",
+        description: "Weapons recharge faster.",
         stat: "cooldown",
         perLevel: 0.04,
-        effect: "attack speed",
+        effect: "weapon speed",
         unit: "percent",
         maxLevel: 5,
         rarity: "rare",
@@ -105,7 +106,7 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "vengeance",
         name: "Vengeance",
-        description: "Deals flat recoil damage back to any enemy that hits you.",
+        description: "Whatever hits you is hit back.",
         stat: "thorns",
         perLevel: 3,
         effect: "recoil damage",
@@ -137,10 +138,10 @@ export const PASSIVES: PassiveDef[] = [
     {
         id: "book_of_the_dead",
         name: "Book of the dead",
-        description: "Increases freeze, poison, debuff, orbit, and potion buff duration.",
+        description: "Freezes, poison and the rest last longer.",
         stat: "duration",
         perLevel: 0.1,
-        effect: "effect & DoT duration",
+        effect: "effect duration",
         unit: "percent",
         maxLevel: 5,
         rarity: "uncommon",
@@ -204,6 +205,7 @@ export const PASSIVES: PassiveDef[] = [
         iconObjId: 27624,
     },
 ];
+applyCustomPassives(PASSIVES);
 
 export const PASSIVE_BY_ID: Map<string, PassiveDef> = new Map(PASSIVES.map((p) => [p.id, p]));
 

@@ -25,6 +25,7 @@ import {
     getShieldedModelKey,
 } from "./GameAssets";
 import { Overlay, ScreenPoint } from "./Overlay";
+import { getPlayerOrDogModel, isDogCharacter, resolveCoopEventPlayer } from "./custom/dogActors";
 
 const FROZEN_TINT = 0xa8d8ff;
 // Shielded enemies (that can't be hurt yet) are washed in lilac
@@ -186,13 +187,7 @@ export class GameView {
                 case "playerHit":
                 case "playerPoisoned": {
                     const ev = event as any;
-                    const mp = (window as any).multiplayer;
-                    const pRef =
-                        ev.slot && mp?.gameStarted
-                            ? ev.slot === mp.localSlot
-                                ? sim.player
-                                : mp.remotePeers?.get(ev.slot)?.entity || sim.player
-                            : sim.player;
+                    const pRef = resolveCoopEventPlayer(sim, ev);
                     this.addHitsplat({
                         kind: ev.blocked
                             ? "block"
@@ -222,27 +217,7 @@ export class GameView {
                     this.shouts.push({ enemyUid: PLAYER_SHOUT, text: event.text, start: now });
                     break;
                 case "slash": {
-                    const ev = event as any;
-                    const mp = (window as any).multiplayer;
-                    let pRef: { x: number; y: number; prevX: number; prevY: number } | undefined =
-                        sim.player;
-                    if (mp?.gameStarted && mp.remotePeers) {
-                        if (ev.slot && ev.slot !== mp.localSlot) {
-                            pRef = mp.remotePeers.get(ev.slot)?.entity;
-                        } else if (
-                            Math.hypot(event.x - sim.player.x, event.y - sim.player.y) > 0.05
-                        ) {
-                            for (const peer of mp.remotePeers.values()) {
-                                if (
-                                    peer.entity &&
-                                    Math.hypot(event.x - peer.entity.x, event.y - peer.entity.y) <= 0.5
-                                ) {
-                                    pRef = peer.entity;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    const pRef = resolveCoopEventPlayer(sim, event as any, true);
                     this.slashes.push({
                         x: event.x,
                         y: event.y,
@@ -470,17 +445,9 @@ export class GameView {
         ) {
             return;
         }
-        const cId =
-            sim.characterId ||
-            ((this as any).store && (this as any).store.getSnapshot().characterId);
-        const isCorgi = cId === "dipper";
-        const isChih = cId === "elias";
-        const isDog = isCorgi || isChih;
-        const model = isCorgi
-            ? this.assets.get("corgi") || this.assets.getPlayer()
-            : isChih
-              ? this.assets.get("chihuahua") || this.assets.getPlayer()
-              : this.assets.getPlayer();
+        const cId = sim.characterId || (this as any).store?.getSnapshot().characterId;
+        const isDog = isDogCharacter(cId);
+        const model = getPlayerOrDogModel(this.assets, cId);
         if (!model) {
             return;
         }
@@ -657,10 +624,7 @@ export class GameView {
             const py = lerp(player.prevY, player.y, alpha);
             const top =
                 this.ground(sim, px, py) -
-                (sim.characterId === "dipper" || sim.characterId === "elias"
-                    ? 110
-                    : (model?.height ?? 200)) /
-                    128 -
+                (isDogCharacter(sim.characterId) ? 110 : (model?.height ?? 200)) / 128 -
                 HEALTH_BAR_GAP;
             const p = overlay.project(px, top, py, this.screen);
             if (p.visible) {

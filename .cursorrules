@@ -2,8 +2,9 @@
 
 1. MANDATORY PRE-READ: Always read `AGENTS.md`, `docs/AGENT_NOTES.md`, and `.jules/sentinel.md` before editing any files or resolving merges.
 2. UPSTREAM-FRIENDLY MODULARIZATION:
-   - Place custom characters, maps, enemies, and secret codes in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`).
-   - Place custom UI screens/modals/tables in standalone components under `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`) rather than inlining large blocks in `GameUi.tsx`.
+   - Place custom characters, maps, enemies, secret codes, and content array overrides in `src/game/content/custom/` (`customCharacters.ts`, `customMaps.ts`, `customEnemies.ts`, `secretCodes.ts`, `customOverrides.ts`).
+   - Place custom simulation, pickup recovery, and save helpers in `src/game/core/custom/` (`pickupRecovery.ts`, `customSimHooks.ts`, `customSave.ts`) and custom client/worker helpers in `src/game/client/custom/dogActors.ts` and `src/mapviewer/worker/customNpcIcon.ts`.
+   - Place custom UI screens/modals/controls in standalone components under `src/game/ui/` (`LeaderboardScreen.tsx`, `CoopGameOverSection.tsx`, `CustomSettingsControls.tsx`) rather than inlining large blocks in `GameUi.tsx`.
    - Edit hand-authored runtime scripts (`multiplayer.js`, `multiplayer/mp-*.js`, `cooks-assistant.js`, `tile-coords.js`, `debug-mode.js`) in `src/custom/` (synced to `assets/` by `npm run build`).
    - Declare global `window.*` properties in `src/game/types/globals.d.ts`.
    - Keep root `CHANGELOG.md`, `docs/DEVELOPMENT.md`, and `package-lock.json` untouched for upstream fast-forwards; record all custom changes in `docs/CHANGELOG.md`. Use LF (`\n`) line endings.

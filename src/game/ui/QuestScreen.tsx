@@ -29,10 +29,7 @@ const SLAYER_MASTER_BY_MAP: Record<string, string> = {
 };
 
 function getSlayerGroupTitle(mapId?: string): string {
-    if (!mapId) {
-        return "Spria (Across Gielinor)";
-    }
-    return SLAYER_MASTER_BY_MAP[mapId] ?? getMap(mapId).name;
+    return mapId ? (SLAYER_MASTER_BY_MAP[mapId] ?? getMap(mapId).name) : "Spria (Across Gielinor)";
 }
 
 // The quests in their maps' order, the ones done all over last

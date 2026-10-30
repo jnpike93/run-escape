@@ -1,4 +1,5 @@
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
+import { applyCustomItems } from "./custom/customOverrides";
 import {
     CasketDef,
     CasketTier,
@@ -839,8 +840,8 @@ export const UTILITY: UtilityDef[] = [
         name: "Saradomin brew",
         objId: 6685,
         rarity: "uncommon",
-        description: "Heals 8 hitpoints. +20% max hitpoints and +2 flat damage reduction for 30 seconds.",
-        use: { kind: "heal", amount: 8, stats: { maxHp: 0.2, armor: 2 }, seconds: 30 },
+        description: "Heals 18 hitpoints. +1.5 armour, but -15% damage, for 20 seconds.",
+        use: { kind: "heal", amount: 18, stats: { armor: 1.5, might: -0.15 }, seconds: 20 },
     },
     {
         kind: "utility",
@@ -848,7 +849,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Zamorak brew",
         objId: 2450,
         rarity: "uncommon",
-        description: "+35% damage, but -1 flat damage reduction, for 30 seconds.",
+        description: "+35% damage, but -1 armour, for 30 seconds.",
         use: { kind: "buff", stats: { might: 0.35, armor: -1 }, seconds: 30 },
     },
     {
@@ -857,7 +858,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Magic potion",
         objId: 3040,
         rarity: "uncommon",
-        description: "+20% attack size and +20% effect & DoT duration for 30 seconds.",
+        description: "+20% area and +20% effect duration for 30 seconds.",
         use: { kind: "buff", stats: { area: 0.2, duration: 0.2 }, seconds: 30 },
     },
     {
@@ -867,8 +868,9 @@ export const UTILITY: UtilityDef[] = [
         objId: 10925,
         rarity: "uncommon",
         description:
-            "Heals 5 hitpoints, grants +10 HP regen / min for 60s, and cures & blocks poison and boss curses for 60s.",
-        use: { kind: "cure", seconds: 60, heal: 5, stats: { regen: 10 } },
+            "Heals 6 hitpoints, cures poison and boss drains and curses, and keeps them off " +
+            "for 60 seconds.",
+        use: { kind: "cure", seconds: 60, heal: 6 },
     },
     {
         kind: "utility",
@@ -876,7 +878,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Super combat potion",
         objId: 12695,
         rarity: "rare",
-        description: "+25% damage, +1 flat damage reduction and +10% attack speed for 30 seconds.",
+        description: "+25% damage, +1 armour and +10% weapon speed for 30 seconds.",
         use: { kind: "buff", stats: { might: 0.25, armor: 1, cooldown: 0.1 }, seconds: 30 },
     },
     {
@@ -894,7 +896,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Bastion potion",
         objId: 22461,
         rarity: "rare",
-        description: "+1 projectile, +20% projectile speed and +1.5 flat damage reduction for 30 seconds.",
+        description: "+1 projectile, +20% projectile speed and +1.5 armour for 30 seconds.",
         use: { kind: "buff", stats: { amount: 1, speed: 0.2, armor: 1.5 }, seconds: 30 },
     },
     {
@@ -903,7 +905,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Battlemage potion",
         objId: 22449,
         rarity: "rare",
-        description: "+25% attack size, +25% effect & DoT duration and +1.5 flat damage reduction for 30 seconds.",
+        description: "+25% area, +25% effect duration and +1.5 armour for 30 seconds.",
         use: { kind: "buff", stats: { area: 0.25, duration: 0.25, armor: 1.5 }, seconds: 30 },
     },
     {
@@ -912,7 +914,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Black chinchompa",
         objId: 11959,
         rarity: "rare",
-        description: "Deals 160 blast damage in a 6.5-tile radius around you.",
+        description: "A huge blast that flattens everything around you.",
         use: { kind: "blast", damage: 160, radius: 6.5, spotAnim: FIRE_WAVE_IMPACT },
     },
     {
@@ -930,7 +932,7 @@ export const UTILITY: UtilityDef[] = [
         name: "Overload",
         objId: 11730,
         rarity: "veryRare",
-        description: "+35% damage, +15% attack speed and +15% attack size for 30 seconds.",
+        description: "+35% damage, +15% weapon speed and +15% area for 30 seconds.",
         use: { kind: "buff", stats: { might: 0.35, cooldown: 0.15, area: 0.15 }, seconds: 30 },
     },
     {
@@ -943,6 +945,7 @@ export const UTILITY: UtilityDef[] = [
         use: { kind: "buff", stats: { might: 0.3, armor: 1.5, cooldown: 0.12 }, seconds: 60 },
     },
 ];
+applyCustomItems(UTILITY);
 
 export const ITEMS: ItemDef[] = [...GEAR, ...UTILITY];
 
