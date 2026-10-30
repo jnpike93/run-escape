@@ -818,6 +818,19 @@ class TestPerformanceOptimizations(unittest.TestCase):
                 self.assertEqual(hdrs.get("Pragma"), "no-cache")
                 self.assertEqual(hdrs.get("Expires"), "0")
 
+    def test_nginx_conf_preserves_coop_coep_headers(self):
+        nginx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nginx.conf")
+        with open(nginx_path, "r", encoding="utf-8") as f:
+            conf = f.read()
+        self.assertIn('add_header Cross-Origin-Opener-Policy "same-origin" always;', conf)
+        self.assertIn('add_header Cross-Origin-Embedder-Policy "require-corp" always;', conf)
+        import re
+        for match in re.finditer(r"location\s+[^{]+\{([^}]+)\}", conf):
+            block = match.group(1)
+            if "add_header " in block:
+                self.assertIn("Cross-Origin-Opener-Policy", block)
+                self.assertIn("Cross-Origin-Embedder-Policy", block)
+
 
 if __name__ == "__main__":
     unittest.main()

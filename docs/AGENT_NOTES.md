@@ -8,10 +8,26 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Deduplicate `favicon.ico` & Streamline Custom Changelog to Gameplay Overview
+### [2026-10-30] Fix Nginx `location /` `add_header` Inheritance Stripping COOP/COEP Headers
 
 **Model**: Gemini (Antigravity)
 **Commit**: (pending - see git log)
+**Bundle**: `index-iGd6J9MJ.js` (`?v=8.5`)
+
+**Scope**: Fixed a regression in `server/nginx.conf` where a standalone `add_header Access-Control-Allow-Origin` inside `location /` suppressed inheritance of all `server`-level `add_header` directives (including `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`), while `proxy_hide_header` stripped the backend's headers.
+
+**Changes implemented**:
+- Moved `add_header Access-Control-Allow-Origin "https://run-escape.cuteanimegirls.moe" always;` to the `server` block in `server/nginx.conf` and removed the lone `add_header` directive from `location /` so all `server`-level security and COOP/COEP/CORP headers are inherited on `/`.
+- Added `test_nginx_conf_preserves_coop_coep_headers` in `server/test_serve.py` to enforce that any `location` block using `add_header` explicitly includes `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`.
+
+**Tests**: `python -m unittest server/test_serve.py` (55 tests OK).
+
+---
+
+### [2026-10-30] Deduplicate `favicon.ico` & Streamline Custom Changelog to Gameplay Overview
+
+**Model**: Gemini (Antigravity)
+**Commit**: `da06c42`
 **Bundle**: `index-iGd6J9MJ.js` (`?v=8.5`, MapViewer `MapViewerApp-DkX-kaAf.js`, WASM loader `module-D8SqyX4g.js`)
 
 **Scope**: Removed the duplicate root `favicon.ico` (leaving `public/favicon.ico` as the single canonical icon), updated `server/serve.py` and `server/nginx.conf` to serve `/favicon.ico` from `public/favicon.ico`, rewrote `docs/CHANGELOG.md` into a high-level overview of player-facing gameplay differences only, updated agent rule files to enforce gameplay-only custom changelogs, and rebuilt the production bundle.
