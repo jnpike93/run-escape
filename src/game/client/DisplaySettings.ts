@@ -1,6 +1,6 @@
 // Settings for how the game looks and behaves, kept in the browser like the
 // sound ones
-export type UiScaleSetting = "auto" | 1 | 1.25 | 1.5;
+export type UiScaleSetting = "auto" | 1 | 1.25 | 1.5 | 1.75 | 2;
 
 export type DisplaySettings = {
     // The camera circles the character on the title screen and the menus
@@ -52,7 +52,9 @@ export function loadDisplaySettings(): DisplaySettings {
                 data.uiScale === "auto" ||
                 data.uiScale === 1 ||
                 data.uiScale === 1.25 ||
-                data.uiScale === 1.5
+                data.uiScale === 1.5 ||
+                data.uiScale === 1.75 ||
+                data.uiScale === 2
             ) {
                 settings.uiScale = data.uiScale;
             }

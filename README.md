@@ -19,12 +19,11 @@ This repository extends [Dynrothe/Run-Escape](https://github.com/Dynrothe/Run-Es
 - **Level Best Times Leaderboard**:
   - Dedicated **Leaderboard** screen on the Title menu and Map Select panel tracking best survival time, fastest boss clear, endless record, wins, and top kill count per map.
 - **Custom Adventurers, Evolutions & Balance Adjustments**:
-  - Secret-code adventurers **Dipper the Corgi** (`dipperthedog`, Bork Wave) and **Elias the Chihuahua** (`barkelly`, Ankle Bite), plus `l33th4x0r` (unlocks all adventurers, maps, and Endless mode) and `debugmode` (`\` opens the live stat slider panel).
+  - Secret-code adventurers **Dipper the Corgi** (`dipperthedog`, Bork Wave) and **Elias the Chihuahua** (`barkelly`, Ankle Bite).
   - **Blood Burst -> Blood Barrage** evolution (paired with Rapid Heal, matched to Ice Barrage's `3.8` radius), rebalanced **Rapid Heal** (`+2.5 HP/min` per level, paused for 5s on hit), and buffed **Saradomin brew** / **Sanfew serum**.
 - **Quality of Life & Automated Upstream Sync**:
-  - **UI Scale** (**Auto**, **1x**, **1.25x**, **1.5x**) and **Tile Coordinates** HUD toggles in Settings, plus disabled browser right-click context menu in the game viewport.
-  - Hourly automated upstream merge, Vite bundle rebuild, cache-busting sync (`scripts/sync_dist.cjs`), verification suite, and PM2 reload via `scripts/auto_sync_upstream.cjs` (`npm run sync-upstream`).
-
+  - **UI Scale** (**Auto**, **1x**, **1.25x**, **1.5x**, **1.75x**, **2x**) and **Tile Coordinates** HUD toggles in Settings, plus disabled browser right-click context menu in the game viewport.
+ 
 > **[!IMPORTANT] AGENT DIRECTIVE (Antigravity, Jules, Claude Code, GitHub Copilot, Cursor, Codex, Windsurf)**
 > If you are an automated coding agent or AI assistant reading or modifying this repository, you MUST strictly follow the protocol in [`AGENTS.md`](./AGENTS.md):
 > 1. **Read First**: Read [`AGENTS.md`](./AGENTS.md), [`docs/AGENT_NOTES.md`](./docs/AGENT_NOTES.md), and [`.jules/sentinel.md`](./.jules/sentinel.md) BEFORE making any edits or resolving merge conflicts.
@@ -166,3 +165,81 @@ Issues and pull requests are welcome.
 ## License
 
 [BSD-2-Clause](LICENSE).
+
+## Getting started
+
+You need [Node.js](https://nodejs.org/) 20 or newer.
+
+```sh
+npm install
+npm run download-caches
+npm start
+```
+
+and open http://localhost:5173.
+
+`npm run download-caches` fetches the game's cache (see [Cache version](#cache-version)) from the
+[OpenRS2 Archive](https://archive.openrs2.org/) into `caches/`; you can also copy a `caches/` folder
+over from another checkout. The first load copies the 227 MB cache into
+the browser's cache storage, so later loads are quick.
+
+### Controls
+
+**WASD** or the arrow keys to move; weapons fire on their own. **1-4** use your utility items (and
+pick on a level up), **Esc** pauses, **Q** shows or hides the quest tracker, **M** mutes and the
+mouse wheel zooms.
+
+### Tests and tools
+
+```sh
+npm test                   # the game's tests (vitest)
+npx tsc --noEmit -p .      # type check
+npm run lint               # format everything with Prettier
+```
+
+`scripts/game/simulate-run.ts` has a bot play full runs for balancing, and `scripts/cache/` has
+tools for finding NPCs, items, animations and scenery in the cache.
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) lists them all, with how the code is laid out and how
+to host a build.
+
+## Hosting
+
+```sh
+npm run build
+npm run slim-cache
+```
+
+writes the game to `dist/` with a slim copy of the cache in `dist/caches/` (only what the game
+reads, about 26 MB instead of 227 MB). The page has to be served with
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, over
+HTTPS. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#hosting) has the details, with nginx and Apache
+examples.
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+- Format with Prettier (`npm run lint`), and keep `npm test` and the type check passing.
+- Content is plain data in `src/game/content/`, with real cache ids; the tools in `scripts/cache/`
+  find them. After changing content, `npm run slim-cache` checks that everything it needs is in the
+  cache.
+- Note what you change under a version in [docs/CHANGELOG.md](docs/CHANGELOG.md). It's written for players,
+  and the game shows it on its title screen.
+
+## Credits
+
+- Jagex, for Old School RuneScape
+- [dennisdev/rs-map-viewer](https://github.com/dennisdev/rs-map-viewer) (BSD-2-Clause, see
+  [LICENSE](LICENSE))
+- [RuneLite](https://github.com/runelite/runelite)
+- [OpenRS2 Archive](https://archive.openrs2.org/) and [RuneScape Archive](https://rs-archive.github.io/) - caches
+- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns and sound ids
+- [2004scape](https://github.com/2004scape/Server) and [2009scape](https://gitlab.com/2009scape/2009scape) - NPC spawns
+- [RuneStar](https://github.com/RuneStar/fonts) - fonts
+- [Blurite](https://github.com/blurite/pathfinder) - pathfinding
+- [RuneApps Model Viewer](https://github.com/skillbert/rsmv) - procedural textures
+
+## License
+
+[BSD-2-Clause](LICENSE).
+

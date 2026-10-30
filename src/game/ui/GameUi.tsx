@@ -326,6 +326,8 @@ function SettingsPanel({
                                     [1, "1x"],
                                     [1.25, "1.25x"],
                                     [1.5, "1.5x"],
+                                    [1.75, "1.75x"],
+                                    [2, "2x"],
                                 ] as const
                             ).map(([h, d]) => {
                                 const selected = ((ui.display as any)?.uiScale ?? "auto") === h;

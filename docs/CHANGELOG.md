@@ -18,6 +18,7 @@ the version in the corner), so it's written for players.
 - **Guest Spawn Deduplication**: Fixed duplicate WebSocket slot registration and added `peer_leaving` cleanup so Guests never see duplicate player entities at spawn.
 - **Slayer Tasks Tab**: Renamed the Quests checklist tab, HUD tracker, and completion notices to **Slayer Tasks** (leaving **Cook's Assistant** in Lumbridge as the game's quest).
 - **Guest Utility Items & Combat Stats**: Fixed **Bonecrusher**, **Red/Black Chinchompas**, self-damaging potions (**Overload**, **Zamorak brew**), ground Magnets, and casket gear/potion combat stats for Co-Op Guests.
+- **UI Scale Options**: Added **1.75x** and **2x** UI Scale options in Settings (**Auto**, **1x**, **1.25x**, **1.5x**, **1.75x**, **2x**).
 - **Co-Op Difficulty Multiplier**: Fixed boss special attacks and enemy explosions ignoring the Co-Op damage multiplier (`damageScale`), prevented double-rounding damage loss on normal enemies, and added a Host-selectable Difficulty Multiplier (`1x` - `3x`) in the Co-Op Lobby.
 
 ## Custom Edition Updates (v8.4)

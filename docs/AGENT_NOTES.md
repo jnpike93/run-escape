@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **TypeScript Source Tree** | [`src/`](../src/) | Built via `npm run build` (`vite build && node scripts/sync_dist.cjs`) |
 | **HTML Entrypoint** | [`index.html`](../index.html) | Browser root (`?v=8.5`) |
-| **Main Engine Bundle** | [`assets/index-Di6mdnQT.js`](../assets/index-Di6mdnQT.js) | `index.html`, `MapViewerApp-DaF9yjOZ.js`, `module-Du8dpbZA.js` |
+| **Main Engine Bundle** | [`assets/index-BJ52CiVK.js`](../assets/index-BJ52CiVK.js) | `index.html`, `MapViewerApp-ByrzZakD.js`, `module-Cc1KzfkC.js` |
 | **Co-Op Facade Entrypoint** | [`assets/multiplayer.js`](../assets/multiplayer.js) | `index.html` (`?v=8.5`, imports `assets/multiplayer/mp-*.js?v=8.5`) |
 | **Co-Op Submodules (9)** | [`assets/multiplayer/`](../assets/multiplayer/) | `mp-constants.js`, `mp-event-bus.js`, `mp-prayers.js`, `mp-transport.js`, `mp-lobby-ui.js`, `mp-hud-leaderboard.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js` |
 | **Build & Asset Syncer** | [`scripts/sync_dist.cjs`](../scripts/sync_dist.cjs) | `package.json` (`npm run build`) |
@@ -20,13 +20,13 @@
 | **Tile Coordinate HUD** | [`assets/tile-coords.js`](../assets/tile-coords.js) | `index.html` (`?v=8.5`) |
 | **Debug / God Mode** | [`assets/debug-mode.js`](../assets/debug-mode.js) | `index.html` (`?v=8.5`, remove before live production) |
 | **Main Stylesheet** | [`assets/index-BMrv4NGQ.css`](../assets/index-BMrv4NGQ.css) | `index.html` (`?v=8.5`) |
-| **Map Viewer Bundle** | [`assets/MapViewerApp-DaF9yjOZ.js`](../assets/MapViewerApp-DaF9yjOZ.js) | `assets/index-Di6mdnQT.js` |
-| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-Di6mdnQT.js` |
+| **Map Viewer Bundle** | [`assets/MapViewerApp-ByrzZakD.js`](../assets/MapViewerApp-ByrzZakD.js) | `assets/index-BJ52CiVK.js` |
+| **Render Worker** | [`assets/RenderDataWorker-DJjFWldW.js`](../assets/RenderDataWorker-DJjFWldW.js) | `assets/index-BJ52CiVK.js` |
 | **Worker WASM Loader** | [`assets/module--MAiymg_.js`](../assets/module--MAiymg_.js) | `assets/RenderDataWorker-DJjFWldW.js` (`module-yzz5kVyQ.wasm`) |
-| **Main WASM Loader** | [`assets/module-Du8dpbZA.js`](../assets/module-Du8dpbZA.js) | `assets/index-Di6mdnQT.js` (`module-yzz5kVyQ.wasm`) |
+| **Main WASM Loader** | [`assets/module-Cc1KzfkC.js`](../assets/module-Cc1KzfkC.js) | `assets/index-BJ52CiVK.js` (`module-yzz5kVyQ.wasm`) |
 | **OSRS Slim Cache** | [`caches/osrs-241_2026-09-30-slim-74e0d2b3`](../caches/osrs-241_2026-09-30-slim-74e0d2b3) | [`caches/caches.json`](../caches/caches.json) (`CacheStorage` key `-v12`) |
 
-### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-Di6mdnQT.js`)
+### Custom Engine & Gameplay Hooks in `src/` (Compiled into `assets/index-BJ52CiVK.js`)
 When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, ensure the following global hooks and custom features are preserved:
 1. **Client Instance Export (`window.gameClient`)**:
    - Exposes the primary game client instance in `src/game/GameApp.tsx` as `window.gameClient` during initialization and attaches helper methods (`getEnemyDef`, `getAppearance`, `getSimAppearance`, `iconCache`, `getCharacters`, `getMaps`, `getThrallDefs`) so [`assets/multiplayer.js`](../assets/multiplayer.js) can attach to `window.gameClient` and `window.gameClient.sim`.
@@ -58,6 +58,15 @@ When merging upstream changes into `src/` and rebuilding `assets/index-*.js`, en
 ---
 
 ## 3. Chronological Agent Handoff Log
+
+### 2026-10-29 - Antigravity - Add 1.75x and 2x UI Scale Options
+- **Commit / PR**: Add `1.75x` and `2x` UI Scale options (`?v=8.5`)
+- **Files Modified**: `src/game/client/DisplaySettings.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `README.md`, `docs/CHANGELOG.md`, `docs/AGENT_NOTES.md`, `index.html`, `assets/index-BJ52CiVK.js`, `assets/MapViewerApp-ByrzZakD.js`, `assets/module-Cc1KzfkC.js`
+- **Bundle / Version Impact**: `?v=8.5` (`assets/index-BJ52CiVK.js`, `assets/MapViewerApp-ByrzZakD.js`, `assets/module-Cc1KzfkC.js`)
+- **What Changed**:
+  - Extended `UiScaleSetting` in `src/game/client/DisplaySettings.ts`, `cycleUiScale()` in `src/game/client/GameClient.ts`, and the Settings modal UI Scale buttons in `src/game/ui/GameUi.tsx` to include `1.75` (`1.75x`) and `2` (`2x`) alongside `auto`, `1`, `1.25`, and `1.5`.
+- **Notes / Invariants for Future Agents**:
+  - Valid `uiScale` settings are `"auto" | 1 | 1.25 | 1.5 | 1.75 | 2`.
 
 ### 2026-10-29 - Antigravity - Relocate MULTIPLAYER_ARCHITECTURE.md, CHANGELOG.md & AGENT_NOTES.md into `docs/` + Update README.md
 - **Commit / PR**: Move documentation files into `docs/` and integrate upstream `README.md` with custom edition differences at the top (`?v=8.5`)
