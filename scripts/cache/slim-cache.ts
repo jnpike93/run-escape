@@ -111,10 +111,10 @@ Object.assign(globalThis, { ImageData: NodeImageData, OffscreenCanvas: NodeOffsc
 
 // Skip CPU-only WebGL vertex packing, software minimap rasterization, and
 // per-frame vertex matrix transforms that do not read from the cache store.
-SceneBuffer.prototype.addTerrain = () => {};
+SceneBuffer.prototype.addTerrain = () => 0;
 SceneBuffer.prototype.addModel = () => {};
 SceneBuffer.prototype.addModelGroup = () => {};
-SceneBuffer.prototype.addModelAnimFrame = () => [0, 0];
+SceneBuffer.prototype.addModelAnimFrame = () => [0, 0, 0];
 SceneBuffer.prototype.addLocAnimatedGroups = () => [];
 MapImageRenderer.prototype.renderMinimap = () => new Int32Array(0);
 MapImageRenderer.prototype.renderMinimapHd = () => new Int32Array(0);
