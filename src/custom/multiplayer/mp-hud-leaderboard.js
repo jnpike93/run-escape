@@ -444,7 +444,8 @@ export const mpHudLeaderboardMethods = {
             const lvl = Math.max(1, Math.round(Number(peer.entity?.level || peer.level) || 1));
             const isCorgi = p2.characterId === 'dipper';
             const isChih = p2.characterId === 'elias';
-            const charName = escapeHtml(isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase()));
+            const isCat = p2.characterId === 'nova';
+            const charName = escapeHtml(isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (isCat ? 'CAT' : (p2.characterId || 'WARRIOR').replace(/_/g, ' ').toUpperCase())));
             const displayName = escapeHtml((peer.name || `Player ${peer.slot}`).toUpperCase());
             const slotColor = isLocalSpectating && activeSpectatePeer?.slot === peer.slot
                 ? '#ffff00'

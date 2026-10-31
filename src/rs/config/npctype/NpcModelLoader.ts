@@ -69,7 +69,7 @@ export class NpcModelLoader {
 
             model = merged.light(
                 this.textureLoader,
-                npcType.ambient + (npcType.id === 16370 || npcType.id === 16543 ? 135 : 64),
+                npcType.ambient + (npcType.id === 16370 || npcType.id === 16543 || npcType.id === 2638 ? 135 : 64),
                 npcType.contrast * 5 + 850,
                 -30,
                 -50,

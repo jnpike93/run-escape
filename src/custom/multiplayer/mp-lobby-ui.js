@@ -94,6 +94,7 @@ export const mpLobbyUiMethods = {
                         for (const cid of parsed.unlockedCharacters) {
                             if (cid === 'dipper' && !unlockedCodes.includes('dipperthedog')) continue;
                             if (cid === 'elias' && !unlockedCodes.includes('barkelly')) continue;
+                            if (cid === 'nova' && !unlockedCodes.includes('novathecat')) continue;
                             if (typeof cid === 'string' && ALLOWED_CHARACTERS.has(cid)) {
                                 unlocked.add(cid);
                             }
@@ -212,7 +213,7 @@ export const mpLobbyUiMethods = {
         const client = window.gameClient;
         if (client) {
             client.store?.set({ characterId: cleanChar });
-            if (cleanChar !== 'dipper' && cleanChar !== 'elias' && client.getAppearance) {
+            if (cleanChar !== 'dipper' && cleanChar !== 'elias' && cleanChar !== 'nova' && client.getAppearance) {
                 try {
                     client.assets?.setPlayerAppearance(client.getAppearance(cleanChar));
                 } catch(e) {}
@@ -236,7 +237,7 @@ export const mpLobbyUiMethods = {
         if (!client || !client.assets || !client.assets.models) return;
         const charIds = new Set(['warrior', 'wizard', 'ranger', 'barbarian', 'monk', ...extraChars]);
         const required = Array.from(charIds)
-            .filter(id => id && id !== 'dipper' && id !== 'elias' && ALLOWED_CHARACTERS.has(id))
+            .filter(id => id && id !== 'dipper' && id !== 'elias' && id !== 'nova' && ALLOWED_CHARACTERS.has(id))
             .map(id => `player_${id}`);
         const missing = required.filter(k => !client.assets.models.has(k));
 
@@ -267,6 +268,14 @@ export const mpLobbyUiMethods = {
                 key: 'chihuahua',
                 npcId: 16543,
                 seqIds: [6561, 6560]
+            });
+        }
+        if (!client.assets.models.has('neite')) {
+            bakes.push({
+                kind: 'npc',
+                key: 'neite',
+                npcId: 2638,
+                seqIds: [317, 314]
             });
         }
 
@@ -437,7 +446,7 @@ export const mpLobbyUiMethods = {
             mapId: config.mapId || 'lumbridge'
         });
 
-        if (localChar !== 'dipper' && localChar !== 'elias' && client.getAppearance) {
+        if (localChar !== 'dipper' && localChar !== 'elias' && localChar !== 'nova' && client.getAppearance) {
             try {
                 await client.assets.setPlayerAppearance(client.getAppearance(localChar));
             } catch(e) {}

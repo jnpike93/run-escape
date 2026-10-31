@@ -591,8 +591,8 @@ export class GameView {
         let frame: number;
         if (isDog) {
             anim = player.moving
-                ? model.getAnim(6560) || model.anims[0]
-                : model.getAnim(6561) || model.anims[0];
+                ? model.getAnim(6560) || model.getAnim(314) || model.anims[0]
+                : model.getAnim(6561) || model.getAnim(317) || model.anims[0];
             frame = anim ? anim.getFrame(tick - player.moveStart) : 0;
         } else {
             const attack = player.attackSeq !== -1 ? model.getAnim(player.attackSeq) : undefined;

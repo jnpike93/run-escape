@@ -8,10 +8,38 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Lock Co-Op Lobbies During Active Games & Isolate In-Game Sessions From Late Lobby Joins/Leaves
+### [2026-10-30] Add Secret Adventurer "Nova the Cat" (NPC `2638` Neite, Code `novathecat`) & Rebuild Slim Cache
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
+**Bundle**: `index-DfhD17VB.js` (`?v=8.6`, MapViewer `MapViewerApp-Dc6alj4g.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-DkcjhG7u.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-58ac8ee5`)
+
+**Scope**: Added secret adventurer **Nova** (`id: "nova"`, NPC ID `2638` "Neite", unlocked by secret code `"novathecat"`) in the **Special** section alongside Dipper and Elias across Singleplayer and Co-Op Multiplayer, and rebuilt the slim cache (`osrs-241_2026-09-30-slim-58ac8ee5`) with Neite's model (`6439`) and animation frames (`317` idle, `314` walk).
+
+**Changes implemented**:
+- **Character Definition & Unlocks (`src/game/content/custom/customCharacters.ts`, `src/game/content/custom/secretCodes.ts`, `src/game/core/custom/customSave.ts`)**:
+  - Added `"nova"` to `CUSTOM_CHARACTERS` and `SPECIAL_CHARACTER_IDS` (`new Set(["dipper", "elias", "nova"])`) so Nova appears in the **Special** section of `AdventurerPanel`:
+    - `startingWeapon: "dragon_claws"`, `style: "melee"`, `iconObjId: -2638`
+    - Cat attributes (`bonus`): `+35% movement speed` (`moveSpeed: 0.35`), `+20% attack speed` (`cooldown: 0.2`), `+20% luck` (`luck: 0.2`), `+1 extra life` (`revival: 1` - nine lives), and `+1 flat damage reduction` (`armor: 1`).
+    - `unlock: { kind: "code", code: "novathecat" }`.
+  - Added `"novathecat"` handling in `redeemSecretCode` (and included `"novathecat"` in `l33th4x0r`) and `VALID_SECRET_CODES` / `migrateCustomSaveFields` in `customSave.ts`.
+- **3D Model, Animations & Icon Rendering (`src/game/client/GameAssets.ts`, `src/game/client/custom/dogActors.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/rs/config/npctype/NpcModelLoader.ts`, `src/mapviewer/worker/customNpcIcon.ts`)**:
+  - Added `{ kind: "npc", key: "neite", npcId: 2638, seqIds: [317, 314] }` to `GameAssets.getBaseRequests()`.
+  - Updated `isDogCharacter` to include `"nova"` and `getPlayerOrDogModel` to return `assets.get("neite") || assets.getPlayer()`.
+  - Updated `GameClient.submitActors` and `GameView.drawPlayer` to support both dog (`6561` idle / `6560` walk) and cat (`317` idle / `314` walk) sequences.
+  - Added `npcType.id === 2638` to the `+135` ambient boost in `NpcModelLoader.ts` so Neite's black-and-white fur has crisp contrast, and updated `renderNpcItemIcon` in `customNpcIcon.ts` to use `npcType.idleSeqId !== -1 ? npcType.idleSeqId : 6561`.
+- **Co-Op Multiplayer Support (`src/custom/multiplayer/mp-constants.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/mp-actor-renderer.js`, `src/custom/multiplayer/mp-hud-leaderboard.js`, `src/custom/multiplayer/mp-sync-engine.js`)**:
+  - Added `{ id: 'nova', name: 'Nova (Cat)', weapon: 'dragon_claws', defaultUnlocked: false, secretCode: true }` to `ALL_CHARACTERS`.
+  - Updated lobby unlock checks (`novathecat`), `ensureAllCharacterModels` (`neite` NPC `2638`), remote peer rendering (`isCat`, sequences `314`/`317`), nametag height, and Party HUD label (`CAT`).
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-58ac8ee5` verified), `python -m unittest server/test_serve.py` (59 tests OK).
+
+---
+
+### [2026-10-30] Lock Co-Op Lobbies During Active Games & Isolate In-Game Sessions From Late Lobby Joins/Leaves
+
+**Model**: Gemini (Antigravity)
+**Commit**: `98c23e0`
 **Bundle**: `index-fTZtG7VT.js` (`?v=8.6`, MapViewer `MapViewerApp-BoiAZB8S.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-CXAPFukV.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
 
 **Scope**: Prevented latecomers from joining or disrupting an in-progress Co-Op session on both the Python WebSocket server (`server/serve.py`) and the client transport/lobby runtime (`src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`).

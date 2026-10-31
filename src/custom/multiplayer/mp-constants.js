@@ -3,6 +3,7 @@
 export const ALL_CHARACTERS = [
     { id: 'dipper', name: 'Dipper (Corgi)', weapon: 'throwing_knives', defaultUnlocked: false, secretCode: true },
     { id: 'elias', name: 'Elias (Chihuahua)', weapon: 'scimitar', defaultUnlocked: false, secretCode: true },
+    { id: 'nova', name: 'Nova (Cat)', weapon: 'dragon_claws', defaultUnlocked: false, secretCode: true },
     { id: 'warrior', name: 'Warrior', weapon: 'scimitar', defaultUnlocked: true },
     { id: 'wizard', name: 'Wizard', weapon: 'fire_spells', defaultUnlocked: true },
     { id: 'ranger', name: 'Ranger', weapon: 'throwing_knives', defaultUnlocked: true },

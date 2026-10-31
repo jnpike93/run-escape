@@ -1127,7 +1127,7 @@ export class GameClient implements GameFrameHandler {
         const model = getPlayerOrDogModel(this.assets, cId);
         if (model) {
             const anim = isDog
-                ? model.getAnim(6561) || model.anims[0]
+                ? model.getAnim(6561) || model.getAnim(317) || model.anims[0]
                 : model.getAnim(this.assets.getPlayerStance().idle);
             const tick = Math.floor(this.attractTick);
             if (anim) {

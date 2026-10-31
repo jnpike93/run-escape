@@ -117,6 +117,8 @@ describe("Multiplayer difficulty scaling & sanitization (mp-constants)", () => {
         expect(sanitizeMapId("BARBARIAN_VILLAGE")).toBe("barbarian_village");
         expect(sanitizeMapId("invalid_map", "lumbridge")).toBe("lumbridge");
         expect(sanitizeCharacter("DIPPER")).toBe("dipper");
+        expect(sanitizeCharacter("nova")).toBe("nova");
+        expect(CHAR_WEAPONS["nova"]).toBe("dragon_claws");
         expect(sanitizeCharacter("unknown", "warrior")).toBe("warrior");
         expect(sanitizeName("  Zezima<script>  ")).toBe("Zezimascript");
         expect(sanitizeRoomId("OSRS-1234!@#")).toBe("OSRS-1234");

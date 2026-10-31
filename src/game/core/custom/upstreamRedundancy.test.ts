@@ -13,6 +13,7 @@ import { MobileTouchInput } from "../../client/custom/mobileInput";
 import { CHARACTERS, getCharacter } from "../../content/characters";
 import { CUSTOM_ENEMIES } from "../../content/custom/customEnemies";
 import { CUSTOM_WEAPONS } from "../../content/custom/customWeapons";
+import { redeemSecretCode } from "../../content/custom/secretCodes";
 import { ENEMIES, getEnemy } from "../../content/enemies";
 import { ITEMS } from "../../content/items";
 import { ALL_MAPS, FUN_MAPS, MAPS, getArenaRegion, getMap } from "../../content/maps";
@@ -98,12 +99,30 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
         expect(fs.existsSync(path.join(slimDir, "main_file_cache.dat2"))).toBe(true);
 
         // Verify custom adventurers
-        for (const charId of ["penance_fighter", "dipper", "elias"]) {
+        for (const charId of ["penance_fighter", "dipper", "elias", "nova"]) {
             const char = getCharacter(charId);
             expect(char).toBeDefined();
             expect(getWeapon(char.startingWeapon)).toBeDefined();
         }
-        expect(CHARACTERS.length).toBeGreaterThanOrEqual(22);
+        expect(CHARACTERS.length).toBeGreaterThanOrEqual(23);
+
+        // Verify secret codes (including novathecat)
+        const mockSave = createSave();
+        let selectedChar = "";
+        const mockClient: any = {
+            save: mockSave,
+            persist() {},
+            selectCharacter(id: string) {
+                selectedChar = id;
+            },
+            sounds: { taskDone() {}, denied() {} },
+            store: { toast() {} },
+        };
+        const res = redeemSecretCode(mockClient, "novathecat");
+        expect(res.ok).toBe(true);
+        expect(mockSave.unlockedCodes).toContain("novathecat");
+        expect(mockSave.unlockedCharacters).toContain("nova");
+        expect(selectedChar).toBe("nova");
 
         // Verify all custom weapons & evolutions are registered in getWeapon
         expect(CUSTOM_WEAPONS.length).toBeGreaterThanOrEqual(6);

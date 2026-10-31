@@ -43,9 +43,21 @@ export const CUSTOM_CHARACTERS: CharacterDef[] = [
         bonus: { moveSpeed: 0.3, cooldown: 0.2, might: 0.15, armor: 1 },
         unlock: { kind: "code", code: "barkelly" } as CharacterDef["unlock"],
     },
+    {
+        id: "nova",
+        name: "Nova",
+        description:
+            "An agile cat with nine lives. Starts with Dragon claws. +35% movement speed, +20% attack speed, +20% luck, +1 extra life, and +1 flat damage reduction.",
+        style: "melee",
+        startingWeapon: "dragon_claws",
+        iconObjId: -2638,
+        equipment: {},
+        bonus: { moveSpeed: 0.35, cooldown: 0.2, luck: 0.2, revival: 1, armor: 1 },
+        unlock: { kind: "code", code: "novathecat" } as CharacterDef["unlock"],
+    },
 ];
 
-const SPECIAL_CHARACTER_IDS = new Set(["dipper", "elias"]);
+const SPECIAL_CHARACTER_IDS = new Set(["dipper", "elias", "nova"]);
 
 export function isSpecialCharacter(characterId: string): boolean {
     return SPECIAL_CHARACTER_IDS.has(characterId);

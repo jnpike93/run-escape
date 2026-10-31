@@ -78,7 +78,7 @@ export const mpActorRendererMethods = {
         });
 
         let appearance = null;
-        if (client.getSimAppearance && sim.characterId !== 'dipper' && sim.characterId !== 'elias') {
+        if (client.getSimAppearance && sim.characterId !== 'dipper' && sim.characterId !== 'elias' && sim.characterId !== 'nova') {
             try {
                 appearance = client.getSimAppearance(sim);
             } catch (err) {
@@ -373,7 +373,7 @@ export const mpActorRendererMethods = {
         this.loadoutVersion = (this.loadoutVersion || 0) + 1;
         this.lastPartyHudKey = '';
 
-        if (msg.appearance && p2.characterId !== 'dipper' && p2.characterId !== 'elias') {
+        if (msg.appearance && p2.characterId !== 'dipper' && p2.characterId !== 'elias' && p2.characterId !== 'nova') {
             this.bakeRemotePeerAppearance(client, peer, msg.appearance);
         }
     },

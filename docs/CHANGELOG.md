@@ -21,7 +21,7 @@ the version in the corner), so it's written for players.
 - **Fight Caves & Protection Prayers**: Enter the **Fight Caves** map and use **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks from TzTok-Jad and TzKal-Zuk.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge for bonus XP, coins, and a guaranteed chest.
 - **Slayer Tasks & Slayer Masters**: The checklist tab and HUD tracker feature **Slayer Tasks** grouped by OSRS Slayer Masters (**Turael**, **Mazchna**, **Krystilia**, **Sumona**, **Vannaka**, **Duradel**, **Konar quo Maten**, **Chaeldar**, **Aya**, **Nieve**, **Steve**, **TzHaar-Ket-Keh**, and **Spria**).
-- **Secret Adventurers & Codes**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi** (Bork Wave) and **Elias the Chihuahua** (Ankle Bite).
+- **Secret Adventurers & Codes**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi**, **Elias the Chihuahua**, and **Nova the Cat** (Neite).
 
 ### Combat, Balance & Quality of Life
 

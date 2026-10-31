@@ -207,8 +207,9 @@ function outlineAndShadow(pixels: Int32Array, width: number, height: number): vo
 export function renderNpcItemIcon(state: WorkerState, objId: number): Int32Array {
     const pixels = new Int32Array(ICON_WIDTH * ICON_HEIGHT);
     const npcType = state.npcTypeLoader.load(-objId);
+    const idleSeq = npcType.idleSeqId !== -1 ? npcType.idleSeqId : 6561;
     const model =
-        state.npcModelLoader.getModel(npcType, 6561, 0) ||
+        state.npcModelLoader.getModel(npcType, idleSeq, 0) ||
         state.npcModelLoader.getModel(npcType, -1, -1);
     if (!model) {
         return pixels;

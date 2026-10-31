@@ -18,6 +18,9 @@ export function redeemSecretCode(
         if (!client.save.unlockedCodes.includes("barkelly")) {
             client.save.unlockedCodes.push("barkelly");
         }
+        if (!client.save.unlockedCodes.includes("novathecat")) {
+            client.save.unlockedCodes.push("novathecat");
+        }
         if (!client.save.unlockedCodes.includes("l33th4x0r")) {
             client.save.unlockedCodes.push("l33th4x0r");
         }
@@ -31,8 +34,8 @@ export function redeemSecretCode(
             client.sim.coins = 999999999;
         }
         client.persist();
-        window.multiplayer?.sendLobbyUpdate?.();
-        window.multiplayer?.updateLobbyUI?.();
+        (globalThis as any).window?.multiplayer?.sendLobbyUpdate?.();
+        (globalThis as any).window?.multiplayer?.updateLobbyUI?.();
         client.sounds.taskDone();
         client.store.toast?.(
             "l33th4x0r activated: All characters & levels unlocked + 999,999,999 gold!",
@@ -55,8 +58,8 @@ export function redeemSecretCode(
         }
         client.persist();
         client.selectCharacter("dipper");
-        window.multiplayer?.sendLobbyUpdate?.();
-        window.multiplayer?.updateLobbyUI?.();
+        (globalThis as any).window?.multiplayer?.sendLobbyUpdate?.();
+        (globalThis as any).window?.multiplayer?.updateLobbyUI?.();
         client.sounds.taskDone();
         return {
             ok: true,
@@ -78,14 +81,37 @@ export function redeemSecretCode(
         }
         client.persist();
         client.selectCharacter("elias");
-        window.multiplayer?.sendLobbyUpdate?.();
-        window.multiplayer?.updateLobbyUI?.();
+        (globalThis as any).window?.multiplayer?.sendLobbyUpdate?.();
+        (globalThis as any).window?.multiplayer?.updateLobbyUI?.();
         client.sounds.taskDone();
         return {
             ok: true,
             message: newlyUnlocked
                 ? "Elias the Chihuahua unlocked!"
                 : "Elias is already unlocked and selected!",
+        };
+    }
+    if (cleaned === "novathecat") {
+        if (!Array.isArray(client.save.unlockedCodes)) {
+            client.save.unlockedCodes = [];
+        }
+        if (!client.save.unlockedCodes.includes("novathecat")) {
+            client.save.unlockedCodes.push("novathecat");
+        }
+        const newlyUnlocked = !client.save.unlockedCharacters.includes("nova");
+        if (newlyUnlocked) {
+            client.save.unlockedCharacters.push("nova");
+        }
+        client.persist();
+        client.selectCharacter("nova");
+        (globalThis as any).window?.multiplayer?.sendLobbyUpdate?.();
+        (globalThis as any).window?.multiplayer?.updateLobbyUI?.();
+        client.sounds.taskDone();
+        return {
+            ok: true,
+            message: newlyUnlocked
+                ? "Nova the Cat unlocked!"
+                : "Nova is already unlocked and selected!",
         };
     }
     client.sounds.denied();

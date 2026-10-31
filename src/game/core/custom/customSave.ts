@@ -4,7 +4,7 @@ import { CUSTOM_MAPS } from "../../content/custom/customMaps";
 import { ALL_MAPS, MAPS, MAP_BY_ID } from "../../content/maps";
 import type { RunSummary, SaveData } from "../save";
 
-const VALID_SECRET_CODES = new Set(["dipperthedog", "barkelly", "l33th4x0r"]);
+const VALID_SECRET_CODES = new Set(["dipperthedog", "barkelly", "novathecat", "l33th4x0r"]);
 const ALWAYS_UNLOCKED_CUSTOM_MAP_IDS = new Set(["fight_caves"]);
 
 export function isCustomMap(mapId: string): boolean {
@@ -263,7 +263,8 @@ export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>)
     save.unlockedCharacters = save.unlockedCharacters.filter(
         (s) =>
             (s !== "dipper" || save.unlockedCodes.includes("dipperthedog")) &&
-            (s !== "elias" || save.unlockedCodes.includes("barkelly")),
+            (s !== "elias" || save.unlockedCodes.includes("barkelly")) &&
+            (s !== "nova" || save.unlockedCodes.includes("novathecat")),
     );
     if (data.mapBest && typeof data.mapBest === "object") {
         for (const [id, best] of Object.entries(data.mapBest)) {

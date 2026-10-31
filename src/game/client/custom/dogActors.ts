@@ -6,7 +6,7 @@ export const DOG_ACTOR_SCALE = 1.5;
 export const DOG_HEIGHT_OFFSET = 0.11;
 
 export function isDogCharacter(characterId?: string): boolean {
-    return characterId === "dipper" || characterId === "elias";
+    return characterId === "dipper" || characterId === "elias" || characterId === "nova";
 }
 
 export function getPlayerOrDogModel(
@@ -18,6 +18,9 @@ export function getPlayerOrDogModel(
     }
     if (characterId === "elias") {
         return assets.get("chihuahua") || assets.getPlayer();
+    }
+    if (characterId === "nova") {
+        return assets.get("neite") || assets.getPlayer();
     }
     return assets.getPlayer();
 }

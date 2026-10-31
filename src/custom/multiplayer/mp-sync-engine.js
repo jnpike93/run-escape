@@ -264,7 +264,7 @@ export const mpSyncEngineMethods = {
             this.remotePeers.set(slot, peerObj);
             this.invalidateSortedRemotePeers();
             sim.remotePlayers.push(entity);
-            if (charId !== 'dipper' && charId !== 'elias') {
+            if (charId !== 'dipper' && charId !== 'elias' && charId !== 'nova') {
                 this.bakeRemotePeerAppearance(client, peerObj, [{ id: weaponId, level: 1 }]);
             }
         }
@@ -1808,7 +1808,8 @@ export const mpSyncEngineMethods = {
                     }
                     const isCorgi = p2.characterId === 'dipper';
                     const isChih = p2.characterId === 'elias';
-                    const isDog = isCorgi || isChih;
+                    const isCat = p2.characterId === 'nova';
+                    const isDog = isCorgi || isChih || isCat;
                     const isSledding = !isDog && !isDeadPeer && Boolean(p2.sled || (p2.sledEndTick && s.tick < p2.sledEndTick));
                     const dynKey = `player_dynamic_${peer.slot}`;
                     let model;
@@ -1816,6 +1817,8 @@ export const mpSyncEngineMethods = {
                         model = client.assets.get('corgi');
                     } else if (isChih) {
                         model = client.assets.get('chihuahua');
+                    } else if (isCat) {
+                        model = client.assets.get('neite');
                     } else if (isSledding) {
                         model = client.assets.get(`${dynKey}_sled`) || client.assets.get('player:sled') || (p2.hasDynamicModel && client.assets.get(dynKey)) || client.assets.get('player_' + p2.characterId) || client.assets.getPlayer();
                     } else if (p2.hasDynamicModel && client.assets.get(dynKey)) {
@@ -1832,8 +1835,8 @@ export const mpSyncEngineMethods = {
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - (p2.deathTick >= 0 ? p2.deathTick : s.tick)), false) : 0;
                         } else if (isDog) {
                             anim = p2.moving ?
-                                (model.getAnim(6560) || model.anims[0]) :
-                                (model.getAnim(6561) || model.anims[0]);
+                                (model.getAnim(6560) || model.getAnim(314) || model.anims[0]) :
+                                (model.getAnim(6561) || model.getAnim(317) || model.anims[0]);
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                         } else if (isSledding) {
                             anim = p2.moving ?
@@ -1900,7 +1903,7 @@ export const mpSyncEngineMethods = {
                         const p1 = s.player;
                         const px1 = p1.prevX + (p1.x - p1.prevX) * alpha;
                         const py1 = p1.prevY + (p1.y - p1.prevY) * alpha;
-                        const isDog1 = p1.characterId === 'dipper' || p1.characterId === 'elias';
+                        const isDog1 = p1.characterId === 'dipper' || p1.characterId === 'elias' || p1.characterId === 'nova';
                         const modelH1 = isDog1 ? 95 : 200;
                         const groundH1 = s.grid ? s.grid.getHeight(px1, py1) / 128 : 0;
                         const worldH1 = groundH1 - (modelH1 / 128) - (15 / 128);
@@ -1930,7 +1933,8 @@ export const mpSyncEngineMethods = {
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
                         const isCorgi = p2.characterId === 'dipper';
                         const isChih = p2.characterId === 'elias';
-                        const isDog = isCorgi || isChih;
+                        const isCat = p2.characterId === 'nova';
+                        const isDog = isCorgi || isChih || isCat;
                         const modelHeight = isDog ? 95 : 200;
                         const groundHeight = s.grid ? s.grid.getHeight(px, py) / 128 : 0;
                         const worldHeight = groundHeight - (modelHeight / 128) - (15 / 128);
@@ -1938,7 +1942,7 @@ export const mpSyncEngineMethods = {
                         overlayRenderer.project(px, worldHeight, py, peerScreen);
 
                         const displayName = (peer.name || `Player ${peer.slot}`).toUpperCase();
-                        const classSub = isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (p2.characterId || 'WARRIOR').toUpperCase());
+                        const classSub = isCorgi ? 'CORGI' : (isChih ? 'CHIHUAHUA' : (isCat ? 'CAT' : (p2.characterId || 'WARRIOR').toUpperCase()));
                         const tagColor = SLOT_COLORS[peer.slot] || '#ffff00';
 
                         const margin = 50;

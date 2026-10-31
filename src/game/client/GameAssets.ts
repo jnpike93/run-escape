@@ -281,6 +281,7 @@ export class GameAssets {
         const requests: BakeRequest[] = [];
         requests.push({ kind: "npc", key: "corgi", npcId: 16370, seqIds: [6561, 6560] });
         requests.push({ kind: "npc", key: "chihuahua", npcId: 16543, seqIds: [6561, 6560] });
+        requests.push({ kind: "npc", key: "neite", npcId: 2638, seqIds: [317, 314] });
         for (const enemy of ENEMIES) {
             const seqIds = [
                 enemy.walkSeq,
