@@ -8,10 +8,36 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Add Mobile Fullscreen Mode, Dynamic Viewport (`100dvh` / `visualViewport`) Sync, Hardware Safe-Area Insets & PWA Manifest
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-rZh4_2OV.js` (`?v=8.6`, MapViewer `MapViewerApp-CyU57m9w.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-C9YkQK8T.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
+
+**Scope**: Implemented mobile-aware Fullscreen mode (`mobileFullscreen.ts`), dynamic visible viewport (`100dvh` + `window.visualViewport` CSS variables `--app-width` / `--app-height`) synchronization, hardware safe-area inset protection across all screens and modals, and a landscape fullscreen PWA web app manifest (`assets/manifest.json`).
+
+**Changes implemented**:
+- **Mobile Fullscreen & Dynamic Viewport Engine (`src/game/client/custom/mobileFullscreen.ts`, `src/game/client/custom/mobileFullscreen.test.ts`)**:
+  - Created `mobileFullscreen.ts` providing `getViewportDimensions`, `syncViewportCssVars`, `isStandaloneOrFullscreen`, `canUseFullscreenApi`, `isIosSafariBrowser`, `enterMobileFullscreen`, `exitMobileFullscreen`, `toggleMobileFullscreen`, and `subscribeFullscreenAndViewport`.
+  - Requests fullscreen with `{ navigationUI: "hide" }` (and `webkitRequestFullscreen` fallback), automatically attempts `screen.orientation.lock("landscape")` on touch devices when entering fullscreen, and unlocks orientation on exit.
+  - Subscribes to `window.visualViewport` (`resize`, `scroll`), `window` (`resize`, `orientationchange`), and `document` (`fullscreenchange`, `webkitfullscreenchange`) with post-transition settle timers (`120ms`, `350ms`) to keep `--app-width`, `--app-height`, and `window.scrollTo(0, 0)` pinned to the exact visible mobile screen area.
+- **Fullscreen UI Controls & iOS Safari Guidance (`src/game/ui/CustomSettingsControls.tsx`, `src/game/ui/GameUi.tsx`)**:
+  - Added `<FullscreenSetting />` (`On` / `Off` toggle) in both Title `SettingsPanel` (under `Game`) and `PauseModal` (under `Settings`).
+  - Added `<HudFullscreenButton />` next to `<HudPauseButton />` inside `.ui-hud-actions` in the run HUD so players can enter or exit fullscreen with one tap mid-run.
+  - Upgraded `<MobileOrientationBanner />` on touch devices to offer a one-tap **Fullscreen** button alongside **Dismiss**, and added clean inline instructions when running in iPhone iOS Safari (where Apple restricts the Fullscreen API on web pages: `Tap AA / Page menu -> Hide Toolbar, or Share -> Add to Home Screen`).
+- **Hardware Safe-Area Insets & `100dvh` Viewport CSS (`src/index.css`, `src/game/GameApp.css`, `src/game/ui/GameUi.css`, `src/custom/multiplayer/mp-prayers.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/manifest.json`, `scripts/sync_dist.cjs`, `index.html`)**:
+  - Updated `html, body` in `src/index.css` to `position: fixed; inset: 0; width: var(--app-width, 100%); height: var(--app-height, 100dvh); overscroll-behavior: none;` so mobile browser URL/navigation bars never clip the bottom of the game or rubber-band scroll.
+  - Added `--safe-top`, `--safe-right`, `--safe-bottom`, and `--safe-left` (`env(safe-area-inset-*)`) to `:root` in `GameUi.css` and applied scale-aware safe-area padding across `.ui-title`, `.ui-version`, `.ui-select`, `.ui-modal`, `#osrs-prayer-bar`, `#coop-toast`, and `#coop-lobby-modal`, plus `min(90vh, 90dvh)` max-heights on all modal panels and compact `@media (max-height: 760px), (max-width: 900px)` Title menu rules.
+  - Added `src/custom/manifest.json` (`"display": "fullscreen"`, `"orientation": "landscape"`), registered `"manifest.json"` in `scripts/sync_dist.cjs`, and linked it in `index.html` with `apple-mobile-web-app-status-bar-style="black-translucent"`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (429/429 passed across all 24 test suites including `mobileFullscreen.test.ts`), `npm run verify-slim-cache` (14,541 groups verified), `python -m unittest server/test_serve.py` (55 tests OK).
+
+---
+
 ### [2026-10-30] Add Android & iOS Mobile Browser Support, Full-Game 20-Map Smoke Test Suite & Upstream Merge Redundancy Guards
 
 **Model**: Gemini (Antigravity)
-**Commit**: `aa347c7` / `a749777` (and redundancy/smoketest commit - see git log)
+**Commit**: `aa347c7` / `a749777` / `d608e37`
 **Bundle**: `index-BwmJHwXe.js` (`?v=8.6`, MapViewer `MapViewerApp-g9OJZ3G9.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-BzK3vuRj.js`, styles `index-Cg9IkcQm.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
 
 **Scope**: Implemented upstream-friendly Android and iOS mobile browser support across touch controls, camera pinch-to-zoom, HUD Pause button, responsive sub-`1.0` UI scaling (`0.45x - 2x`), viewport safe-area insets, iOS Safari `GainNode` audio volume/unlock handling, mobile GPU/worker budgeting, and custom runtime script layouts; added dual-signature `FlowField.update` redundancy, `GameClient` constructor `window.gameClient` registration, touch-tap interaction for the Lumbridge Cook in `cooks-assistant.js`, and a full-game 20-map Solo + Co-Op smoke test and upstream contract verification suite (`src/game/core/custom/upstreamRedundancy.test.ts`).

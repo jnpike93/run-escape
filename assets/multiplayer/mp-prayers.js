@@ -61,7 +61,7 @@ export function ensureOsrsPrayerBarUI() {
     bar.id = 'osrs-prayer-bar';
     bar.style.cssText = `
         position: fixed;
-        bottom: 92px;
+        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
         left: 50%;
         transform: translateX(-50%);
         zoom: var(--ui-scale, 1);

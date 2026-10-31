@@ -459,7 +459,7 @@ export const mpLobbyUiMethods = {
             toast.id = 'coop-toast';
             toast.style.cssText = `
                 position: fixed;
-                bottom: 24px;
+                bottom: calc(24px + env(safe-area-inset-bottom, 0px));
                 left: 50%;
                 transform: translateX(-50%);
                 zoom: var(--ui-scale, 1);
@@ -520,6 +520,8 @@ export const mpLobbyUiMethods = {
         modal.style.cssText = `
             position: fixed;
             inset: 0;
+            padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+            box-sizing: border-box;
             background: rgba(0, 0, 0, 0.75);
             display: flex;
             align-items: center;

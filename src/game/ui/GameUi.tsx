@@ -51,6 +51,8 @@ import { Coins } from "./Coins";
 import { CollectionLogScreen } from "./CollectionLogScreen";
 import { CoopDamageLeaderboardTable, CoopGameOverButtons } from "./CoopGameOverSection";
 import {
+    FullscreenSetting,
+    HudFullscreenButton,
     HudPauseButton,
     MobileOrientationBanner,
     PauseHoverInfoBox,
@@ -67,6 +69,10 @@ import { RerollButton } from "./RerollButton";
 import { SkipButton } from "./SkipButton";
 import { GAME_VERSION } from "./changelog";
 import { Notice, loadNotice, markNoticeSeen, shouldShowNotice } from "./notice";
+import {
+    getViewportDimensions,
+    subscribeFullscreenAndViewport,
+} from "../client/custom/mobileFullscreen";
 
 type Props = {
     store: GameStore;
@@ -80,9 +86,10 @@ const UI_BASE_WIDTH = 1150;
 const UI_MAX_SCALE = 2;
 
 function getUiScale(): number {
+    const { width, height } = getViewportDimensions();
     return computeAutoUiScale(
-        window.innerWidth,
-        window.innerHeight,
+        width,
+        height,
         UI_BASE_WIDTH,
         UI_BASE_HEIGHT,
         UI_MAX_SCALE,
@@ -92,9 +99,18 @@ function getUiScale(): number {
 function useUiScale(): number {
     const [scale, setScale] = useState(getUiScale);
     useEffect(() => {
-        const onResize = () => setScale(getUiScale());
-        window.addEventListener("resize", onResize);
-        return () => window.removeEventListener("resize", onResize);
+        setScale(getUiScale());
+        return subscribeFullscreenAndViewport(({ width, height }) => {
+            setScale(
+                computeAutoUiScale(
+                    width,
+                    height,
+                    UI_BASE_WIDTH,
+                    UI_BASE_HEIGHT,
+                    UI_MAX_SCALE,
+                ),
+            );
+        });
     }, []);
     return scale;
 }
@@ -366,6 +382,7 @@ function SettingsPanel({
                 </section>
                 <section className="ui-settings-section">
                     <h3>Game</h3>
+                    <FullscreenSetting />
                     <Setting name="UI Scale" text="Scale menus, HUD and Co-Op lobby">
                         <UiScaleButtons ui={ui} client={client} />
                     </Setting>
@@ -1375,7 +1392,10 @@ function Hud({
                 <div className="ui-timer">{formatTime(hud.seconds)}</div>
                 <div className="ui-hud-right">
                     <Minimap client={client} />
-                    <HudPauseButton client={client} />
+                    <div className="ui-hud-actions">
+                        <HudFullscreenButton />
+                        <HudPauseButton client={client} />
+                    </div>
                     <div>
                         <span className="ui-skull">☠</span> {hud.kills.toLocaleString()}
                     </div>
@@ -1762,6 +1782,7 @@ function PauseModal({
                         )}
                         <PauseHoverInfoBox hoverInfo={hoverInfo} />
                         <h3 className="ui-pause-heading">Settings</h3>
+                        <FullscreenSetting />
                         <SoundSettings
                             ui={ui}
                             client={client}

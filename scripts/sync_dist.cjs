@@ -26,6 +26,7 @@ const PRESERVED_ASSETS = new Set([
     "tile-coords.js",
     "debug-mode.js",
     "quest-complete.ogg",
+    "manifest.json",
 ]);
 
 const OBSOLETE_HASHED_RE =

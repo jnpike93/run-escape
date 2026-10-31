@@ -1,7 +1,26 @@
 import { useEffect, useState } from "react";
 
+import { isTouchDevice } from "../../util/DeviceUtil";
 import { GameClient } from "../client/GameClient";
 import { UiSnapshot } from "../client/GameStore";
+import {
+    ViewportState,
+    subscribeFullscreenAndViewport,
+    syncViewportCssVars,
+    toggleMobileFullscreen,
+} from "../client/custom/mobileFullscreen";
+
+const IOS_FULLSCREEN_GUIDE =
+    "On iPhone Safari, tap the AA / Page menu in the address bar and choose 'Hide Toolbar', or tap Share -> 'Add to Home Screen' for fullscreen.";
+
+export function useViewportState(): ViewportState {
+    const [state, setState] = useState<ViewportState>(() => syncViewportCssVars());
+    useEffect(() => {
+        setState(syncViewportCssVars());
+        return subscribeFullscreenAndViewport((next) => setState(next));
+    }, []);
+    return state;
+}
 
 const UI_SCALE_OPTIONS = [
     ["auto", "Auto"],
@@ -175,6 +194,79 @@ export function PauseHoverInfoBox({
     );
 }
 
+export function FullscreenSetting(): JSX.Element {
+    const { fullscreen } = useViewportState();
+    const [iosTip, setIosTip] = useState(false);
+
+    const onToggle = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.blur();
+        const res = await toggleMobileFullscreen({ lockLandscape: isTouchDevice });
+        if (res.mode === "ios-guide") {
+            setIosTip((v) => !v);
+        } else {
+            setIosTip(false);
+        }
+    };
+
+    return (
+        <>
+            <div className="ui-setting">
+                <div className="ui-setting-label">
+                    <div className="ui-setting-name">Fullscreen</div>
+                    <div className="ui-setting-text">Fill the screen and hide browser bars</div>
+                </div>
+                <div className="ui-setting-control">
+                    <button
+                        type="button"
+                        className={
+                            "ui-button ui-button-small ui-toggle" +
+                            (fullscreen ? " ui-toggle-on" : "")
+                        }
+                        aria-label="Fullscreen"
+                        aria-pressed={fullscreen}
+                        onClick={onToggle}
+                    >
+                        {fullscreen ? "On" : "Off"}
+                    </button>
+                </div>
+            </div>
+            {iosTip && (
+                <div
+                    style={{
+                        fontSize: "13px",
+                        color: "#ffff00",
+                        background: "rgba(16, 12, 8, 0.85)",
+                        border: "1px solid #6b5e4a",
+                        padding: "5px 8px",
+                        marginBottom: "4px",
+                    }}
+                >
+                    {IOS_FULLSCREEN_GUIDE}
+                </div>
+            )}
+        </>
+    );
+}
+
+export function HudFullscreenButton(): JSX.Element {
+    const { fullscreen } = useViewportState();
+    return (
+        <button
+            type="button"
+            className="ui-button ui-button-small ui-hud-fullscreen"
+            title={fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            aria-label={fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            aria-pressed={fullscreen}
+            onClick={async (e) => {
+                e.currentTarget.blur();
+                await toggleMobileFullscreen({ lockLandscape: isTouchDevice });
+            }}
+        >
+            {fullscreen ? "Exit Full" : "Full"}
+        </button>
+    );
+}
+
 export function HudPauseButton({ client }: { client: GameClient }): JSX.Element {
     return (
         <button
@@ -188,33 +280,39 @@ export function HudPauseButton({ client }: { client: GameClient }): JSX.Element 
     );
 }
 
-function isNarrowPortrait(): boolean {
-    if (typeof window === "undefined") {
-        return false;
-    }
-    return window.innerWidth < 600 && window.innerHeight > window.innerWidth;
+export function HudControlButtons({ client }: { client: GameClient }): JSX.Element {
+    return (
+        <div className="ui-hud-actions">
+            <HudFullscreenButton />
+            <HudPauseButton client={client} />
+        </div>
+    );
 }
 
 export function MobileOrientationBanner(): JSX.Element | null {
     const [dismissed, setDismissed] = useState(false);
-    const [portrait, setPortrait] = useState(isNarrowPortrait);
+    const [iosGuide, setIosGuide] = useState(false);
+    const { width, height, fullscreen, portrait } = useViewportState();
 
-    useEffect(() => {
-        const onResize = () => setPortrait(isNarrowPortrait());
-        window.addEventListener("resize", onResize);
-        return () => window.removeEventListener("resize", onResize);
-    }, []);
+    const narrowPortrait = portrait && width < 600;
+    const mobileNeedsFullscreen = isTouchDevice && !fullscreen && Math.min(width, height) < 560;
 
-    if (dismissed || !portrait) {
+    if (dismissed || (!narrowPortrait && !mobileNeedsFullscreen)) {
         return null;
     }
+
+    const message = iosGuide
+        ? "Tap AA -> Hide Toolbar or Share -> Add to Home Screen for fullscreen."
+        : portrait
+          ? "Tip: Rotate to landscape or tap Fullscreen for the best mobile view."
+          : "Tip: Tap Fullscreen to hide browser bars and fit your screen.";
 
     return (
         <div
             className="rs-border rs-background"
             style={{
                 position: "absolute",
-                top: "calc(6px + env(safe-area-inset-top, 0px))",
+                top: "calc(6px + var(--safe-top, env(safe-area-inset-top, 0px)) / var(--ui-scale, 1))",
                 left: "50%",
                 transform: "translateX(-50%)",
                 zIndex: 50,
@@ -231,7 +329,22 @@ export function MobileOrientationBanner(): JSX.Element | null {
                 whiteSpace: "nowrap",
             }}
         >
-            <span>Tip: Rotate your device to landscape for the best experience.</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{message}</span>
+            {!fullscreen && (
+                <button
+                    type="button"
+                    className="ui-button ui-button-small"
+                    style={{ padding: "2px 6px", fontSize: "12px", color: "#0dc10d" }}
+                    onClick={async () => {
+                        const res = await toggleMobileFullscreen({ lockLandscape: true });
+                        if (res.mode === "ios-guide") {
+                            setIosGuide(true);
+                        }
+                    }}
+                >
+                    Fullscreen
+                </button>
+            )}
             <button
                 type="button"
                 className="ui-button ui-button-small"
