@@ -8,6 +8,28 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-31] Merge Upstream v0.20.0 (`6f2c6bf`) — Hallowed Night, The Nightmare, Random Events, Ancient Spell Choice, ScapeRune & Slim Cache Rebuild
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-Dzib22Bq.js` (`?v=8.6`, MapViewer `MapViewerApp-pgqa-M-b.js`, Worker `RenderDataWorker-B2C7vh-p.js`, WASM loader `module-Cs_PHBte.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Merged `upstream/main` (`v0.20.0`, commit `6f2c6bf`) into `main`, resolving conflicts across 12 files, rebuilding the slim cache (`osrs-241_2026-09-30-slim-6a314ed2`), adding Co-Op Multiplayer support for the seasonal **Hallowed Night** (`halloween`) map and Random Events, and running full rendering/simulation smoke tests across all 21 maps.
+
+**Changes implemented**:
+- **Hallowed Night (`halloween`), ScapeRune Map Engine & Batched Slim Cache (`src/game/content/maps.ts`, `src/game/client/custom/customMusic.ts`, `vite.config.ts`, `scripts/cache/slim-cache.ts`, `src/game/scaperune/generator.test.ts`)**:
+  - Merged upstream's **Hallowed Night** (`id: "halloween"`, `seasonal: true`), `CAMPAIGN_MAPS`, `SEASONAL_MAPS`, and `DEV_MAPS` alongside our custom maps (`barbarian_village`, `fight_caves`), assigning `"Dangerous Way"` (`./assets/music/dangerous_way.ogg`) for **Hallowed Night**.
+  - Merged `leaveOutDevMapsPlugin()` with `sourceEntryIndexHtmlPlugin()` in `vite.config.ts`.
+  - Merged `BAKE_BATCH = 25` batched actor baking and `installRecipeInSceneBuilder(state.sceneBuilder, map.id)` in `scripts/cache/slim-cache.ts`, rebuilt `caches/osrs-241_2026-09-30-slim-6a314ed2` (26.7 MB, 14,760 groups), and updated `generator.test.ts` to invoke `node ./node_modules/tsx/dist/cli.mjs` via `process.execPath` so `check-maps.ts` and `check-prefabs.ts` run cross-platform on Windows.
+- **The Nightmare, Slash Bash, The Mimic, Random Events & Ancient Spell Pick (`src/game/core/Sim.ts`, `src/game/core/entities.ts`, `src/game/core/save.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/game/ui/GameUi.tsx`)**:
+  - Merged The Nightmare of Ashihama multi-phase boss mechanics (shield break, sleepwalkers, spores, portals, flowers, totems, square arena), Hallowed Night pumpkins/sweets/Mimic/Slash Bash, Random Event visitors (`<EventModal />`, `chooseEvent`, `leaveEvent`, `powerUpRate` upgrade), and Ancient Spell selection (`ANCIENT_SPELL_PICK`) while preserving custom Jad/Zuk recovery cooldowns, pickup recovery, Challenge Modes, God Wars faction warfare, and custom UI panels.
+- **Co-Op Multiplayer Support for Hallowed Night & Random Events (`src/custom/multiplayer/mp-constants.js`, `src/custom/multiplayer/mp-sync-engine.js`, `src/game/core/custom/upstreamRedundancy.test.ts`)**:
+  - Added `halloween` (`Hallowed Night (Seasonal)`) to `ALL_REGIONS`, `ALLOWED_REGIONS`, and `sanitizeMapId` (with `hallowed_night` alias), added item `24424` (Volatile nightmare staff) to `PLAYER_STANCES`, and synchronized `bossStage`, `visitor`, `visitorShout`, `chooseEvent`, and `leaveEvent` across Co-Op sessions.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 38 test suites passed, 785 tests including `Halloween.test.ts`, `Nightmare.test.ts`, `generator.test.ts`, `scaperune.test.ts`, `Sim.test.ts`, and `upstreamRedundancy.test.ts` across all 21 maps), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-6a314ed2` verified, 14,760 groups), `python -m unittest server/test_serve.py` (61 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-10-31] Merge Upstream v0.19.0 (`f14e888`) & Run Full Rendering/Simulation Smoke Tests
 
 **Model**: Gemini (Antigravity)

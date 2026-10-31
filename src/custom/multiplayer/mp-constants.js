@@ -65,9 +65,11 @@ export const ALL_REGIONS = [
     { id: 'falador', name: 'Falador Massacre (Fun)', bosses: 'Player Moderator, Cursed You & Mod Murdoch', difficulty: 'Endless Fun Map (All Durial321)' },
     { id: 'last_man_standing', name: 'Last Man Standing (Fun)', bosses: 'AGS Specer, Claws Specer & Dharok Risker', difficulty: 'Endless Fun Map (1.0x Base)' },
     { id: 'castle_wars', name: 'Castle Wars (Fun)', bosses: 'Flag Carrier, Catapult Crew & Zamorak Tank', difficulty: 'Endless Fun Map (1.0x Base)' },
-    { id: 'pest_control', name: 'Pest Control (Fun)', bosses: 'Purple, Blue, Yellow & Red Portals', difficulty: 'Endless Fun Map (1.15x HP / 1.1x Dmg)' }
+    { id: 'pest_control', name: 'Pest Control (Fun)', bosses: 'Purple, Blue, Yellow & Red Portals', difficulty: 'Endless Fun Map (1.15x HP / 1.1x Dmg)' },
+    { id: 'halloween', name: 'Hallowed Night (Seasonal)', bosses: 'Slash Bash, The Mimic & The Nightmare', difficulty: '1.25x Base HP / 1.15x Dmg' }
 ];
-export const ALLOWED_REGIONS = new Set(ALL_REGIONS.map(r => r.id));
+export const ALLOWED_REGIONS = new Set([...ALL_REGIONS.map(r => r.id), 'hallowed_night']);
+export const ALLOWED_MAPS = ALLOWED_REGIONS;
 
 export const SPAWN_OFFSETS = {
     1: { dx: -0.75, dy: -0.5 },
@@ -91,6 +93,7 @@ export function getCoopDifficultyWeights(partyCount) {
 export function sanitizeMapId(mapId, fallback = 'lumbridge') {
     if (!mapId || typeof mapId !== 'string') return fallback;
     const normalized = mapId.trim().toLowerCase();
+    if (normalized === 'hallowed_night') return 'halloween';
     return ALLOWED_REGIONS.has(normalized) ? normalized : fallback;
 }
 
@@ -207,7 +210,7 @@ export const PLAYER_STANCES = [
         ]
     },
     // Nightmare staves
-    { idle: 4504, run: 1210, objIds: [24423, 24425] },
+    { idle: 4504, run: 1210, objIds: [24423, 24424, 24425] },
     // Tumeken's shadows
     { idle: 9494, run: 1707, objIds: [27275, 28547] },
     // Crossbows

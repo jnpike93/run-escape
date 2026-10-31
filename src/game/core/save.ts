@@ -7,9 +7,10 @@ import {
 import { CHARACTERS } from "../content/characters";
 import { ENEMY_BY_ID } from "../content/enemies";
 import { ITEM_BY_ID, getGear } from "../content/items";
-import { ALL_MAPS, MAPS, isFunMap } from "../content/maps";
+import { ALL_MAPS, MAPS, isDevMap, isFunMap, isSeasonalMap } from "../content/maps";
 import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
+import { TROPHY_BY_ID } from "../content/trophies";
 import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
 import { WEAPONS } from "../content/weapons";
@@ -64,7 +65,8 @@ export {
 // 5: gear found, and the Armoury's upgrades
 // 6: quests, and the kills and caskets they count
 // 7: evolutions made, for the Collection log
-export const SAVE_VERSION = 7;
+// 8: trophies found, for the Collection log
+export const SAVE_VERSION = 8;
 
 // Characters taken out of the game for now; saves keep them unlocked for when
 // they're back
@@ -105,6 +107,8 @@ export type SaveData = {
     questsDone: string[];
     // The weapons evolved into at least once
     evolutionsMade: string[];
+    // The Collection log's trophies found (see trophies.ts)
+    trophies: string[];
 };
 
 // The round reached, and how long the run lasted
@@ -134,6 +138,7 @@ export function createSave(): SaveData {
         casketsOpened: 0,
         questsDone: [],
         evolutionsMade: [],
+        trophies: [],
     };
 }
 
@@ -226,6 +231,13 @@ export function migrateSave(raw: unknown): SaveData {
         for (const id of data.evolutionsMade) {
             if (WEAPONS.some((w) => w.id === id) && !save.evolutionsMade.includes(id)) {
                 save.evolutionsMade.push(id);
+            }
+        }
+    }
+    if (Array.isArray(data.trophies)) {
+        for (const id of data.trophies) {
+            if (TROPHY_BY_ID.has(id) && !save.trophies.includes(id)) {
+                save.trophies.push(id);
             }
         }
     }
@@ -325,6 +337,7 @@ export type RunSummary = {
     // The gear that came out of caskets, as found
     gearFound?: string[];
     evolutionsMade?: string[];
+    trophies?: string[];
     // For quests: enemy id -> times killed, and reward caskets opened
     enemyKills?: Record<string, number>;
     caskets?: number;
@@ -332,6 +345,10 @@ export type RunSummary = {
 
 // Banks the run, and pays out the quests it finished. Returns those quests.
 export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
+    // Nothing from a development map, or its id would stay in the save for good
+    if (isDevMap(run.mapId)) {
+        return [];
+    }
     const quests = getFinishedQuests(save, run);
     save.coins += run.coins;
     save.totalCoins += run.coins;
@@ -355,6 +372,11 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
     for (const id of run.evolutionsMade ?? []) {
         if (!save.evolutionsMade.includes(id)) {
             save.evolutionsMade.push(id);
+        }
+    }
+    for (const id of run.trophies ?? []) {
+        if (!save.trophies.includes(id)) {
+            save.trophies.push(id);
         }
     }
     const tallies = getQuestTallies(run);
@@ -432,6 +454,9 @@ export function getFinishedQuests(save: SaveData, run?: RunSummary): QuestDef[] 
 // Whether an endless run got further than any before it on its map: a later
 // round, or as far but longer
 export function isEndlessRecord(save: SaveData, run: RunSummary): boolean {
+    if (isDevMap(run.mapId)) {
+        return false;
+    }
     const best = save.endlessBest[run.mapId];
     const round = run.round ?? 1;
     return !best || round > best.round || (round === best.round && run.seconds > best.seconds);
@@ -479,11 +504,12 @@ export function applyUnlocks(save: SaveData, run?: RunSummary): void {
 }
 
 // The first map is always open; each after it opens once the one before it
-// has been beaten. The fun maps are open from the start.
+// has been beaten. The fun and seasonal maps are open from the start.
 export function isMapUnlocked(save: SaveData, mapId: string): boolean {
     if (
         isCustomMap(mapId) ||
         isFunMap(mapId) ||
+        isSeasonalMap(mapId) ||
         !!save?.unlockedCodes?.includes("l33th4x0r")
     ) {
         return true;

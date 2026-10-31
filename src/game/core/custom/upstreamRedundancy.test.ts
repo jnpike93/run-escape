@@ -62,14 +62,18 @@ function makeOpenArenaGrid(baseX: number, baseY: number, sizeX: number, sizeY: n
 }
 
 describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
-    it("verifies all 20 maps, custom adventurers, bosses, weapons, stances, quests, and on-disk music/cache assets", () => {
-        expect(MAPS.length).toBe(14);
+    it("verifies all 21 maps (including Hallowed Night), custom adventurers, bosses, weapons, stances, quests, and on-disk music/cache assets", () => {
+        expect(MAPS.length).toBe(15);
         expect(FUN_MAPS.length).toBe(6);
-        expect(ALL_MAPS.length).toBe(20);
+        expect(ALL_MAPS.length).toBe(21);
 
-        // Verify custom maps and music tracks exist on disk
+        // Verify custom and seasonal maps and music tracks exist on disk
         expect(getMap("barbarian_village").name).toContain("Barbarian Village");
         expect(getMap("fight_caves").name).toContain("Fight Caves");
+        expect(getMap("halloween").name).toContain("Hallowed Night");
+        expect(getEnemy("the_nightmare")).toBeDefined();
+        expect(getEnemy("the_mimic")).toBeDefined();
+        expect(getEnemy("slash_bash")).toBeDefined();
 
         const titleMusicPath = path.resolve(process.cwd(), CUSTOM_MUSIC[TITLE_MUSIC]);
         expect(fs.existsSync(titleMusicPath)).toBe(true);

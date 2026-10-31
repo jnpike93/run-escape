@@ -1,6 +1,7 @@
 import { ENEMIES, getEnemy } from "../content/enemies";
 import { getItem } from "../content/items";
 import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
+import { RANDOM_EVENTS, VISITOR_SOUND } from "../content/randomEvents";
 import { Rarity } from "../content/rarity";
 import { SOUNDS } from "../content/sounds";
 import { ItemUse } from "../content/types";
@@ -36,8 +37,12 @@ export function getGameSoundIds(): number[] {
         ids.push(enemy.sounds.attack, enemy.sounds.hit, enemy.sounds.death);
         ids.push(enemy.spawnSound ?? -1, enemy.explodes?.sound ?? -1, enemy.blinks?.sound ?? -1);
         for (const attack of enemy.boss?.attacks ?? []) {
-            ids.push(attack.sound ?? -1, attack.hitSound ?? -1);
+            ids.push(attack.windupSound ?? -1, attack.sound ?? -1, attack.hitSound ?? -1);
         }
+        const boss = enemy.boss;
+        ids.push(boss?.intro?.darkSound ?? -1, boss?.intro?.sound ?? -1);
+        ids.push(boss?.phases?.totems.blastSound ?? -1, boss?.phases?.totems.chargedSound ?? -1);
+        ids.push(enemy.shot?.sound ?? -1, enemy.shot?.hitSound ?? -1);
     }
     for (const weapon of WEAPONS) {
         ids.push(weapon.sound, weapon.hitSound, weapon.special?.sound ?? -1);
@@ -50,6 +55,10 @@ export function getGameSoundIds(): number[] {
     }
     for (const thrall of THRALLS) {
         ids.push(thrall.sound);
+    }
+    ids.push(VISITOR_SOUND);
+    for (const { effect } of RANDOM_EVENTS) {
+        ids.push("sound" in effect ? effect.sound : -1);
     }
     for (const value of Object.values(SOUNDS)) {
         ids.push(...(Array.isArray(value) ? value : [value]));
@@ -94,6 +103,9 @@ export class GameSounds {
                     audio.playAt(getPowerUp(event.id).hitSound ?? -1, event.x, event.y, px, py, {
                         volume: 0.9,
                     });
+                    break;
+                case "visitor":
+                    audio.play(event.sound, { volume: 1, minGap: 0 });
                     break;
                 case "powerUpEnded":
                     audio.play(getPowerUp(event.id).endSound ?? -1, { volume: 1, minGap: 0 });
@@ -187,6 +199,16 @@ export class GameSounds {
                 case "bossEnraged":
                 case "roundStarted":
                     audio.play(SOUNDS.bossSpawn, { volume: 1 });
+                    break;
+                case "bossIntro":
+                case "bossRising":
+                case "totemBlast":
+                    if (event.sound !== -1) {
+                        audio.play(event.sound, { volume: 1 });
+                    }
+                    break;
+                case "bossStage":
+                    audio.play(SOUNDS.bossSpawn, { volume: 0.8 });
                     break;
                 case "coinsStolen":
                 case "coinsReturned":

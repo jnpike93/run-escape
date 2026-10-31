@@ -20,6 +20,21 @@ export const POWER_UP_COLOR = "#46f0dc";
 
 export const POWER_UPS: PowerUpDef[] = [
     {
+        // Never rolled with the rest (weight 0): only the maps in
+        // trickOrTreat.ts drop it
+        id: "pumpkin",
+        name: "Pumpkin",
+        description: "A treat or a trick.",
+        objId: 1959,
+        weight: 0,
+        price: 0,
+        color: "#ff8a1e",
+        flash: "#ff8a1e",
+        // eat
+        sound: 2393,
+        effect: { kind: "pumpkin" },
+    },
+    {
         id: "cannon",
         name: "Dwarf multicannon",
         description: "Sets up a cannon that shoots everything nearby for 20 seconds.",
@@ -27,6 +42,7 @@ export const POWER_UPS: PowerUpDef[] = [
         objId: 6,
         locId: 6,
         weight: 3,
+        price: 60,
         // mcannon_setup plays as it's set up
         sound: -1,
         effect: { kind: "cannon", damage: 12, interval: 0.5, amount: 2, range: 8, seconds: 20 },
@@ -37,6 +53,7 @@ export const POWER_UPS: PowerUpDef[] = [
         description: "Raises a greater thrall to fight beside you for 30 seconds.",
         objId: 25818,
         weight: 3,
+        price: 60,
         // prayer_boost
         sound: 2671,
         effect: { kind: "thrall", seconds: 30 },
@@ -48,6 +65,7 @@ export const POWER_UPS: PowerUpDef[] = [
         // Lit explosive
         objId: 29573,
         weight: 1,
+        price: 150,
         flash: "#fff5dc",
         // firewave_hit
         sound: 163,
@@ -59,6 +77,7 @@ export const POWER_UPS: PowerUpDef[] = [
         description: "Pulls every drop on the ground to you.",
         objId: 2410,
         weight: 2,
+        price: 30,
         // teleport_vwoop
         sound: 200,
         effect: { kind: "magnet" },
@@ -69,6 +88,7 @@ export const POWER_UPS: PowerUpDef[] = [
         description: "Everything but bosses stands still for 8 seconds.",
         objId: 27414,
         weight: 2,
+        price: 60,
         flash: "#aad7ff",
         // ice_barrage_impact
         sound: 168,
@@ -82,6 +102,7 @@ export const POWER_UPS: PowerUpDef[] = [
         // is ridden
         objId: 4084,
         weight: 2,
+        price: 50,
         // sled_start, sled_stop
         sound: 1868,
         endSound: 1869,
@@ -96,6 +117,7 @@ export const POWER_UPS: PowerUpDef[] = [
             "A huge rock falls on the thickest crowd nearby. Bosses lose 8% of their hitpoints.",
         objId: 1436,
         weight: 2,
+        price: 60,
         // star_meteor_landing, toa_human_boulder_impact_01
         sound: 4930,
         hitSound: 6033,
@@ -119,6 +141,7 @@ export const POWER_UPS: PowerUpDef[] = [
         // Pet cat: Evil Bob has no item of his own
         objId: 1561,
         weight: 2,
+        price: 60,
         // cat_hiss, cat_angry
         sound: 335,
         hitSound: 1161,
@@ -142,6 +165,7 @@ export const POWER_UPS: PowerUpDef[] = [
         // Dramen staff, what it takes to use one
         objId: 772,
         weight: 2,
+        price: 50,
         // lotg_fairy_teleport
         sound: 5324,
         effect: {
@@ -161,6 +185,7 @@ export const POWER_UPS: PowerUpDef[] = [
         // Camo helmet, from Sergeant Damien's random event
         objId: 6656,
         weight: 2,
+        price: 50,
         // whistle
         sound: 1569,
         effect: {

@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { EquipSlot, createAppearance } from "../../rs/model/player/PlayerModelLoader";
 import { ENEMIES } from "../content/enemies";
 import { POWER_UPS, getPowerUp } from "../content/powerups";
+import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { getWeapon } from "../content/weapons";
 import {
     GameAssets,
@@ -22,6 +23,23 @@ describe("enemy bakes", () => {
             }
             if (enemy.shield?.look) {
                 expect(keys).toContain(getShieldedModelKey(enemy));
+            }
+        }
+    });
+
+    test("every spot animation a boss attack shows is in the base bake", () => {
+        const keys = GameAssets.getBaseRequests().map((r) => r.key);
+        for (const enemy of ENEMIES) {
+            for (const attack of enemy.boss?.attacks ?? []) {
+                for (const id of attack.impactSpotAnims ?? []) {
+                    expect(keys).toContain("spot:" + id);
+                }
+                if (attack.pool) {
+                    expect(keys).toContain("loc:" + attack.pool.locId);
+                }
+            }
+            for (const id of enemy.disguise?.warning?.spotAnims ?? []) {
+                expect(keys).toContain("spot:" + id);
             }
         }
     });
@@ -68,6 +86,16 @@ describe("power-ups in the cache", () => {
                 expect(keys).toContain("rampage:" + id);
             }
         }
+    });
+
+    test("random events' visitors are baked", () => {
+        const keys = GameAssets.getBaseRequests().map((request) => request.key);
+        for (const { id, npcId } of RANDOM_EVENTS) {
+            if (npcId !== undefined) {
+                expect(keys).toContain("visitor:" + id);
+            }
+        }
+        expect(keys).toContain("spot:" + VISITOR_SPOTANIM);
     });
 
     test("Toktz-mej-tal's fire is baked with its animation", () => {

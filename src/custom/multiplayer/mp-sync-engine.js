@@ -1309,6 +1309,9 @@ export const mpSyncEngineMethods = {
                                     ev.type === 'bossSpawned' ||
                                     ev.type === 'bossRose' ||
                                     ev.type === 'bossEnraged' ||
+                                    ev.type === 'bossStage' ||
+                                    ev.type === 'visitor' ||
+                                    ev.type === 'visitorShout' ||
                                     ev.type === 'notice'
                                 ) {
                                     this._pendingVisEvents.push(ev);
@@ -1734,6 +1737,28 @@ export const mpSyncEngineMethods = {
                     this.syncLocalPauseState(client, true);
                 }
             };
+
+            if (client.chooseEvent) {
+                const origChooseEvent = client.chooseEvent.bind(client);
+                client.chooseEvent = (idx) => {
+                    const prevHp = client.sim?.player?.hp ?? 0;
+                    origChooseEvent(idx);
+                    if (this.gameStarted && client.sim) {
+                        this.sendLoadoutSync(client, client.sim.player.hp > prevHp);
+                        this.syncLocalPauseState(client, true);
+                    }
+                };
+            }
+
+            if (client.leaveEvent) {
+                const origLeaveEvent = client.leaveEvent.bind(client);
+                client.leaveEvent = () => {
+                    origLeaveEvent();
+                    if (this.gameStarted && client.sim) {
+                        this.syncLocalPauseState(client, true);
+                    }
+                };
+            }
 
             const origUseItem = client.useItem.bind(client);
             client.useItem = (slot) => {
@@ -2186,7 +2211,7 @@ export const mpSyncEngineMethods = {
 
         // 1. Synchronize all players in the party (2 to 4 players)
         if (Array.isArray(msg.players)) {
-            const allowedStates = new Set(['levelUp', 'chest', 'paused']);
+            const allowedStates = new Set(['levelUp', 'chest', 'paused', 'event']);
             let pauseChanged = false;
             let localPlayerSnapshot = null;
             const syncedSlots = new Set();

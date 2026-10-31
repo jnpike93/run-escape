@@ -24,5 +24,6 @@ export const CUSTOM_MUSIC: Record<string, string> = {
     "Last Man Standing": "./assets/music/last_man_standing.ogg",
     Melodrama: "./assets/music/melodrama.ogg",
     "Null and Void": "./assets/music/null_and_void.ogg",
+    "Hallowed Night": "./assets/music/dangerous_way.ogg",
 };
 

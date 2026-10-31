@@ -171,6 +171,24 @@ function sourceEntryIndexHtmlPlugin(): Plugin {
     };
 }
 
+// The dev server has ScapeRune's dev maps and map generator. A build swaps both
+// for empty stand-ins, so only what shipped maps use goes out to players.
+function leaveOutDevMapsPlugin(): Plugin {
+    const standIns: [RegExp, string][] = [
+        [/\/devMaps$/, "src/game/scaperune/maps/devMaps.build.ts"],
+        [/\/MapGeneratorScreen$/, "src/game/scaperune/MapGeneratorScreen.build.tsx"],
+    ];
+    return {
+        name: "leave-out-dev-maps",
+        apply: "build",
+        enforce: "pre",
+        resolveId(source) {
+            const standIn = standIns.find(([pattern]) => pattern.test(source));
+            return standIn ? resolve(process.cwd(), standIn[1]) : null;
+        },
+    };
+}
+
 export default defineConfig({
     // Relative asset URLs, so a build works wherever it's put (a site's root
     // or a folder like https://example.com/game/)
@@ -182,6 +200,7 @@ export default defineConfig({
         serveCachesPlugin(),
         wasmAssetUrlPlugin(),
         wasmGzipNoSourceMapPlugin(),
+        leaveOutDevMapsPlugin(),
     ],
     define: {
         __APP_VERSION__: JSON.stringify(version),
@@ -220,7 +239,7 @@ export default defineConfig({
         format: "es",
         // User plugins are not applied to worker bundles by default; the wasm
         // URL handling is needed there too (the worker imports @foxglove/wasm-bz2).
-        plugins: () => [wasmAssetUrlPlugin()],
+        plugins: () => [wasmAssetUrlPlugin(), leaveOutDevMapsPlugin()],
     },
     build: {
         target: "es2020",

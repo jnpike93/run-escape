@@ -35,9 +35,12 @@ import { CASKETS, GEAR, GEAR_SLOT_BY_ID, ITEMS } from "../../src/game/content/it
 import { ALL_MAPS, getArenaRegion } from "../../src/game/content/maps";
 import { PASSIVES } from "../../src/game/content/passives";
 import { POWER_UPS, THRALLS } from "../../src/game/content/powerups";
+import { RANDOM_EVENTS } from "../../src/game/content/randomEvents";
 import { SHOP_UPGRADES } from "../../src/game/content/shop";
 import { getPlayerStanceSeqs } from "../../src/game/content/stances";
+import { TROPHIES } from "../../src/game/content/trophies";
 import { WEAPONS } from "../../src/game/content/weapons";
+import { installRecipeInSceneBuilder } from "../../src/game/scaperune/squares";
 import { LoadedCache } from "../../src/mapviewer/Caches";
 import { ActorBakeLoader } from "../../src/mapviewer/webgl/actor/ActorBakeLoader";
 import { BakeRequest } from "../../src/mapviewer/webgl/actor/ActorBakeTypes";
@@ -219,7 +222,7 @@ function getContentObjIds(): number[] {
     const seen = new Set<object>();
     const visit = (value: unknown, key: string): void => {
         if (typeof value === "number") {
-            if (/objIds?$/i.test(key)) {
+            if (/objIds?$/i.test(key) && value >= 0) {
                 ids.add(value);
             }
         } else if (value && typeof value === "object" && !seen.has(value)) {
@@ -238,9 +241,11 @@ function getContentObjIds(): number[] {
             ITEMS,
             CASKETS,
             POWER_UPS,
+            RANDOM_EVENTS,
             THRALLS,
             ALL_MAPS,
             SHOP_UPGRADES,
+            TROPHIES,
         },
         "",
     );
@@ -320,6 +325,9 @@ function loadSceneLocEntities(state: WorkerState, scene: Scene): void {
     }
 }
 
+// Bake requests to put through one buffer
+const BAKE_BATCH = 25;
+
 async function loadWhatTheGameLoads(
     cache: LoadedCache,
     includeMapScenes: boolean = true,
@@ -390,7 +398,10 @@ async function loadWhatTheGameLoads(
     ];
     const bakeLoader = new ActorBakeLoader();
     const allBakeRequests = [...dedupedNpcReqs, ...otherReqs, ...questRequests, ...playerRequests];
-    await load(bakeLoader, { requests: allBakeRequests, loadedTextureIds: allTextureIds });
+    for (let i = 0; i < allBakeRequests.length; i += BAKE_BATCH) {
+        const requests = allBakeRequests.slice(i, i + BAKE_BATCH);
+        await load(bakeLoader, { requests, loadedTextureIds: allTextureIds });
+    }
 
     await load(new SoundLoader(), { ids: getGameSoundIds() });
     // The hitsplats, and the passives with an interface sprite for an icon
@@ -412,6 +423,7 @@ async function loadWhatTheGameLoads(
         const regionLoader = new RegionDataLoader();
         regionLoader.init();
         for (const map of ALL_MAPS) {
+            installRecipeInSceneBuilder(state.sceneBuilder, map.id);
             const region = getArenaRegion(map);
             await regionLoader.load(state, region);
 
@@ -499,6 +511,7 @@ async function loadWhatTheGameLoads(
             }
         };
         for (const map of ALL_MAPS) {
+            installRecipeInSceneBuilder(state.sceneBuilder, map.id);
             const region = getArenaRegion(map);
             const { baseX, baseY, sizeX, sizeY } = region;
             const firstX = Math.floor((baseX - borderSize) / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;

@@ -22,6 +22,7 @@ import { ENEMIES } from "../content/enemies";
 import { CASKETS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPassive } from "../content/passives";
 import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
+import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { PlayerStance, getPlayerStance } from "../content/stances";
 import { EnemyDef, EnemyOutfit, GearSlot } from "../content/types";
 import { WEAPONS } from "../content/weapons";
@@ -109,9 +110,16 @@ export const HITSPLAT_SPRITES = { damage: 1359, poison: 1360, block: 1358 } as c
 
 // Every spot animation the content uses, plus the fixed ones (cannonball,
 // level up fireworks, a frozen player's ice, the bot nuke's explosions, the
-// Amulet of blood fury's heal)
+// Amulet of blood fury's heal, a random event's visitor coming and going)
 function getSpotAnimIds(): number[] {
-    const ids = new Set<number>([53, 199, FREEZE_SPOTANIM, NUKE_SPOTANIM, BLOOD_FURY_SPOTANIM]);
+    const ids = new Set<number>([
+        53,
+        199,
+        FREEZE_SPOTANIM,
+        NUKE_SPOTANIM,
+        BLOOD_FURY_SPOTANIM,
+        VISITOR_SPOTANIM,
+    ]);
     const add = (...spotAnims: (number | undefined)[]) => {
         for (const id of spotAnims) {
             if (id !== undefined) {
@@ -135,10 +143,15 @@ function getSpotAnimIds(): number[] {
     }
     for (const enemy of ENEMIES) {
         add(enemy.spawnSpotAnim);
+        add(...(enemy.disguise?.warning?.spotAnims ?? []));
         add(enemy.shot?.castSpotAnim, enemy.shot?.spotAnim, enemy.shot?.impactSpotAnim);
         for (const attack of enemy.boss?.attacks ?? []) {
             add(attack.castSpotAnim, attack.spotAnim, attack.impactSpotAnim);
+            add(attack.ground?.spotAnim, attack.ground?.middleSpotAnim);
+            add(...(attack.impactSpotAnims ?? []));
         }
+        add(enemy.boss?.intro?.spotAnim, enemy.boss?.leash?.spotAnim);
+        add(enemy.boss?.phases?.totems.blastSpotAnim);
         add(enemy.shield?.spotAnim, enemy.spawns?.spotAnim, enemy.heals?.spotAnim);
         add(enemy.revives?.spotAnim, enemy.splits?.spotAnim, enemy.explodes?.spotAnim);
         add(enemy.blinks?.castSpotAnim, enemy.blinks?.impactSpotAnim);
@@ -292,6 +305,8 @@ export class GameAssets {
             enemy.revives?.seq ?? -1,
             enemy.blinks?.seq ?? -1,
             ...(enemy.boss?.attacks.map((a) => a.seq ?? -1) ?? []),
+            enemy.boss?.intro?.seq ?? -1,
+            enemy.boss?.surgeSeq ?? -1,
         ].filter((id, i, all) => id !== -1 && all.indexOf(id) === i);
         if (enemy.outfits) {
             return enemy.outfits.map(
@@ -314,6 +329,15 @@ export class GameAssets {
                 npcId: shielded.npcId,
                 seqIds: [shielded.idleSeq],
             });
+        }
+        // Scenery its attacks grow, here rather than in what every run bakes
+        for (const attack of enemy.boss?.attacks ?? []) {
+            const quarters = attack.quarters;
+            for (const locId of [quarters?.safeLocId, quarters?.hurtLocId, attack.ground?.locId]) {
+                if (locId !== undefined) {
+                    requests.push({ kind: "loc", key: "loc:" + locId, locId, animated: true });
+                }
+            }
         }
         return requests;
     }
@@ -371,8 +395,20 @@ export class GameAssets {
                 });
             }
         }
+        for (const { id, npcId, idleSeq } of RANDOM_EVENTS) {
+            if (npcId !== undefined && idleSeq !== undefined) {
+                requests.push({ kind: "npc", key: "visitor:" + id, npcId, seqIds: [idleSeq] });
+            }
+        }
         const objIds = new Set(getThrownObjIds());
         const locIds = new Set([CANNON_LOC]);
+        for (const enemy of ENEMIES) {
+            for (const attack of enemy.boss?.attacks ?? []) {
+                if (attack.pool) {
+                    locIds.add(attack.pool.locId);
+                }
+            }
+        }
         for (const powerUp of POWER_UPS) {
             if (powerUp.locId !== undefined) {
                 locIds.add(powerUp.locId);

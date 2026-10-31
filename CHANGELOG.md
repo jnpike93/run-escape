@@ -3,7 +3,51 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
-## Unreleased
+## 0.20.0 - 2026-10-31
+
+### Added
+
+- Hallowed Night, a Halloween map: a graveyard hamlet in a pumpkin patch at night, open to everyone
+  from the start. Fifteen minutes of the restless dead, with Slash Bash, The Mimic and The Nightmare.
+- The Nightmare: a three-phase final boss fought like a bullet hell. Break her shield, charge the
+  four totems, and dodge what she throws at you, all marked on the ground before it lands.
+- New boss: Slash Bash. His disease stacks up, a little slower and weaker each dose, and his bile
+  leaves pools you won't want to stand in.
+- New boss: The Mimic. Not every master casket is what it seems. It flings candy that brings its
+  Third Age minions, and its stomp hurts more the longer you stay under it.
+- Trick or treat: enemies on Hallowed Night sometimes drop a pumpkin. Walk over it for a treat
+  (healing, coins, a sugar rush) or a trick (ghosts, a curse).
+- New weapons for killing The Nightmare: the Inquisitor's mace, which crushes the undead, and the
+  Volatile Nightmare staff, whose Immolate burns big things hardest.
+- The Collection log has a Hallowed Night page: the Jar of Dreams and Little Nightmare from The
+  Nightmare, and halloween masks and a Scythe hidden in pumpkins.
+- Four new quests on Hallowed Night.
+
+### Changed
+
+- Ancient spells: level ups only offer Ice Burst now. Beat the Desert and its second level lets you
+  pick which burst you want for the run.
+
+## 0.19.2 - 2026-10-31
+
+### Fixed
+
+- The Mysterious Old Man's and Quiz Master's screens have room between their choices and buttons.
+- Random event visitors come and go in a puff of smoke, not a flash of purple on the ground.
+
+## 0.19.1 - 2026-10-31
+
+### Added
+
+- Random events: every few minutes someone turns up near you for 30 seconds. Walk up to them to see
+  what they want.
+- The Mysterious Old Man sells power-ups for coins, and his prices climb as the run goes on.
+- The Quiz Master asks which item is the odd one out, with a power-up for the right answer.
+- The Genie grants experience, Rick Turpentine drops a casket, and a Strange plant's fruit makes you
+  faster and safe from poison for 20 seconds.
+- The Sandwich lady heals you, but ignore her and she throws her baguette at you.
+- The Highwayman ambushes you later in a run and steals coins until you take them back.
+- New shop upgrade, Runecraft: power-ups drop more often.
 
 ## 0.19.0 - 2026-10-31
 
