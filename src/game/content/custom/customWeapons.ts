@@ -22,8 +22,74 @@ function evolvedLevels(
 }
 
 const BATTLEAXES = [1375, 1363, 1365, 1367, 1369, 1371, 1373, 1377];
+const CLAWS = [3095, 3096, 3097, 3098, 3099, 3100, 3101];
 
 export const CUSTOM_WEAPONS: WeaponDef[] = [
+    {
+        id: "claws",
+        name: "Claws",
+        kind: "slash",
+        description:
+            "Two quick slashes at the closest enemy each time, the second the hardest. Upgrades through the metals from bronze to rune.",
+        iconObjId: CLAWS[0],
+        playerSeq: 393,
+        sound: 2500,
+        hitSound: -1,
+        rarity: "common",
+        hits: [0.6, 1],
+        levels: levels(
+            {
+                name: "Bronze claws",
+                damage: 10,
+                cooldown: 1.25,
+                amount: 1,
+                area: 2.2,
+                pierce: 0,
+                speed: 0,
+                duration: 0,
+                knockback: 0.25,
+                objId: CLAWS[0],
+            },
+            {
+                name: "Iron claws",
+                objId: CLAWS[1],
+                damage: 12,
+                description: "+2 damage a slash.",
+            },
+            {
+                name: "Steel claws",
+                objId: CLAWS[2],
+                amount: 2,
+                description: "Also slashes behind you.",
+            },
+            {
+                name: "Black claws",
+                objId: CLAWS[3],
+                area: 2.4,
+                cooldown: 1.15,
+                description: "+9% reach, +9% attack speed (1.15s cooldown).",
+            },
+            {
+                name: "Mithril claws",
+                objId: CLAWS[4],
+                damage: 15,
+                description: "+3 damage a slash.",
+            },
+            {
+                name: "Adamant claws",
+                objId: CLAWS[5],
+                cooldown: 1.05,
+                description: "+9% attack speed (1.05s cooldown).",
+            },
+            {
+                name: "Rune claws",
+                objId: CLAWS[6],
+                damage: 18,
+                area: 2.6,
+                description: "+3 damage a slash, +8% reach.",
+            },
+        ),
+    },
     {
         id: "battleaxe",
         name: "Battleaxe",

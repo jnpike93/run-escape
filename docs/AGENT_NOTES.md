@@ -8,15 +8,17 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Secret Adventurer "Nova the Cat" (NPC `2638` Neite, Code `novathecat`) & Rebuild Slim Cache
+### [2026-10-30] Add Secret Adventurer "Nova the Cat" (NPC `2638` Neite, Code `novathecat`), Bronze-Rune Claws (`claws`) & Rebuild Slim Cache
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
-**Bundle**: `index-DfhD17VB.js` (`?v=8.6`, MapViewer `MapViewerApp-Dc6alj4g.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-DkcjhG7u.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-58ac8ee5`)
+**Bundle**: `index-k40f1cu9.js` (`?v=8.6`, MapViewer `MapViewerApp-DJYeqslD.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-CzY2WkH1.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-47e97bee`)
 
-**Scope**: Added secret adventurer **Nova** (`id: "nova"`, NPC ID `2638` "Neite", unlocked by secret code `"novathecat"`) in the **Special** section alongside Dipper and Elias across Singleplayer and Co-Op Multiplayer, and rebuilt the slim cache (`osrs-241_2026-09-30-slim-58ac8ee5`) with Neite's model (`6439`) and animation frames (`317` idle, `314` walk).
+**Scope**: Added secret adventurer **Nova** (`id: "nova"`, NPC ID `2638` "Neite", unlocked by secret code `"novathecat"`, starting with `dragon_claws`) in the **Special** section alongside Dipper and Elias across Singleplayer and Co-Op Multiplayer, added the **Bronze through Rune Claws** (`id: "claws"`, OSRS item IDs `3095-3101`) weapon line with double-slash attacks (`hits: [0.6, 1]`), and rebuilt the slim cache.
 
 **Changes implemented**:
+- **Bronze through Rune Claws (`src/game/content/custom/customWeapons.ts`)**:
+  - Added `claws` (`id: "claws"`, `name: "Claws"`, `kind: "slash"`, `playerSeq: 393`, `sound: 2500`, `rarity: "common"`, `hits: [0.6, 1]`) with 7 metal tiers (`Bronze claws` `3095`, `Iron claws` `3096`, `Steel claws` `3097`, `Black claws` `3098`, `Mithril claws` `3099`, `Adamant claws` `3100`, `Rune claws` `3101`), balanced with double-hit slashes (`60%` + `100%` damage per swing, `1.25s -> 1.05s` cooldown, `2.2 -> 2.6` reach, front+back slash at Steel).
 - **Character Definition & Unlocks (`src/game/content/custom/customCharacters.ts`, `src/game/content/custom/secretCodes.ts`, `src/game/core/custom/customSave.ts`)**:
   - Added `"nova"` to `CUSTOM_CHARACTERS` and `SPECIAL_CHARACTER_IDS` (`new Set(["dipper", "elias", "nova"])`) so Nova appears in the **Special** section of `AdventurerPanel`:
     - `startingWeapon: "dragon_claws"`, `style: "melee"`, `iconObjId: -2638`
@@ -32,7 +34,7 @@
   - Added `{ id: 'nova', name: 'Nova (Cat)', weapon: 'dragon_claws', defaultUnlocked: false, secretCode: true }` to `ALL_CHARACTERS`.
   - Updated lobby unlock checks (`novathecat`), `ensureAllCharacterModels` (`neite` NPC `2638`), remote peer rendering (`isCat`, sequences `314`/`317`), nametag height, and Party HUD label (`CAT`).
 
-**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-58ac8ee5` verified), `python -m unittest server/test_serve.py` (59 tests OK).
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-47e97bee` verified), `python -m unittest server/test_serve.py` (59 tests OK).
 
 ---
 

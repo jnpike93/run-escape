@@ -125,10 +125,22 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
         expect(selectedChar).toBe("nova");
 
         // Verify all custom weapons & evolutions are registered in getWeapon
-        expect(CUSTOM_WEAPONS.length).toBeGreaterThanOrEqual(6);
+        expect(CUSTOM_WEAPONS.length).toBeGreaterThanOrEqual(7);
         for (const w of CUSTOM_WEAPONS) {
             expect(getWeapon(w.id)).toBeDefined();
         }
+        const claws = getWeapon("claws");
+        expect(claws.hits).toEqual([0.6, 1]);
+        expect(claws.levels.map((l) => l.name)).toEqual([
+            "Bronze claws",
+            "Iron claws",
+            "Steel claws",
+            "Black claws",
+            "Mithril claws",
+            "Adamant claws",
+            "Rune claws",
+        ]);
+        expect(getCharacter("nova").startingWeapon).toBe("dragon_claws");
         const bloodBurst = getWeapon("blood_burst");
         expect(bloodBurst.evolution?.into).toBe("blood_barrage");
         expect(getWeapon("blood_barrage").name).toBe("Blood Barrage");

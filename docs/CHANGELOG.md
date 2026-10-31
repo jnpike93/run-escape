@@ -21,9 +21,11 @@ the version in the corner), so it's written for players.
 - **Fight Caves & Protection Prayers**: Enter the **Fight Caves** map and use **Protection Prayers (Q / E / R)** to block Magic, Ranged, and Melee boss attacks from TzTok-Jad and TzKal-Zuk.
 - **Cook's Assistant Quest (Lumbridge)**: Speak to the Lumbridge Cook and gather an **Egg**, **Bucket of Milk**, and **Pot of Flour** across Lumbridge for bonus XP, coins, and a guaranteed chest.
 - **Slayer Tasks & Slayer Masters**: The checklist tab and HUD tracker feature **Slayer Tasks** grouped by OSRS Slayer Masters (**Turael**, **Mazchna**, **Krystilia**, **Sumona**, **Vannaka**, **Duradel**, **Konar quo Maten**, **Chaeldar**, **Aya**, **Nieve**, **Steve**, **TzHaar-Ket-Keh**, and **Spria**).
-- **Secret Adventurers & Codes**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi**, **Elias the Chihuahua**, and **Nova the Cat** (Neite).
+- **Secret Adventurers & Codes**: Redeem secret codes in **Settings -> Save & Codes** to unlock **Dipper the Corgi**, **Elias the Chihuahua**, and **Nova the Cat** (Neite, starting with **Dragon claws**).
 
 ### Combat, Balance & Quality of Life
+
+- **Bronze through Rune Claws**: Added the **Claws** weapon line (**Bronze** -> **Iron** -> **Steel** -> **Black** -> **Mithril** -> **Adamant** -> **Rune claws**) with double-slash attacks (`60%` + `100%` damage per swing).
 
 - **Blood Burst -> Blood Barrage**: Evolve **Blood Burst** into **Blood Barrage** with full multi-target AoE radius matching Ice Burst and Ice Barrage.
 - **Rapid Heal**: Rebalanced to **+2.5 HP/min per level** (+12.5 HP/min at level 5); taking a hit pauses Rapid Heal regeneration for **5 seconds**.
