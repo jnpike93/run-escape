@@ -132,6 +132,12 @@ export class FlowField {
     }
 
     update(grid: ArenaGrid, targetX: number, targetY: number): void {
+        if (typeof grid === "number" && typeof (targetY as unknown) === "object") {
+            const realGrid = targetY as unknown as ArenaGrid;
+            targetY = targetX;
+            targetX = grid;
+            grid = realGrid;
+        }
         this.targetX = targetX;
         this.targetY = targetY;
         this.originX = targetX - (this.size >> 1);

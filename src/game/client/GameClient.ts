@@ -273,6 +273,9 @@ export class GameClient implements GameFrameHandler {
         readonly options: GameClientOptions,
     ) {
         this.save = store.getSnapshot().save;
+        if (typeof window !== "undefined") {
+            (window as any).gameClient = this;
+        }
         this.grid = titleGrid;
         this.grids.set(TITLE_MAP.id, titleGrid);
         this.syncPlayArea();

@@ -8,13 +8,13 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Android & iOS Mobile Browser Support (Floating Virtual Thumbstick, Pinch-to-Zoom, HUD Pause Button, Responsive Sub-1.0 UI Scaling & iOS Safari Audio/VRAM Budgeting)
+### [2026-10-30] Add Android & iOS Mobile Browser Support, Full-Game 20-Map Smoke Test Suite & Upstream Merge Redundancy Guards
 
 **Model**: Gemini (Antigravity)
-**Commit**: (see git log)
-**Bundle**: `index-BrDD3xsq.js` (`?v=8.6`, MapViewer `MapViewerApp-Cw3ppyqV.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-VUwdCnfv.js`, styles `index-Cg9IkcQm.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
+**Commit**: `aa347c7` / `a749777` (and redundancy/smoketest commit - see git log)
+**Bundle**: `index-BwmJHwXe.js` (`?v=8.6`, MapViewer `MapViewerApp-g9OJZ3G9.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-BzK3vuRj.js`, styles `index-Cg9IkcQm.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
 
-**Scope**: Implemented upstream-friendly Android and iOS mobile browser support across touch controls, camera pinch-to-zoom, HUD Pause button, responsive sub-`1.0` UI scaling (`0.45x - 2x`), viewport safe-area insets, iOS Safari `GainNode` audio volume/unlock handling, mobile GPU/worker budgeting, and custom runtime script layouts.
+**Scope**: Implemented upstream-friendly Android and iOS mobile browser support across touch controls, camera pinch-to-zoom, HUD Pause button, responsive sub-`1.0` UI scaling (`0.45x - 2x`), viewport safe-area insets, iOS Safari `GainNode` audio volume/unlock handling, mobile GPU/worker budgeting, and custom runtime script layouts; added dual-signature `FlowField.update` redundancy, `GameClient` constructor `window.gameClient` registration, touch-tap interaction for the Lumbridge Cook in `cooks-assistant.js`, and a full-game 20-map Solo + Co-Op smoke test and upstream contract verification suite (`src/game/core/custom/upstreamRedundancy.test.ts`).
 
 **Changes implemented**:
 - **Modular Floating Touch Thumbstick & Two-Finger Pinch-to-Zoom (`src/game/client/custom/mobileInput.ts`, `src/game/client/custom/mobileInput.test.ts`, `src/game/client/GameInput.ts`)**:
@@ -29,10 +29,12 @@
 - **iOS Safari Audio & Mobile GPU/Worker Budgeting (`src/game/client/GameAudio.ts`, `src/util/DeviceUtil.ts`, `src/game/GameApp.tsx`)**:
   - Routed `this.music.element` through `AudioContext.createMediaElementSource` -> `this.musicGain` (`GainNode`) in `GameAudio.ts` so the Music volume slider and mute toggle work on iOS Safari (where `HTMLAudioElement.volume` is read-only), and added `touchend`, `click`, and `visibilitychange` unlock listeners plus `"interrupted"` `AudioContext` recovery.
   - Capped `pixelRatio` to `1.75` on touch devices (`DeviceUtil.ts`) and scaled `RenderDataWorkerPool` to `2` workers on touch devices (`GameApp.tsx`) to prevent mobile GPU framebuffer exhaustion and iOS WebKit Jetsam tab termination.
-- **Custom Runtime Scripts Mobile Polish (`src/custom/cooks-assistant.js`, `src/custom/multiplayer/mp-prayers.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `assets/`)**:
-  - Added responsive viewport bounds (`max-width`, `zoom: var(--ui-scale, 1)`, `touch-action: manipulation`) to `#ca-chatbox`, `#quest-complete-scroll`, `#osrs-prayer-bar`, and `#coop-modal-box`, and added multi-touch `pointerdown`/`touchstart`/`touchend` isolation on `.osrs-prayer-btn` so players can switch Protection Prayers with one thumb while moving with the other.
+- **Custom Runtime Scripts Mobile Polish & Upstream Merge Redundancy (`src/custom/cooks-assistant.js`, `src/custom/multiplayer/mp-prayers.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/game/core/world/FlowField.ts`, `src/game/client/GameClient.ts`, `src/game/core/custom/upstreamRedundancy.test.ts`, `assets/`)**:
+  - Added responsive viewport bounds (`max-width`, `zoom: var(--ui-scale, 1)`, `touch-action: manipulation`) to `#ca-chatbox`, `#quest-complete-scroll`, `#osrs-prayer-bar`, and `#coop-modal-box`, multi-touch `pointerdown`/`touchstart`/`touchend` isolation on `.osrs-prayer-btn`, and touch-tap Cook interaction (`onTouchStartCook` / `onTouchEndCook`) in `cooks-assistant.js` so mobile players can start and turn in Cook's Assistant by tapping near the Cook.
+  - Added dual-signature runtime parameter normalization in `FlowField.update(grid, targetX, targetY)` so both `(grid, targetX, targetY)` and legacy `(targetX, targetY, grid)` argument orders succeed without throwing, and added redundant `window.gameClient = this` registration in the `GameClient` constructor (`src/game/client/GameClient.ts`) alongside `GameApp.tsx`.
+  - Guarded top-level `window` and `Image` references in `src/custom/multiplayer/mp-prayers.js` for Node/Vitest test imports and added `src/game/core/custom/upstreamRedundancy.test.ts` to smoketest all 20 maps in Solo & Co-Op Multiplayer, verify all custom content/assets/slim-cache files on disk, and verify `FlowField`, `MapManager`, `Dat2SeqFrameLoader`, `pickupRecovery`, and `MobileTouchInput` contracts on every `npm test`.
 
-**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (416/416 passed across all 22 test suites including `mobileInput.test.ts`), `npm run verify-slim-cache` (14,541 groups verified), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (421/421 passed across all 23 test suites including `mobileInput.test.ts` and `upstreamRedundancy.test.ts`), `npm run verify-slim-cache` (14,541 groups verified), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
 
 ---
 

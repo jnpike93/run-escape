@@ -521,9 +521,12 @@
 
     function promptText() {
         if (!quest) return null;
-        if (quest.stage === 0) return [['Press ', '#ffffff'], ['Space', '#ffff00'], [' to start ', '#ffffff'], [QUEST_NAME, '#ff9040']];
+        const isTouch = !!(navigator.maxTouchPoints || 'ontouchstart' in document.documentElement);
+        const keyLabel = isTouch ? 'Tap / Space' : 'Space';
+        const verb = isTouch ? '' : 'Press ';
+        if (quest.stage === 0) return [[verb, '#ffffff'], [keyLabel, '#ffff00'], [' to start ', '#ffffff'], [QUEST_NAME, '#ff9040']];
         if (quest.stage === 1) {
-            if (heldItems().length > 0) return [['Press ', '#ffffff'], ['Space', '#ffff00'], [' to hand in items', '#ffffff']];
+            if (heldItems().length > 0) return [[verb, '#ffffff'], [keyLabel, '#ffff00'], [' to hand in items', '#ffffff']];
             return [[`${QUEST_NAME}: `, '#ff9040'], [`${deliveredCount()}/${ITEMS.length} ingredients delivered`, '#ffffff']];
         }
         return null;
@@ -729,6 +732,32 @@
         }
     }
 
+    let tapStartX = 0;
+    let tapStartY = 0;
+    let tapStartTime = 0;
+
+    function onTouchStartCook(e) {
+        if (!e.touches || e.touches.length !== 1) return;
+        tapStartX = e.touches[0].clientX;
+        tapStartY = e.touches[0].clientY;
+        tapStartTime = performance.now();
+    }
+
+    function onTouchEndCook(e) {
+        if (!client || !sim || !quest || client.paused) return;
+        if (sim.state !== 'playing' || !overlayIsNone()) return;
+        if (distToCook() > COOK.talkRange) return;
+        const t = e.changedTouches && e.changedTouches[0];
+        if (!t) return;
+        if (performance.now() - tapStartTime > 450) return;
+        if (Math.hypot(t.clientX - tapStartX, t.clientY - tapStartY) > 14) return;
+        const target = e.target;
+        if (target && target.closest && target.closest('button, .ui-panel, .ui-modal, #osrs-prayer-bar, #coop-overlay')) return;
+        if (onSpace()) {
+            e.preventDefault();
+        }
+    }
+
     // ------------------------------------------------------------------ main loop
 
     function watch() {
@@ -746,6 +775,8 @@
     }
 
     window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('touchstart', onTouchStartCook, { passive: true });
+    window.addEventListener('touchend', onTouchEndCook, { passive: false });
     requestAnimationFrame(watch);
 
     // Small debugging/test surface.

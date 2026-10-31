@@ -3,7 +3,9 @@
 // ============================================================================
 // OSRS Protection Prayer System for Fight Caves & TzTok-Jad (NPC ID 3127)
 // ============================================================================
-window._osrsPrayer = null; // 'magic' | 'ranged' | 'melee' | null
+if (typeof window !== 'undefined') {
+    window._osrsPrayer = null; // 'magic' | 'ranged' | 'melee' | null
+}
 
 // Real OSRS prayer sprites from the game cache (rev 241): prayer book icons are sprites 127-129,
 // overhead icons are sprite group 440 (frames 0 melee, 1 missiles, 2 magic).
@@ -13,10 +15,12 @@ export const OSRS_PRAYER_ICONS = {
     melee: { book: './assets/prayer/protect-melee.png', overhead: './assets/prayer/overhead-melee.png' }
 };
 const _overheadPrayerImages = {};
-for (const [type, icons] of Object.entries(OSRS_PRAYER_ICONS)) {
-    const img = new Image();
-    img.src = icons.overhead;
-    _overheadPrayerImages[type] = img;
+if (typeof Image !== 'undefined') {
+    for (const [type, icons] of Object.entries(OSRS_PRAYER_ICONS)) {
+        const img = new Image();
+        img.src = icons.overhead;
+        _overheadPrayerImages[type] = img;
+    }
 }
 
 export function drawOverheadPrayerEmblem(ctx, x, y, scale, prayerType) {
@@ -146,6 +150,7 @@ export function updateOsrsPrayerBarUI() {
 }
 
 const _isDebugAllowed = () => {
+    if (typeof window === 'undefined') return false;
     const hostname = window.location?.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
     try {
@@ -180,7 +185,7 @@ let _prayerKeydownInitialized = false;
 
 export function initOsrsPrayers(multiplayer = null) {
     if (multiplayer) _mpInstance = multiplayer;
-    if (_prayerKeydownInitialized) return;
+    if (_prayerKeydownInitialized || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     _prayerKeydownInitialized = true;
     window.addEventListener('keydown', (ev) => {
     if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'SELECT')) return;
@@ -232,6 +237,7 @@ export function initOsrsPrayers(multiplayer = null) {
 
 initOsrsPrayers();
 
+if (typeof window !== 'undefined') {
 window._hideOsrsPrayerBar = function() {
     window._osrsPrayer = null;
     const client = window.gameClient || window._client;
@@ -352,5 +358,6 @@ window._drawOsrsPrayerOverlay = function(viewport, sim, alpha, ctx, scale, playe
         ctx.restore();
     }
 };
+}
 
 // Automatically open lobby if ?room= is in URL
