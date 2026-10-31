@@ -8,10 +8,29 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Co-Op Multiplayer Lobby Ready Check & Require All Players Ready Before Starting
+### [2026-10-30] Upgrade Bronze Claws through Dragon Claws (Level 8) & Block Duplicate Claws Offers
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
+**Bundle**: `index-Db4sYHt8.js` (`?v=8.6`, MapViewer `MapViewerApp-BCMiVwws.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-Dytokrf9.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
+
+**Scope**: Extended the `claws` weapon line (`id: "claws"`) in `src/game/content/custom/customWeapons.ts` to upgrade from **Bronze claws** (level 1) through **Dragon claws** (`objId: 13652`, level 8, evolving into **Burning claws** with `tome_of_fire`), and prevented offering `claws` (`Bronze claws`) when the player already owns `dragon_claws` (or `burning_claws`) and vice versa.
+
+**Changes implemented**:
+- **Claws Level 8 (`Dragon claws`) & Evolution (`src/game/content/custom/customWeapons.ts`, `src/game/content/evolutions.ts`)**:
+  - Added `13652` (`Dragon claws`) as `CLAWS[7]` (level 8 of `claws`, `damage: 21`, `cooldown: 0.95`, `description: "+3 damage a slash, +10% attack speed (0.95s cooldown)."`), and added `evolution: { into: "burning_claws", requiresPassive: "tome_of_fire" }`.
+  - Updated `describeWeapons` in `evolutions.ts` and `getEvolutionHint` in `Upgrades.ts` to check `weapons[0].family` when multiple weapons evolve into the same target (`burning_claws`).
+- **Mutual Exclusion (`src/game/core/custom/customSimHooks.ts`, `src/game/core/Upgrades.ts`, `src/game/core/Upgrades.test.ts`)**:
+  - Added `isMutuallyExclusiveWeaponOwned(weaponId, ownedWeapons)` in `customSimHooks.ts` and wired it into `rollChoices` in `Upgrades.ts` so owning `dragon_claws` (or `burning_claws`) blocks `claws` (`Bronze claws`) from being offered, and owning `claws` blocks `dragon_claws` from being offered.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed, 437 tests), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified), `python -m unittest server/test_serve.py` (61 tests OK).
+
+---
+
+### [2026-10-30] Add Co-Op Multiplayer Lobby Ready Check & Require All Players Ready Before Starting
+
+**Model**: Gemini (Antigravity)
+**Commit**: `d7b563a`
 **Bundle**: `index-CzfrEO3D.js` (`?v=8.6`, MapViewer `MapViewerApp-B4ZvNkxl.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-9rXEPkLn.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
 
 **Scope**: Added an explicit Ready Up toggle and all-players-ready gate in the Co-Op Multiplayer lobby on both the client (`src/custom/multiplayer.js`, `src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`) and the WebSocket server (`server/serve.py`).

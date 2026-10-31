@@ -140,6 +140,7 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
             "Mithril claws",
             "Adamant claws",
             "Rune claws",
+            "Dragon claws",
         ]);
         expect(getCharacter("nova").startingWeapon).toBe("dragon_claws");
         const fakeAnims = new Map<number, any>(

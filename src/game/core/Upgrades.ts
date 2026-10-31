@@ -13,6 +13,7 @@ import { isAvailable } from "../content/unlocks";
 import { WeaponStatLine, weaponStatChanges, weaponStats } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
 import { Rng } from "./Rng";
+import { isMutuallyExclusiveWeaponOwned } from "./custom/customSimHooks";
 import { PassiveState, WeaponState } from "./entities";
 
 // Slots for a run's build, before the shop's. Kept small so a run is about
@@ -101,7 +102,7 @@ export function getEvolutionHint(
             return undefined;
         }
         const names = shown.map((e) =>
-            e.weapons.length > 1 ? e.name.toLowerCase() : `the ${e.name}`,
+            e.weapons.length > 1 && e.weapons[0].family ? e.name.toLowerCase() : `the ${e.name}`,
         );
         return { text: `Evolves ${names.join(" and ")}`, held: held.length > 0 };
     }
@@ -321,7 +322,9 @@ export function rollChoices(
                 continue;
             }
             // Evolutions replace their base weapon, so don't offer the base again
-            const evolvedOwned = !!weapon.evolution && ownedWeapons.has(weapon.evolution.into);
+            const evolvedOwned =
+                (!!weapon.evolution && ownedWeapons.has(weapon.evolution.into)) ||
+                isMutuallyExclusiveWeaponOwned(weapon.id, ownedWeapons);
             if (!evolvedOwned) {
                 const familySize = weapon.family ? familySizes.get(weapon.family)! : 1;
                 pool.push({

@@ -393,6 +393,20 @@ describe("class weapons", () => {
         }
     });
 
+    test("bronze claws upgrade to dragon claws and cannot be offered if dragon claws are owned", () => {
+        const clawsDef = getWeapon("claws");
+        expect(clawsDef.levels.length).toBe(8);
+        expect(clawsDef.levels[0].name).toBe("Bronze claws");
+        expect(clawsDef.levels[7].name).toBe("Dragon claws");
+        expect(clawsDef.levels[7].objId).toBe(13652);
+
+        const withDragonClaws = newWeaponOffers("melee", [weapon("dragon_claws")], 1000);
+        expect(withDragonClaws.has("claws")).toBe(false);
+
+        const withBronzeClaws = newWeaponOffers("melee", [weapon("claws")], 1000);
+        expect(withBronzeClaws.has("dragon_claws")).toBe(false);
+    });
+
     test("a new weapon is offered at its own rarity or better", () => {
         const rng = new Rng(4);
         let seen = 0;

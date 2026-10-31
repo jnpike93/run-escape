@@ -22,7 +22,7 @@ function evolvedLevels(
 }
 
 const BATTLEAXES = [1375, 1363, 1365, 1367, 1369, 1371, 1373, 1377];
-const CLAWS = [3095, 3096, 3097, 3098, 3099, 3100, 3101];
+const CLAWS = [3095, 3096, 3097, 3098, 3099, 3100, 3101, 13652];
 
 export const CUSTOM_WEAPONS: WeaponDef[] = [
     {
@@ -30,7 +30,7 @@ export const CUSTOM_WEAPONS: WeaponDef[] = [
         name: "Claws",
         kind: "slash",
         description:
-            "Two quick slashes at the closest enemy each time, the second the hardest. Upgrades through the metals from bronze to rune.",
+            "Two quick slashes at the closest enemy each time, the second the hardest. Upgrades through the metals to dragon.",
         iconObjId: CLAWS[0],
         playerSeq: 393,
         sound: 2500,
@@ -47,7 +47,7 @@ export const CUSTOM_WEAPONS: WeaponDef[] = [
                 pierce: 0,
                 speed: 0,
                 duration: 0,
-                knockback: 0.25,
+                knockback: 0,
                 objId: CLAWS[0],
             },
             {
@@ -88,7 +88,15 @@ export const CUSTOM_WEAPONS: WeaponDef[] = [
                 area: 2.6,
                 description: "+3 damage a slash, +8% reach.",
             },
+            {
+                name: "Dragon claws",
+                objId: CLAWS[7],
+                damage: 21,
+                cooldown: 0.95,
+                description: "+3 damage a slash, +10% attack speed (0.95s cooldown).",
+            },
         ),
+        evolution: { into: "burning_claws", requiresPassive: "tome_of_fire" },
     },
     {
         id: "battleaxe",

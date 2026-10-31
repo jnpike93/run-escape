@@ -25,7 +25,7 @@ the version in the corner), so it's written for players.
 
 ### Combat, Balance & Quality of Life
 
-- **Bronze through Rune Claws**: Added the **Claws** weapon line (**Bronze** -> **Iron** -> **Steel** -> **Black** -> **Mithril** -> **Adamant** -> **Rune claws**) with double-slash attacks (`60%` + `100%` damage per swing).
+- **Bronze through Dragon Claws**: Added the **Claws** weapon line (**Bronze** -> **Iron** -> **Steel** -> **Black** -> **Mithril** -> **Adamant** -> **Rune** -> **Dragon claws**, evolving into **Burning claws** with the **Tome of fire**) with double-slash attacks (`60%` + `100%` damage per swing).
 
 - **Blood Burst -> Blood Barrage**: Evolve **Blood Burst** into **Blood Barrage** with full multi-target AoE radius matching Ice Burst and Ice Barrage.
 - **Rapid Heal**: Rebalanced to **+2.5 HP/min per level** (+12.5 HP/min at level 5); taking a hit pauses Rapid Heal regeneration for **5 seconds**.

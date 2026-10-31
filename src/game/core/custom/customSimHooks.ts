@@ -162,3 +162,16 @@ export function resolveCustomBossPrayerHit(
     }
     return { blocked: false, damage, ignoreArmor };
 }
+
+export function isMutuallyExclusiveWeaponOwned(
+    weaponId: string,
+    ownedWeapons: ReadonlySet<string>,
+): boolean {
+    if (weaponId === "claws") {
+        return ownedWeapons.has("dragon_claws") || ownedWeapons.has("burning_claws");
+    }
+    if (weaponId === "dragon_claws") {
+        return ownedWeapons.has("claws") || ownedWeapons.has("burning_claws");
+    }
+    return false;
+}

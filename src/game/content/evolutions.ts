@@ -17,7 +17,10 @@ export type EvolutionDef = {
 function describeWeapons(weapons: WeaponDef[]): { name: string; iconObjId: number } {
     const top = weapons[0].levels[weapons[0].levels.length - 1];
     return {
-        name: weapons.length > 1 ? `Any ${weapons[0].family}` : (top.name ?? weapons[0].name),
+        name:
+            weapons.length > 1 && weapons[0].family
+                ? `Any ${weapons[0].family}`
+                : (top.name ?? weapons[0].name),
         iconObjId: top.objId ?? weapons[0].iconObjId,
     };
 }
