@@ -88,9 +88,7 @@ export function AboutSetting(): JSX.Element {
     return (
         <div className="ui-setting">
             <div className="ui-setting-label">
-                <div className="ui-setting-name">About</div>
                 <div className="ui-setting-text">
-                    GitHub repository:{" "}
                     <a
                         href={GITHUB_REPO_URL}
                         target="_blank"
@@ -98,21 +96,9 @@ export function AboutSetting(): JSX.Element {
                         style={{ color: "#ff981f", textDecoration: "underline" }}
                         onClick={(e) => e.currentTarget.blur()}
                     >
-                        jnpike93/run-escape
+                        {GITHUB_REPO_URL}
                     </a>
                 </div>
-            </div>
-            <div className="ui-setting-control">
-                <a
-                    href={GITHUB_REPO_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ui-button ui-button-small"
-                    style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-                    onClick={(e) => e.currentTarget.blur()}
-                >
-                    GitHub
-                </a>
             </div>
         </div>
     );

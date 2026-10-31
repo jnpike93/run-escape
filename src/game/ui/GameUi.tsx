@@ -52,7 +52,6 @@ import { CollectionLogScreen } from "./CollectionLogScreen";
 import { CoopDamageLeaderboardTable, CoopGameOverButtons } from "./CoopGameOverSection";
 import {
     AboutSection,
-    AboutSetting,
     FullscreenSetting,
     HudFullscreenButton,
     HudPauseButton,
@@ -1792,7 +1791,6 @@ function PauseModal({
                             music={getMap(ui.mapId).music !== undefined}
                         />
                         <AutoPauseSetting ui={ui} client={client} />
-                        <AboutSetting />
                     </div>
                 </div>
                 <div className="ui-row">

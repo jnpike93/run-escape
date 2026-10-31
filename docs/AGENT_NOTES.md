@@ -12,15 +12,15 @@
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
-**Bundle**: `index-B-grqhle.js` (`?v=8.6`, MapViewer `MapViewerApp-CLf5yWit.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-tBiHHVKF.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
+**Bundle**: `index-Cvvc9cfz.js` (`?v=8.6`, MapViewer `MapViewerApp-DIOWMG9G.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-WE-eQwVm.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
 
-**Scope**: Added an **About** section and setting row in Settings (`SettingsPanel` and in-game `PauseModal`) linking to the GitHub repository (`https://github.com/jnpike93/run-escape`).
+**Scope**: Added an **About** section at the bottom of `SettingsPanel` displaying the GitHub repository link (`https://github.com/jnpike93/run-escape`).
 
 **Changes implemented**:
 - **Custom Settings Controls (`src/game/ui/CustomSettingsControls.tsx`)**:
-  - Exported `GITHUB_REPO_URL` (`"https://github.com/jnpike93/run-escape"`), `AboutSetting`, and `AboutSection` rendering the **About** field with a clickable `jnpike93/run-escape` link and a `GitHub` button opening the repository in a new tab (`target="_blank" rel="noopener noreferrer"`).
-- **Settings Panel & Pause Menu (`src/game/ui/GameUi.tsx`, `src/game/core/custom/upstreamRedundancy.test.ts`, `docs/CHANGELOG.md`)**:
-  - Rendered `<AboutSection />` in `SettingsPanel` and `<AboutSetting />` under `Settings` in `PauseModal` via 1-line component tags.
+  - Exported `GITHUB_REPO_URL` (`"https://github.com/jnpike93/run-escape"`), `AboutSetting`, and `AboutSection` rendering the **About** section with a direct link to `https://github.com/jnpike93/run-escape` (`target="_blank" rel="noopener noreferrer"`).
+- **Settings Panel (`src/game/ui/GameUi.tsx`, `src/game/core/custom/upstreamRedundancy.test.ts`, `docs/CHANGELOG.md`)**:
+  - Rendered `<AboutSection />` at the bottom of `SettingsPanel` via a 1-line component tag.
   - Added verification assertions in `upstreamRedundancy.test.ts` and updated `docs/CHANGELOG.md`.
 
 **Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed, 437 tests), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified), `python -m unittest server/test_serve.py` (61 tests OK), `node --check src/custom/multiplayer.js` (OK).
