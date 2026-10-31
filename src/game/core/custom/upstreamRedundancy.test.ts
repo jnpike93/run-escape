@@ -213,6 +213,13 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
             "extreme_one_chunk",
             "nightmare",
         ]);
+        const customSettingsSrc = fs.readFileSync(
+            path.resolve(process.cwd(), "src/game/ui/CustomSettingsControls.tsx"),
+            "utf8",
+        );
+        expect(customSettingsSrc).toContain("https://github.com/jnpike93/run-escape");
+        expect(customSettingsSrc).toContain("export function AboutSetting");
+        expect(customSettingsSrc).toContain("export function AboutSection");
     });
 
     it("verifies FlowField.update dual-signature redundancy ((grid, x, y) and legacy (x, y, grid))", () => {

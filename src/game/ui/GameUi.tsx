@@ -51,6 +51,8 @@ import { Coins } from "./Coins";
 import { CollectionLogScreen } from "./CollectionLogScreen";
 import { CoopDamageLeaderboardTable, CoopGameOverButtons } from "./CoopGameOverSection";
 import {
+    AboutSection,
+    AboutSetting,
     FullscreenSetting,
     HudFullscreenButton,
     HudPauseButton,
@@ -413,6 +415,7 @@ function SettingsPanel({
                     <SaveSetting ui={ui} client={client} />
                     <SecretCodeSection client={client} />
                 </section>
+                <AboutSection />
             </div>
             <div className="ui-row">
                 <button className="ui-button" onClick={onClose}>
@@ -1789,6 +1792,7 @@ function PauseModal({
                             music={getMap(ui.mapId).music !== undefined}
                         />
                         <AutoPauseSetting ui={ui} client={client} />
+                        <AboutSetting />
                     </div>
                 </div>
                 <div className="ui-row">
