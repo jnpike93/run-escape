@@ -60,7 +60,9 @@ import { MemoryStore } from "../../src/rs/cache/store/MemoryStore";
 import { Sector } from "../../src/rs/cache/store/Sector";
 import { SectorCluster } from "../../src/rs/cache/store/SectorCluster";
 import { LocModelLoader } from "../../src/rs/config/loctype/LocModelLoader";
+import { LocModelType } from "../../src/rs/config/loctype/LocModelType";
 import { SeqType } from "../../src/rs/config/seqtype/SeqType";
+import { ByteBuffer } from "../../src/rs/io/ByteBuffer";
 import { MapImageRenderer } from "../../src/rs/map/MapImageRenderer";
 import { Model } from "../../src/rs/model/Model";
 import {
@@ -431,6 +433,66 @@ async function loadWhatTheGameLoads(
         clearWorkerStateCaches(state);
     } else {
         const seenMapArchiveSquares = new Set<string>();
+        const seenLocKeys = new Set<number>();
+        const seenModelIds = new Set<number>();
+        const seenSeqIds = new Set<number>();
+        const modelLoader = state.cacheLoaderFactory.getModelLoader();
+        const checkFastLoc = (rawId: number, rawType: LocModelType) => {
+            const modelType =
+                rawType === LocModelType.NORMAL_DIAGIONAL
+                    ? LocModelType.NORMAL
+                    : rawType >= LocModelType.WALL_DECORATION_INSIDE &&
+                        rawType <= LocModelType.WALL_DECORATION_DIAGONAL_DOUBLE
+                      ? LocModelType.WALL_DECORATION_INSIDE
+                      : rawType;
+            const locKey = (rawId << 5) | modelType;
+            if (seenLocKeys.has(locKey)) return;
+            seenLocKeys.add(locKey);
+            const rawLocType = state.locTypeLoader.load(rawId);
+            let seqId = rawLocType.seqId;
+            if (seqId === -1 && rawLocType.randomSeqIds && rawLocType.randomSeqIds.length > 0) {
+                seqId = rawLocType.randomSeqIds[0];
+            }
+            let locType = rawLocType;
+            if (locType.transforms) {
+                const transformed = locType.transform(state.varManager, state.locTypeLoader);
+                if (!transformed) return;
+                locType = transformed;
+            }
+            if (locType.models) {
+                let modelIds: number[] | undefined;
+                if (!locType.types) {
+                    if (modelType === LocModelType.NORMAL) {
+                        modelIds = locType.models[0];
+                    }
+                } else {
+                    const idx = locType.types.indexOf(modelType);
+                    if (idx !== -1) {
+                        modelIds = locType.models[idx];
+                    }
+                }
+                if (modelIds) {
+                    for (const modelId of modelIds) {
+                        if (!seenModelIds.has(modelId)) {
+                            seenModelIds.add(modelId);
+                            modelLoader.getModel(modelId);
+                        }
+                        if (!modelLoader.getModel(modelId)) break;
+                    }
+                }
+            }
+            if (seqId !== -1 && !seenSeqIds.has(seqId)) {
+                seenSeqIds.add(seqId);
+                const seqType = state.seqTypeLoader.load(seqId);
+                if (seqType.isSkeletalSeq()) {
+                    state.skeletalSeqLoader?.load(seqType.skeletalId);
+                } else if (seqType.frameIds) {
+                    for (const frameId of seqType.frameIds) {
+                        state.seqFrameLoader.load(frameId);
+                    }
+                }
+            }
+        };
         for (const map of ALL_MAPS) {
             const region = getArenaRegion(map);
             const { baseX, baseY, sizeX, sizeY } = region;
@@ -440,13 +502,36 @@ async function loadWhatTheGameLoads(
                 Math.ceil((baseX + sizeX + borderSize) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
             const lastY =
                 Math.ceil((baseY + sizeY + borderSize) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+            const innerFirstX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const innerFirstY = Math.floor(baseY / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
+            const innerLastX =
+                Math.ceil((baseX + sizeX) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
+            const innerLastY =
+                Math.ceil((baseY + sizeY) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
             for (let mx = firstX; mx <= lastX; mx++) {
                 for (let my = firstY; my <= lastY; my++) {
-                    const key = `${mx}:${my}`;
+                    const isInner =
+                        mx >= innerFirstX &&
+                        mx <= innerLastX &&
+                        my >= innerFirstY &&
+                        my <= innerLastY;
+                    const key = `${mx}:${my}:${isInner ? 1 : 0}`;
                     if (seenMapArchiveSquares.has(key)) continue;
                     seenMapArchiveSquares.add(key);
                     state.sceneBuilder.getTerrainData(mx, my);
-                    state.sceneBuilder.getLocData(mx, my);
+                    const locData = state.sceneBuilder.getLocData(mx, my);
+                    if (locData && isInner) {
+                        const buf = new ByteBuffer(locData);
+                        let id = -1;
+                        let idDelta: number;
+                        while ((idDelta = buf.readSmart3()) !== 0) {
+                            id += idDelta;
+                            while (buf.readUnsignedSmart() !== 0) {
+                                const attr = buf.readUnsignedByte();
+                                checkFastLoc(id, attr >> 2);
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -69,16 +69,21 @@ export class Dat2SeqFrameLoader implements SeqFrameLoader {
 
         let frameMap = this.frameMaps.get(frameMapId);
         if (!frameMap) {
-            const archive = this.animIndex.getArchive(frameMapId);
+            try {
+                const archive = this.animIndex.getArchive(frameMapId);
 
-            const frames: SeqFrame[] = new Array(archive.lastFileId);
+                const frames: SeqFrame[] = new Array(archive.lastFileId);
 
-            for (const file of archive.files) {
-                frames[file.id] = Dat2SeqFrame.load(this.cacheInfo, this.baseLoader, file.data);
+                for (const file of archive.files) {
+                    frames[file.id] = Dat2SeqFrame.load(this.cacheInfo, this.baseLoader, file.data);
+                }
+
+                frameMap = new SeqFrameMap(frames);
+                this.frameMaps.set(frameMapId, frameMap);
+            } catch (e) {
+                console.error("Failed loading frame map " + frameMapId, e);
+                return undefined;
             }
-
-            frameMap = new SeqFrameMap(frames);
-            this.frameMaps.set(frameMapId, frameMap);
         }
 
         return frameMap.frames[frameId];

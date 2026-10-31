@@ -8,6 +8,32 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Fix Black Map Square Rendering Across All 20 Maps, Rebuild Slim Cache (`71087aea`) & Harden Fast Slim-Cache Verification
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-CHsA59DT.js` (`?v=8.6`, MapViewer `MapViewerApp-CwrzFjbT.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-BO6hrWmD.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
+
+**Scope**: Root-caused and fixed black map square rendering across Lumbridge (and the Title Screen), Barbarian Village, Barrows, Wilderness, Kharidian Desert, Karamja, Prifddinas, Grand Exchange, East Varrock, Falador, and small-arena borders, rebuilt the slim cache (`osrs-241_2026-09-30-slim-71087aea`), and hardened `slim-cache.ts`, `Dat2SeqFrameLoader`, `MapManager`, and `WebGLMapViewerRenderer` to prevent recurrence.
+
+**Changes implemented**:
+- **Root Cause 1 - Outdated Tile-Visibility Filter in `loadSceneLocEntities` (`scripts/cache/slim-cache.ts`)**:
+  - In `0.17.1` and `0.18.0`, upstream replaced the inline `scene.isInside` check in `SceneLocs.ts` with `isTileDrawn(scene, tile.minLevel, level, tileX, tileY, maxLevel)` from `UpperLevels.ts` (which draws upper-level tiles whenever `tile.minLevel <= maxLevel` or `hasWalkwayAbove(...)` is true).
+  - However, `loadSceneLocEntities` in `scripts/cache/slim-cache.ts` still skipped any tile where `level > maxLevel && scene.isInside(maxLevel, x, y)`. As a result, animated `LocEntity` props and transformed multilocs on upper-level bridge/wall/walkway tiles were omitted from the slim cache:
+    - Missing animation `0:8495` caused `SdMapDataLoader.load()` to throw on map squares `(50, 50)` (Lumbridge spawn & Title Screen, Barbarian Village), `(46, 49)` (Lumbridge, Karamja, Falador), and `(48, 56)` (Barbarian Village, Wilderness, Grand Exchange, East Varrock).
+    - Missing animations `0:13133` and `0:5596` caused `SdMapDataLoader.load()` to throw on Prifddinas `(50, 95)` and `(51, 95)`.
+    - Missing transformed `LocEntity` models `7:13282`, `7:13283`, `7:14065` (Barrows) and `7:58472`, `7:57663`, `7:57665` (Kharidian Desert) failed to load.
+  - Updated `loadSceneLocEntities` in `scripts/cache/slim-cache.ts` to iterate all levels (`0..scene.levels - 1`) and all tiles (`0..scene.sizeX - 1`, `0..scene.sizeY - 1`) without any visibility filter that could drift from `SceneLocs.ts`, and rebuilt `caches/osrs-241_2026-09-30-slim-71087aea` (`26.3 MB`, +42 animation groups in index `0` and +8 model groups in index `7`).
+- **Root Cause 2 - Zero-Margin `playArea` Clamping & Permanent `addInvalidMap` Blacklisting (`src/mapviewer/MapManager.ts`, `src/mapviewer/MapManager.test.ts`, `src/mapviewer/webgl/WebGLMapViewerRenderer.ts`, `src/rs/model/seq/SeqFrameLoader.ts`)**:
+  - Updated `MapManager.update()` to include `margin = 2` (`MAP_MARGIN = 2` map squares) around `playArea` so the 1-2 border map squares visible within camera `renderDistance` and `PLAY_AREA_FADE` load cleanly while squares outside the slim cache's 2-square margin remain clamped out.
+  - Updated `WebGLMapViewerRenderer.queueLoadMap()` `catch (e)` block to delete the failed square from `loadingMapIds` rather than permanently blacklisting it via `addInvalidMap`, and wrapped `Dat2SeqFrameLoader.load()` in `try/catch` (matching `DatSeqFrameLoader` and `ModelLoader`) so a single missing animation archive never crashes an entire 64x64 map square.
+- **Preventive Safeguard - Full Map Loc/Model/Animation Coverage in Fast `--verify` Mode (`scripts/cache/slim-cache.ts`)**:
+  - Upgraded `npm run verify-slim-cache` (`--verify` fast mode) to decode every map square's `locData` (`ByteBuffer`) across all 20 maps (+ `MAP_MARGIN = 2`) and verify every placed `locType`, `varManager` multiloc transform, `LocModelType` 3D model, and `seqId` animation frame archive in ~8 seconds (`14,446` groups read vs `3,529` previously).
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (411/411 passed across all 21 test suites), `npm run verify-slim-cache` (verified 14,446 groups in fast mode, 14,607 groups in full mode, and 902/902 map squares across all 20 maps via `SdMapDataLoader` + `loadMinimapData` with 0 failures), `python -m unittest server/test_serve.py` (55 tests OK).
+
+---
+
 ### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning (`FlowField.update`), Async/Co-Op Music Autoplay Unlock & Full 20-Map OSRS Music Soundtrack
 
 **Model**: Gemini (Antigravity)
