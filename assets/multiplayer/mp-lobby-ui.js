@@ -139,6 +139,7 @@ export const mpLobbyUiMethods = {
             mapId: this.selectedMapId,
             endless: Boolean(this.selectedEndless),
             difficultyMult: Number(this.difficultyMult) || 1.0,
+            inGame: Boolean(this.gameStarted),
             name: this.localName,
             ready: this.localReady,
             unlockedCharacters: unlocked,
@@ -692,6 +693,19 @@ export const mpLobbyUiMethods = {
                 </span>
             </div>
 
+            ${this.lobbyLockedReason ? `
+                <div id="coop-locked-banner" style="background: #3a1814; border: 2px solid #cc4433; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; text-align: left;">
+                    <div style="font-size: 13px; color: #ff8877; flex: 1; min-width: 180px;">
+                        ${escapeHtml(this.lobbyLockedReason)}
+                    </div>
+                    <button id="coop-new-room-btn" style="
+                        background: #8a6414; border: 2px solid #d4af37; color: #fff; padding: 6px 14px;
+                        cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; white-space: nowrap;">
+                        Create New Room
+                    </button>
+                </div>
+            ` : ''}
+
             <!-- Room Code & Link Box -->
             <div style="background: #1a1510; border: 2px solid #3d3123; padding: 10px 12px; margin-bottom: 12px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -789,6 +803,17 @@ export const mpLobbyUiMethods = {
                         }, 2000);
                     });
                 }
+            };
+        }
+
+        const newRoomBtn = box.querySelector('#coop-new-room-btn');
+        if (newRoomBtn) {
+            newRoomBtn.onclick = () => {
+                this.lobbyLockedReason = null;
+                const newRoom = this.constructor.generateRoomId();
+                window.history.replaceState({}, '', `${window.location.pathname}?room=${encodeURIComponent(newRoom)}`);
+                this.connect(newRoom);
+                this.updateLobbyUI();
             };
         }
 

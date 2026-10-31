@@ -49,6 +49,7 @@ export const mpTransportMethods = {
         const safeRoom = sanitizeRoomId(roomId) || this.constructor.generateRoomId();
         this.roomId = safeRoom;
         this.role = null;
+        this.lobbyLockedReason = null;
         this.lobbyPlayers.clear();
         this.syncLocalToLobbyPlayers();
 
@@ -124,6 +125,13 @@ export const mpTransportMethods = {
         if (!Array.isArray(activeSlots)) return;
         const validSet = new Set(activeSlots.map(s => sanitizeSlot(s, 0)).filter(s => s >= 1 && s <= 4));
         validSet.add(this.localSlot);
+        if (this.gameStarted) {
+            for (const s of Array.from(validSet)) {
+                if (s !== this.localSlot && !this.remotePeers.has(s)) {
+                    validSet.delete(s);
+                }
+            }
+        }
         for (const s of this.lobbyPlayers.keys()) {
             if (!validSet.has(s)) {
                 this.lobbyPlayers.delete(s);
@@ -157,13 +165,19 @@ export const mpTransportMethods = {
 
             case 'error':
                 if (typeof msg.message === 'string') {
-                    this.showToast(msg.message.slice(0, 80));
+                    const errText = msg.message.slice(0, 80);
+                    this.showToast(errText);
+                    if (msg.code === 'room_locked' || /in progress|locked|full/i.test(errText)) {
+                        this.lobbyLockedReason = errText;
+                        this.updateLobbyUI?.();
+                    }
                 }
                 break;
 
             case 'welcome': {
                 if (this.gameStarted) break;
                 if (msg.role !== 'host' && msg.role !== 'guest') break;
+                this.lobbyLockedReason = null;
                 this.role = msg.role;
                 this.localSlot = sanitizeSlot(msg.slot, msg.role === 'host' ? 1 : 2);
                 this.hostSlot = sanitizeSlot(msg.hostSlot, 1);
@@ -195,6 +209,10 @@ export const mpTransportMethods = {
 
             case 'peer_joined': {
                 const joinedSlot = sanitizeSlot(msg.slot, 2);
+                if (this.gameStarted && !this.remotePeers.has(joinedSlot)) {
+                    console.log(`[Multiplayer] Ignoring peer_joined from slot ${joinedSlot} while game is in progress`);
+                    break;
+                }
                 if (msg.hostSlot) this.hostSlot = sanitizeSlot(msg.hostSlot, this.hostSlot);
                 if (!this.lobbyPlayers.has(joinedSlot)) {
                     this.lobbyPlayers.set(joinedSlot, {
@@ -221,6 +239,15 @@ export const mpTransportMethods = {
             case 'peer_leaving':
             case 'peer_left': {
                 const leftSlot = sanitizeSlot(msg.slot || msg.senderSlot, 0);
+                const isHostLeaving = msg.role === 'host' || (leftSlot > 0 && leftSlot === this.hostSlot);
+                const departingPeer = this.remotePeers.get(leftSlot);
+                if (this.gameStarted && !isHostLeaving && !departingPeer) {
+                    if (leftSlot && leftSlot !== this.localSlot) {
+                        this.lobbyPlayers.delete(leftSlot);
+                    }
+                    console.log(`[Multiplayer] Ignoring disconnect of non-participating slot ${leftSlot} during active run`);
+                    break;
+                }
                 console.log(`[Multiplayer] Peer slot ${leftSlot} disconnected`);
                 if (leftSlot && leftSlot !== this.localSlot) {
                     this.lobbyPlayers.delete(leftSlot);
@@ -276,6 +303,9 @@ export const mpTransportMethods = {
             case 'lobby_update': {
                 const sSlot = sanitizeSlot(msg.senderSlot || msg.slot, 2);
                 const senderSlot = sSlot;
+                if (this.gameStarted && senderSlot !== this.localSlot && senderSlot !== this.hostSlot && !this.remotePeers.has(senderSlot)) {
+                    break;
+                }
                 const incomingName = sanitizeName(msg.name) || (this.getRememberedPlayerName && this.getRememberedPlayerName(senderSlot)) || `Player ${senderSlot}`;
                 const hostUnlocked = this.getUnlockedCharacters();
 

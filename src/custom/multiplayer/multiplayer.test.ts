@@ -960,3 +960,152 @@ describe("0.18.0 Multiplayer compatibility - Stances, Sled, Rocks, Rampages, Fai
     );
 });
 
+describe("Mid-run lobby lock & non-participating peer disconnect isolation (mp-transport & mp-lobby-ui)", () => {
+    function createActiveDuoCtx(role: "host" | "guest" = "host", localSlot = 1) {
+        const partnerSlot = localSlot === 1 ? 2 : 1;
+        const disconnectReasons: string[] = [];
+        const toasts: string[] = [];
+        const lobbyPlayers = new Map<number, any>([
+            [1, { slot: 1, name: "HostPlayer", character: "warrior", ready: true, isHost: true }],
+            [2, { slot: 2, name: "PartnerPlayer", character: "ranger", ready: true, isHost: false }],
+        ]);
+        const remotePeers = new Map<number, any>([
+            [partnerSlot, { slot: partnerSlot, name: partnerSlot === 1 ? "HostPlayer" : "PartnerPlayer", characterId: "ranger" }],
+        ]);
+        const ctx: any = {
+            ...mpTransportMethods,
+            role,
+            localSlot,
+            hostSlot: 1,
+            peers: 2,
+            peerConnected: true,
+            gameStarted: true,
+            lobbyLockedReason: null,
+            lobbyPlayers,
+            remotePeers,
+            disconnectReasons,
+            toasts,
+            getUnlockedCharacters: () => ["warrior", "ranger", "wizard"],
+            syncLocalToLobbyPlayers() {},
+            sendLobbyUpdate() {},
+            broadcastPartyRoster() {},
+            updateLobbyUI() {},
+            showToast(msg: string) {
+                toasts.push(msg);
+            },
+            endGameOnDisconnect(reason: string) {
+                disconnectReasons.push(reason);
+                this.gameStarted = false;
+            },
+        };
+        return ctx;
+    }
+
+    test("Latecomer (slot 3) peer_joined, lobby_update, and peer_left during active 2P run are ignored and NEVER end the game", () => {
+        const ctx = createActiveDuoCtx("host", 1);
+
+        // 1. Latecomer slot 3 sends peer_joined with activeSlots [1, 2, 3]
+        ctx.handleMessage({
+            type: "peer_joined",
+            slot: 3,
+            hostSlot: 1,
+            peers: 3,
+            activeSlots: [1, 2, 3],
+        });
+        expect(ctx.gameStarted).toBe(true);
+        expect(ctx.disconnectReasons).toEqual([]);
+        expect(ctx.lobbyPlayers.has(3)).toBe(false);
+        expect(ctx.toasts).toEqual([]);
+
+        // 2. Latecomer slot 3 sends lobby_update
+        ctx.handleMessage({
+            type: "lobby_update",
+            senderSlot: 3,
+            slot: 3,
+            name: "Latecomer3",
+            character: "wizard",
+            ready: true,
+        });
+        expect(ctx.gameStarted).toBe(true);
+        expect(ctx.lobbyPlayers.has(3)).toBe(false);
+
+        // 3. Even if reconcileActiveSlots is called directly with [1, 2, 3, 4] mid-run, slots 3 & 4 are excluded
+        ctx.reconcileActiveSlots([1, 2, 3, 4]);
+        expect(Array.from(ctx.lobbyPlayers.keys()).sort()).toEqual([1, 2]);
+
+        // 4. Latecomer slot 3 leaves (peer_left / peer_leaving) -> MUST NOT trigger endGameOnDisconnect
+        ctx.handleMessage({
+            type: "peer_left",
+            slot: 3,
+            senderSlot: 3,
+            role: "guest",
+            peers: 2,
+            activeSlots: [1, 2],
+        });
+        expect(ctx.disconnectReasons).toEqual([]);
+        expect(ctx.gameStarted).toBe(true);
+    });
+
+    test("Actual in-game partner (slot 2) or Host (slot 1) leaving DOES trigger endGameOnDisconnect", () => {
+        // Case A: Host (slot 1) sees in-game partner (slot 2) leave in a 2-player game
+        const hostCtx = createActiveDuoCtx("host", 1);
+        hostCtx.handleMessage({
+            type: "peer_left",
+            slot: 2,
+            senderSlot: 2,
+            role: "guest",
+            peers: 1,
+            activeSlots: [1],
+        });
+        expect(hostCtx.disconnectReasons.length).toBe(1);
+        expect(hostCtx.disconnectReasons[0]).toContain("PartnerPlayer Disconnected - Game Over");
+        expect(hostCtx.gameStarted).toBe(false);
+
+        // Case B: Guest (slot 2) sees Host (slot 1) leave
+        const guestCtx = createActiveDuoCtx("guest", 2);
+        guestCtx.handleMessage({
+            type: "peer_left",
+            slot: 1,
+            senderSlot: 1,
+            role: "host",
+            peers: 1,
+            activeSlots: [2],
+        });
+        expect(guestCtx.disconnectReasons.length).toBe(1);
+        expect(guestCtx.disconnectReasons[0]).toContain("HostPlayer Disconnected - Game Over");
+        expect(guestCtx.gameStarted).toBe(false);
+    });
+
+    test("error with code 'room_locked' populates lobbyLockedReason and calls showToast", () => {
+        const ctx = createActiveDuoCtx("guest", 2);
+        ctx.gameStarted = false;
+        let uiUpdated = false;
+        ctx.updateLobbyUI = () => {
+            uiUpdated = true;
+        };
+
+        ctx.handleMessage({
+            type: "error",
+            code: "room_locked",
+            message: "Cannot join room: a Co-Op run is already in progress.",
+        });
+
+        expect(ctx.lobbyLockedReason).toBe("Cannot join room: a Co-Op run is already in progress.");
+        expect(ctx.toasts).toContain("Cannot join room: a Co-Op run is already in progress.");
+        expect(uiUpdated).toBe(true);
+
+        // Welcome message clears lobbyLockedReason
+        ctx.handleMessage({
+            type: "welcome",
+            role: "host",
+            slot: 1,
+            hostSlot: 1,
+            peers: 1,
+            room: "NEWROOM1",
+            activeSlots: [1],
+        });
+        expect(ctx.lobbyLockedReason).toBeNull();
+    });
+});
+
+

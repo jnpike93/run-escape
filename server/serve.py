@@ -53,6 +53,7 @@ _SLOT_SUFFIXES = {
 # WebSocket Room Broker: room_id -> list of (client_sock, lock, role, slot)
 rooms = {}
 ip_conns = {}
+locked_rooms = set()
 rooms_lock = threading.Lock()
 
 HOST_ALLOWED_MSG_TYPES = {
@@ -145,6 +146,7 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
     Returns (success, role, slot, host_slot, active_slots, peer_count).
     """
     room_full = False
+    room_locked = False
     with rooms_lock:
         current_ip_count = ip_conns.get(client_ip, 0)
         if current_ip_count >= MAX_CONNS_PER_IP:
@@ -155,9 +157,12 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
             if len(rooms) >= MAX_ROOMS:
                 safe_close(sock)
                 return False, None, None, None, None, None
+            locked_rooms.discard(room_id)
             rooms[room_id] = []
 
-        if len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
+        if room_id in locked_rooms and len(rooms[room_id]) > 0:
+            room_locked = True
+        elif len(rooms[room_id]) >= MAX_PEERS_PER_ROOM:
             room_full = True
         else:
             peer_count = len(rooms[room_id])
@@ -174,6 +179,19 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
             host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
             ip_conns[client_ip] = current_ip_count + 1
             return True, role, slot, host_slot, active_slots, peer_count
+
+    if room_locked:
+        try:
+            err_frame = encode_ws_frame(json.dumps({
+                "type": "error",
+                "code": "room_locked",
+                "message": "Lobby is locked - a Co-Op run is currently in progress."
+            }))
+            sock.sendall(err_frame)
+        except Exception:
+            pass
+        safe_close(sock)
+        return False, None, None, None, None, None
 
     if room_full:
         try:
@@ -309,11 +327,18 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
         return True
 
     msg_modified = False
-    if current_role != "host":
+    if current_role == "host":
+        if msg_type == "game_start":
+            with rooms_lock:
+                locked_rooms.add(room_id)
+        elif msg_type == "game_over" or (msg_type == "lobby_update" and parsed_msg.get("inGame") is False):
+            with rooms_lock:
+                locked_rooms.discard(room_id)
+    else:
         if msg_type == "coop_pickup" and parsed_msg.get("kind") != "lamp_xp":
             return True
         if msg_type == "lobby_update":
-            for host_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter"):
+            for host_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter", "inGame"):
                 if host_key in parsed_msg:
                     parsed_msg.pop(host_key, None)
                     msg_modified = True
@@ -439,10 +464,13 @@ def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
                     new_host_slot = next((p[3] for p in remaining if p[2] == "host"), remaining[0][3])
 
                 if remaining:
+                    if departing_role == "host":
+                        locked_rooms.discard(room_id)
                     rooms[room_id] = remaining
                     notify_peers = list(remaining)
                     active_slots_after = [p[3] for p in remaining]
                 else:
+                    locked_rooms.discard(room_id)
                     del rooms[room_id]
 
     if notify_peers:

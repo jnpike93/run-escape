@@ -30,7 +30,7 @@ const PRESERVED_ASSETS = new Set([
 ]);
 
 const OBSOLETE_HASHED_RE =
-    /^(index|MapViewerApp|RenderDataWorker|module|favicon)-.*\.(js|css|wasm|ico)(\.map)?$/;
+    /^(index|MapViewerApp|RenderDataWorker|module|favicon|manifest)-.*\.(js|css|wasm|ico|json)(\.map)?$/;
 
 function copyCustomDirSync(srcDir, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
@@ -93,7 +93,7 @@ function main() {
     // 3. Copy all built files (excluding .map sourcemaps and hashed favicons) from dist/assets/ into root assets/
     const distEntries = fs
         .readdirSync(DIST_ASSETS_DIR)
-        .filter((e) => !e.endsWith(".map") && !/^favicon-.*\.ico$/.test(e));
+        .filter((e) => !e.endsWith(".map") && !/^favicon-.*\.ico$/.test(e) && !/^manifest-.*\.json$/.test(e));
     let newIndexJs = null;
     let newIndexCss = null;
 

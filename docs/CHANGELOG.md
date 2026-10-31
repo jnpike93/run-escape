@@ -7,7 +7,7 @@ the version in the corner), so it's written for players.
 
 ### Co-Op Multiplayer & Leaderboards
 
-- **2-4 Player Co-Op Rooms**: Host or join Co-Op lobbies across all maps with synchronized waves, enemies, bosses, revives, overhead chat, per-weapon stances, power-ups (Sled, Giant rune essence, Evil Bob, Fairy ring, Drill Demon), and a Host-selectable **Difficulty Multiplier (1x - 3x)**.
+- **2-4 Player Co-Op Rooms**: Host or join Co-Op lobbies across all maps with synchronized waves, enemies, bosses, revives, overhead chat, per-weapon stances, power-ups (Sled, Giant rune essence, Evil Bob, Fairy ring, Drill Demon), a Host-selectable **Difficulty Multiplier (1x - 3x)**, and automatic **In-Game Lobby Locking** so latecomers cannot join or disrupt an active run.
 - **Shared Progression & Casket Rolls**: Co-Op runs share the Host's shop upgrades and pool party XP bonuses. Bones, coins, and Antique Lamps split across the party, while each casket opens once to grant every player their own unique item roll.
 - **Party HUD & Leaderboards**: Live party cards with player levels, health, and active prayers, a post-run **Co-Op Run Leaderboard** with individual damage and point scores, and a **Level Points & Best Times Leaderboard** on the Title screen and Map Select panel.
 - **Level Top Score System**: Earn a run score on every level based on monsters slain, kill pace (kills/min), bosses defeated, fast boss clear speed, character level, survival time, and endless rounds, scaled by each map's difficulty multiplier (`1.00x` Lumbridge to `3.33x` The Inferno).

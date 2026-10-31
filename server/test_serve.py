@@ -135,6 +135,7 @@ from serve import (
     handle_ws_client,
     rooms,
     ip_conns,
+    locked_rooms,
     rooms_lock,
     MAX_CONNS_PER_IP,
     MAX_FRAMES_PER_SEC,
@@ -347,11 +348,13 @@ class TestWebSocketHelpers(unittest.TestCase):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
+            locked_rooms.clear()
 
     def tearDown(self):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
+            locked_rooms.clear()
 
     def test_sanitize_room_id(self):
         self.assertEqual(sanitize_room_id("room123"), "room123")
@@ -506,7 +509,8 @@ class TestWebSocketHelpers(unittest.TestCase):
             "mapId": "inferno",
             "endless": True,
             "difficultyMult": 10.0,
-            "hostCharacter": "mage"
+            "hostCharacter": "mage",
+            "inGame": False
         }).encode("utf-8")
         res = _process_ws_text_message(guest_sock, threading.Lock(), "room", "guest", 2, spoofed_lobby)
         self.assertTrue(res)
@@ -517,8 +521,130 @@ class TestWebSocketHelpers(unittest.TestCase):
         self.assertEqual(relayed.get("character"), "ranger")
         self.assertEqual(relayed.get("slot"), 2)
         self.assertEqual(relayed.get("senderSlot"), 2)
-        for stripped_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter"):
+        for stripped_key in ("party", "unlockedCharacters", "mapId", "endless", "difficultyMult", "hostCharacter", "inGame"):
             self.assertNotIn(stripped_key, relayed)
+
+    def test_room_lock_on_game_start_rejects_latecomers_without_peer_left(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        reg1, role1, slot1, _, _, _ = _register_ws_client(host_sock, threading.Lock(), "coop_room", "127.0.0.1")
+        reg2, role2, slot2, _, _, _ = _register_ws_client(guest_sock, threading.Lock(), "coop_room", "127.0.0.2")
+        self.assertTrue(reg1)
+        self.assertTrue(reg2)
+
+        start_msg = json.dumps({"type": "game_start"}).encode("utf-8")
+        res = _process_ws_text_message(host_sock, threading.Lock(), "coop_room", role1, slot1, start_msg)
+        self.assertTrue(res)
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+        host_sock.sent_data.clear()
+        guest_sock.sent_data.clear()
+
+        late_sock = MockSocket()
+        reg_late, role_late, slot_late, _, _, _ = _register_ws_client(
+            late_sock, threading.Lock(), "coop_room", "127.0.0.3"
+        )
+        self.assertFalse(reg_late)
+        self.assertIsNone(role_late)
+        self.assertIsNone(slot_late)
+        self.assertTrue(late_sock.closed)
+
+        _, err_payload, err = _read_ws_frame(MockSocket(bytes(late_sock.sent_data)))
+        self.assertIsNone(err)
+        err_obj = json.loads(err_payload.decode("utf-8"))
+        self.assertEqual(err_obj.get("type"), "error")
+        self.assertEqual(err_obj.get("code"), "room_locked")
+
+        with rooms_lock:
+            self.assertEqual(len(rooms["coop_room"]), 2)
+
+        _unregister_ws_client(late_sock, "coop_room", "127.0.0.3", reg_late, role_late, slot_late)
+        self.assertEqual(bytes(host_sock.sent_data), b"")
+        self.assertEqual(bytes(guest_sock.sent_data), b"")
+
+    def test_host_game_over_and_lobby_update_unlock_room(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        _register_ws_client(host_sock, threading.Lock(), "coop_room", "127.0.0.1")
+        _register_ws_client(guest_sock, threading.Lock(), "coop_room", "127.0.0.2")
+
+        # Lock via game_start and unlock via game_over
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"game_start"}'
+        )
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"game_over","victory":true}'
+        )
+        with rooms_lock:
+            self.assertNotIn("coop_room", locked_rooms)
+
+        join_sock1 = MockSocket()
+        reg_join1, _, slot_join1, _, _, _ = _register_ws_client(
+            join_sock1, threading.Lock(), "coop_room", "127.0.0.3"
+        )
+        self.assertTrue(reg_join1)
+        self.assertEqual(slot_join1, 3)
+
+        # Lock again and unlock via lobby_update with inGame=False
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"game_start"}'
+        )
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"lobby_update","inGame":false}'
+        )
+        with rooms_lock:
+            self.assertNotIn("coop_room", locked_rooms)
+
+        join_sock2 = MockSocket()
+        reg_join2, _, slot_join2, _, _, _ = _register_ws_client(
+            join_sock2, threading.Lock(), "coop_room", "127.0.0.4"
+        )
+        self.assertTrue(reg_join2)
+        self.assertEqual(slot_join2, 4)
+
+    def test_guest_cannot_unlock_room(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        _register_ws_client(host_sock, threading.Lock(), "coop_room", "127.0.0.1")
+        _register_ws_client(guest_sock, threading.Lock(), "coop_room", "127.0.0.2")
+
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"game_start"}'
+        )
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+        _process_ws_text_message(
+            guest_sock, threading.Lock(), "coop_room", "guest", 2, b'{"type":"game_over"}'
+        )
+        _process_ws_text_message(
+            guest_sock, threading.Lock(), "coop_room", "guest", 2, b'{"type":"lobby_update","inGame":false}'
+        )
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+    def test_host_disconnect_unlocks_room(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        _register_ws_client(host_sock, threading.Lock(), "coop_room", "127.0.0.1")
+        _register_ws_client(guest_sock, threading.Lock(), "coop_room", "127.0.0.2")
+
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "coop_room", "host", 1, b'{"type":"game_start"}'
+        )
+        with rooms_lock:
+            self.assertIn("coop_room", locked_rooms)
+
+        _unregister_ws_client(host_sock, "coop_room", "127.0.0.1", True, "host", 1)
+        with rooms_lock:
+            self.assertNotIn("coop_room", locked_rooms)
 
     def test_guest_game_over_rejected(self):
         host_sock = MockSocket()
@@ -716,11 +842,13 @@ class TestPerformanceOptimizations(unittest.TestCase):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
+            locked_rooms.clear()
 
     def tearDown(self):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
+            locked_rooms.clear()
 
     def test_read_exact_single_chunk_zero_copy_fast_path(self):
         sock = Mock()

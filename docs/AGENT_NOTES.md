@@ -8,10 +8,34 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Mobile Fullscreen Mode, Dynamic Viewport (`100dvh` / `visualViewport`) Sync, Hardware Safe-Area Insets & PWA Manifest
+### [2026-10-30] Lock Co-Op Lobbies During Active Games & Isolate In-Game Sessions From Late Lobby Joins/Leaves
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
+**Bundle**: `index-fTZtG7VT.js` (`?v=8.6`, MapViewer `MapViewerApp-BoiAZB8S.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-CXAPFukV.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
+
+**Scope**: Prevented latecomers from joining or disrupting an in-progress Co-Op session on both the Python WebSocket server (`server/serve.py`) and the client transport/lobby runtime (`src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`).
+
+**Root Cause & Changes implemented**:
+- **Root Cause**:
+  1. `server/serve.py` previously accepted WebSocket connections into `rooms[room_id]` (up to 4 slots) even after the Host had started the run (`game_start`). When a latecomer joined the lobby and then disconnected, the server broadcast `peer_left` for their slot (e.g. `slot 3`).
+  2. `src/custom/multiplayer/mp-transport.js` previously checked `if (msg.role === 'host' || leftSlot === this.hostSlot || this.remotePeers.size <= 1)` on every `peer_left` while `this.gameStarted` was `true`. In a 2-player Co-Op run (`slot 1` Host + `slot 2` Guest), `this.remotePeers.size` is `1`, so a non-participating `slot 3` leaving the lobby satisfied `this.remotePeers.size <= 1` and triggered `this.endGameOnDisconnect("Player 3 Disconnected - Game Over")` for the active players.
+- **Server-Side Room Lock (`server/serve.py`, `server/test_serve.py`)**:
+  - Added `locked_rooms = set()` guarded by `rooms_lock`.
+  - `_register_ws_client`: rejects new WebSocket connections to any active locked room (`room_id in locked_rooms and len(rooms[room_id]) > 0`) with `{"type": "error", "code": "room_locked", "message": "Lobby is locked - a Co-Op run is currently in progress."}`, closes the socket, and returns `False` so latecomers are never added to `rooms[room_id]` and never broadcast `peer_joined` or `peer_left`.
+  - `_process_ws_text_message` & `_unregister_ws_client`: Host `game_start` adds `room_id` to `locked_rooms`; Host `game_over`, Host `lobby_update` with `inGame: False`, Host disconnect, or an empty room discards `room_id` from `locked_rooms` (while stripping `"inGame"` from guest `lobby_update` payloads).
+- **Client-Side Session Isolation & Locked-Room Banner (`src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/multiplayer.test.ts`)**:
+  - `mp-transport.js`: In `peer_leaving` and `peer_left`, checks whether the departing slot is either the Host (`isHostLeaving`) or a registered in-game participant (`this.remotePeers.get(leftSlot)`). If `this.gameStarted && !isHostLeaving && !departingPeer`, removes the slot from `this.lobbyPlayers` and exits without calling `endGameOnDisconnect`. Also ignores non-participating slots in `peer_joined`, `lobby_update`, and `reconcileActiveSlots` while `this.gameStarted` is `true`, and records `this.lobbyLockedReason` on `error` (`code === 'room_locked'`).
+  - `mp-lobby-ui.js`: Includes `inGame: Boolean(this.gameStarted)` in `broadcastPartyRoster()` so returning to the lobby (`returnToLobby()`) unlocks the room on the server, and renders a locked-lobby banner (`#coop-locked-banner`) with a one-click **Create New Room** button (`#coop-new-room-btn`) if a player opens a link to an in-progress room.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (432/432 passed across all 24 test suites), `npm run verify-slim-cache` (14,541 groups verified), `python -m unittest server/test_serve.py` (59 tests OK).
+
+---
+
+### [2026-10-30] Add Mobile Fullscreen Mode, Dynamic Viewport (`100dvh` / `visualViewport`) Sync, Hardware Safe-Area Insets & PWA Manifest
+
+**Model**: Gemini (Antigravity)
+**Commit**: `e0ccafc`
 **Bundle**: `index-rZh4_2OV.js` (`?v=8.6`, MapViewer `MapViewerApp-CyU57m9w.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-C9YkQK8T.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
 
 **Scope**: Implemented mobile-aware Fullscreen mode (`mobileFullscreen.ts`), dynamic visible viewport (`100dvh` + `window.visualViewport` CSS variables `--app-width` / `--app-height`) synchronization, hardware safe-area inset protection across all screens and modals, and a landscape fullscreen PWA web app manifest (`assets/manifest.json`).
