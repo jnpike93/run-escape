@@ -136,6 +136,7 @@ from serve import (
     rooms,
     ip_conns,
     locked_rooms,
+    room_ready_slots,
     rooms_lock,
     MAX_CONNS_PER_IP,
     MAX_FRAMES_PER_SEC,
@@ -349,12 +350,14 @@ class TestWebSocketHelpers(unittest.TestCase):
             rooms.clear()
             ip_conns.clear()
             locked_rooms.clear()
+            serve.room_ready_slots.clear()
 
     def tearDown(self):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
             locked_rooms.clear()
+            serve.room_ready_slots.clear()
 
     def test_sanitize_room_id(self):
         self.assertEqual(sanitize_room_id("room123"), "room123")
@@ -646,6 +649,94 @@ class TestWebSocketHelpers(unittest.TestCase):
         with rooms_lock:
             self.assertNotIn("coop_room", locked_rooms)
 
+    def test_game_start_blocked_when_lobby_players_not_all_ready(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        _register_ws_client(host_sock, threading.Lock(), "ready_room", "127.0.0.1")
+        _register_ws_client(guest_sock, threading.Lock(), "ready_room", "127.0.0.2")
+
+        # Case 1: Host ready=True, Guest ready=False
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "lobby_update", "ready": True}).encode("utf-8")
+        )
+        _process_ws_text_message(
+            guest_sock, threading.Lock(), "ready_room", "guest", 2,
+            json.dumps({"type": "lobby_update", "ready": False}).encode("utf-8")
+        )
+        host_sock.sent_data.clear()
+        guest_sock.sent_data.clear()
+
+        res = _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "game_start"}).encode("utf-8")
+        )
+        self.assertTrue(res)
+        self.assertEqual(bytes(guest_sock.sent_data), b"")
+        with rooms_lock:
+            self.assertNotIn("ready_room", locked_rooms)
+
+        _, err_payload, err = _read_ws_frame(MockSocket(bytes(host_sock.sent_data)))
+        self.assertIsNone(err)
+        err_obj = json.loads(err_payload.decode("utf-8"))
+        self.assertEqual(err_obj.get("type"), "error")
+        self.assertEqual(err_obj.get("code"), "not_ready")
+
+        # Case 2: Host ready=False, Guest ready=True
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "lobby_update", "ready": False}).encode("utf-8")
+        )
+        _process_ws_text_message(
+            guest_sock, threading.Lock(), "ready_room", "guest", 2,
+            json.dumps({"type": "lobby_update", "ready": True}).encode("utf-8")
+        )
+        host_sock.sent_data.clear()
+        guest_sock.sent_data.clear()
+
+        res2 = _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "game_start"}).encode("utf-8")
+        )
+        self.assertTrue(res2)
+        self.assertEqual(bytes(guest_sock.sent_data), b"")
+        with rooms_lock:
+            self.assertNotIn("ready_room", locked_rooms)
+
+        _, err_payload2, err2 = _read_ws_frame(MockSocket(bytes(host_sock.sent_data)))
+        self.assertIsNone(err2)
+        err_obj2 = json.loads(err_payload2.decode("utf-8"))
+        self.assertEqual(err_obj2.get("type"), "error")
+        self.assertEqual(err_obj2.get("code"), "not_ready")
+
+    def test_game_start_allowed_when_all_lobby_players_ready(self):
+        host_sock = MockSocket()
+        guest_sock = MockSocket()
+        _register_ws_client(host_sock, threading.Lock(), "ready_room", "127.0.0.1")
+        _register_ws_client(guest_sock, threading.Lock(), "ready_room", "127.0.0.2")
+
+        _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "lobby_update", "ready": True}).encode("utf-8")
+        )
+        _process_ws_text_message(
+            guest_sock, threading.Lock(), "ready_room", "guest", 2,
+            json.dumps({"type": "lobby_update", "ready": True}).encode("utf-8")
+        )
+        host_sock.sent_data.clear()
+        guest_sock.sent_data.clear()
+
+        res = _process_ws_text_message(
+            host_sock, threading.Lock(), "ready_room", "host", 1,
+            json.dumps({"type": "game_start"}).encode("utf-8")
+        )
+        self.assertTrue(res)
+        self.assertEqual(bytes(host_sock.sent_data), b"")
+        self.assertIn(b"game_start", guest_sock.sent_data)
+        with rooms_lock:
+            self.assertIn("ready_room", locked_rooms)
+            self.assertNotIn("ready_room", room_ready_slots)
+
     def test_guest_game_over_rejected(self):
         host_sock = MockSocket()
         guest_sock = MockSocket()
@@ -843,12 +934,14 @@ class TestPerformanceOptimizations(unittest.TestCase):
             rooms.clear()
             ip_conns.clear()
             locked_rooms.clear()
+            serve.room_ready_slots.clear()
 
     def tearDown(self):
         with rooms_lock:
             rooms.clear()
             ip_conns.clear()
             locked_rooms.clear()
+            serve.room_ready_slots.clear()
 
     def test_read_exact_single_chunk_zero_copy_fast_path(self):
         sock = Mock()

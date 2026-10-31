@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { mpActorRendererMethods } from "./mp-actor-renderer.js";
 import { mpHudLeaderboardMethods } from "./mp-hud-leaderboard.js";
+import { mpLobbyUiMethods } from "./mp-lobby-ui.js";
 import { mpPickupsMethods } from "./mp-pickups.js";
 import { mpTransportMethods } from "./mp-transport.js";
 import {
@@ -1109,5 +1110,202 @@ describe("Mid-run lobby lock & non-participating peer disconnect isolation (mp-t
         expect(ctx.lobbyLockedReason).toBeNull();
     });
 });
+
+describe("Lobby explicit Ready Up system (mp-lobby-ui & mp-transport)", () => {
+    function createLobbyReadyCtx(role: "host" | "guest" = "host", localSlot = 1) {
+        const sentMessages: any[] = [];
+        const toasts: string[] = [];
+        let uiUpdateCount = 0;
+        let launchedConfig: any = null;
+        const ctx: any = {
+            ...mpTransportMethods,
+            ...mpLobbyUiMethods,
+            role,
+            localSlot,
+            hostSlot: 1,
+            localName: `Player ${localSlot}`,
+            localNameDraft: `Player ${localSlot}`,
+            localCharacter: "warrior",
+            localReady: false,
+            localAssetsReady: false,
+            selectedMapId: "lumbridge",
+            selectedEndless: false,
+            difficultyMult: 1.0,
+            gameStarted: false,
+            gameConfig: null,
+            roomId: "OSRS-RDY1",
+            ws: { readyState: 1, send() {} },
+            lobbyPlayers: new Map<number, any>(),
+            remotePeers: new Map<number, any>(),
+            sentMessages,
+            toasts,
+            get uiUpdateCount() {
+                return uiUpdateCount;
+            },
+            get launchedConfig() {
+                return launchedConfig;
+            },
+            getUnlockedCharacters: () => ["warrior", "ranger", "wizard", "barbarian"],
+            send(msg: any) {
+                sentMessages.push(msg);
+            },
+            showToast(msg: string) {
+                toasts.push(msg);
+            },
+            updateLobbyUI() {
+                uiUpdateCount++;
+            },
+            renderLobbyModal() {},
+            removePauseOverlay() {},
+            invalidateSortedRemotePeers() {},
+            waitForGameClient: async () => ({
+                save: { unlockedItems: ["bronze_scimitar"], upgrades: { might: 1 }, armoury: {} },
+            }),
+            launchCoopRun: async (cfg: any) => {
+                launchedConfig = cfg;
+            },
+        };
+        ctx.syncLocalToLobbyPlayers();
+        return ctx;
+    }
+
+    test("toggleReady() toggles localReady, syncs lobbyPlayers, and broadcasts lobby_update", () => {
+        const hostCtx = createLobbyReadyCtx("host", 1);
+        expect(hostCtx.localReady).toBe(false);
+        expect(hostCtx.lobbyPlayers.get(1)?.ready).toBe(false);
+
+        hostCtx.toggleReady();
+        expect(hostCtx.localReady).toBe(true);
+        expect(hostCtx.lobbyPlayers.get(1)?.ready).toBe(true);
+        expect(hostCtx.sentMessages.length).toBe(1);
+        expect(hostCtx.sentMessages[0]).toMatchObject({
+            type: "lobby_update",
+            slot: 1,
+            ready: true,
+        });
+        expect(hostCtx.uiUpdateCount).toBe(1);
+
+        hostCtx.toggleReady();
+        expect(hostCtx.localReady).toBe(false);
+        expect(hostCtx.lobbyPlayers.get(1)?.ready).toBe(false);
+        expect(hostCtx.sentMessages.length).toBe(2);
+        expect(hostCtx.sentMessages[1]).toMatchObject({
+            type: "lobby_update",
+            slot: 1,
+            ready: false,
+        });
+
+        // Explicit forceState argument works on Guest as well
+        const guestCtx = createLobbyReadyCtx("guest", 2);
+        guestCtx.toggleReady(true);
+        expect(guestCtx.localReady).toBe(true);
+        expect(guestCtx.lobbyPlayers.get(2)?.ready).toBe(true);
+        expect(guestCtx.sentMessages[0]).toMatchObject({
+            type: "lobby_update",
+            slot: 2,
+            ready: true,
+        });
+    });
+
+    test("areAllPlayersReady() requires >= 2 players and every player in lobbyPlayers (2-4P) to have ready: true", () => {
+        const ctx = createLobbyReadyCtx("host", 1);
+
+        // Solo in lobby (<2 players) -> false even if Host is ready
+        ctx.localReady = true;
+        expect(ctx.areAllPlayersReady()).toBe(false);
+
+        // Add Guest (slot 2) unready -> Host ready, Guest not ready -> false
+        ctx.lobbyPlayers.set(2, { slot: 2, name: "Player 2", character: "ranger", ready: false, isHost: false });
+        expect(ctx.areAllPlayersReady()).toBe(false);
+
+        // Guest ready, Host not ready -> false
+        ctx.localReady = false;
+        ctx.lobbyPlayers.set(2, { slot: 2, name: "Player 2", character: "ranger", ready: true, isHost: false });
+        expect(ctx.areAllPlayersReady()).toBe(false);
+
+        // Both Host and Guest ready (2P) -> true
+        ctx.localReady = true;
+        expect(ctx.areAllPlayersReady()).toBe(true);
+
+        // Add 3rd and 4th players: if any is unready -> false; when all 4 are ready -> true
+        ctx.lobbyPlayers.set(3, { slot: 3, name: "Player 3", character: "wizard", ready: true, isHost: false });
+        ctx.lobbyPlayers.set(4, { slot: 4, name: "Player 4", character: "barbarian", ready: false, isHost: false });
+        expect(ctx.areAllPlayersReady()).toBe(false);
+
+        ctx.lobbyPlayers.get(4).ready = true;
+        expect(ctx.areAllPlayersReady()).toBe(true);
+    });
+
+    test("startRun() blocks starting and shows toast without sending game_start unless all players are ready", async () => {
+        const prevDoc = (globalThis as any).document;
+        try {
+            (globalThis as any).document = { getElementById: () => null };
+            const ctx = createLobbyReadyCtx("host", 1);
+            ctx.lobbyPlayers.set(2, { slot: 2, name: "Player 2", character: "ranger", ready: false, isHost: false });
+
+            // 1. Host ready, Guest unready -> blocked
+            ctx.localReady = true;
+            await ctx.startRun();
+            expect(ctx.gameStarted).toBe(false);
+            expect(ctx.sentMessages.filter((m: any) => m.type === "game_start")).toHaveLength(0);
+            expect(ctx.toasts).toContain("All players must be Ready before starting Co-Op!");
+
+            // 2. Guest ready, Host unready -> blocked
+            ctx.toasts.length = 0;
+            ctx.localReady = false;
+            ctx.lobbyPlayers.get(2).ready = true;
+            await ctx.startRun();
+            expect(ctx.gameStarted).toBe(false);
+            expect(ctx.sentMessages.filter((m: any) => m.type === "game_start")).toHaveLength(0);
+            expect(ctx.toasts).toContain("All players must be Ready before starting Co-Op!");
+
+            // 3. Both Host and Guest ready -> sends game_start and launches run
+            ctx.toasts.length = 0;
+            ctx.localReady = true;
+            await ctx.startRun();
+            expect(ctx.gameStarted).toBe(true);
+            const startMsgs = ctx.sentMessages.filter((m: any) => m.type === "game_start");
+            expect(startMsgs).toHaveLength(1);
+            expect(startMsgs[0].config.partySize).toBe(2);
+            expect(ctx.launchedConfig).not.toBeNull();
+        } finally {
+            (globalThis as any).document = prevDoc;
+        }
+    });
+
+    test("returnToLobby() resets localReady and all lobbyPlayers ready flags to false", () => {
+        const prevDoc = (globalThis as any).document;
+        const prevWin = (globalThis as any).window;
+        try {
+            (globalThis as any).document = { getElementById: () => null };
+            (globalThis as any).window = { gameClient: { leaveRun() {} } };
+
+            const ctx = createLobbyReadyCtx("host", 1);
+            ctx.localReady = true;
+            ctx.gameStarted = true;
+            ctx.gameConfig = {
+                players: [
+                    { slot: 1, name: "HostPlayer", character: "warrior", isHost: true },
+                    { slot: 2, name: "GuestPlayer", character: "ranger", isHost: false },
+                ],
+            };
+            ctx.lobbyPlayers.set(1, { slot: 1, name: "HostPlayer", character: "warrior", ready: true, isHost: true });
+            ctx.lobbyPlayers.set(2, { slot: 2, name: "GuestPlayer", character: "ranger", ready: true, isHost: false });
+            ctx.remotePeers.set(2, { slot: 2, name: "GuestPlayer", characterId: "ranger" });
+
+            ctx.returnToLobby();
+
+            expect(ctx.gameStarted).toBe(false);
+            expect(ctx.localReady).toBe(false);
+            expect(ctx.lobbyPlayers.get(1)?.ready).toBe(false);
+            expect(ctx.lobbyPlayers.get(2)?.ready).toBe(false);
+            expect(ctx.areAllPlayersReady()).toBe(false);
+        } finally {
+            (globalThis as any).document = prevDoc;
+            (globalThis as any).window = prevWin;
+        }
+    });
+});
+
 
 

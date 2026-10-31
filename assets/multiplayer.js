@@ -49,6 +49,7 @@ export class MultiplayerManager {
         this.localNameDraft = this.localName;
         this.localNameCustomized = Boolean(savedSlotName);
         this.localReady = false;
+        this.localAssetsReady = false;
         this.selectedMapId = 'lumbridge';
         this.selectedEndless = false;
         this.difficultyMult = 1.0;

@@ -54,6 +54,7 @@ _SLOT_SUFFIXES = {
 rooms = {}
 ip_conns = {}
 locked_rooms = set()
+room_ready_slots = {}
 rooms_lock = threading.Lock()
 
 HOST_ALLOWED_MSG_TYPES = {
@@ -158,6 +159,7 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
                 safe_close(sock)
                 return False, None, None, None, None, None
             locked_rooms.discard(room_id)
+            room_ready_slots.pop(room_id, None)
             rooms[room_id] = []
 
         if room_id in locked_rooms and len(rooms[room_id]) > 0:
@@ -174,6 +176,8 @@ def _register_ws_client(sock, sock_lock, room_id, client_ip):
                     break
             has_host = any(p[2] == "host" for p in rooms[room_id])
             role = "host" if not has_host else "guest"
+            if room_id in room_ready_slots:
+                room_ready_slots[room_id].discard(slot)
             rooms[room_id].append((sock, sock_lock, role, slot))
             active_slots = [p[3] for p in rooms[room_id]]
             host_slot = next((p[3] for p in rooms[room_id] if p[2] == "host"), 1)
@@ -329,11 +333,32 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
     msg_modified = False
     if current_role == "host":
         if msg_type == "game_start":
+            not_ready = False
             with rooms_lock:
-                locked_rooms.add(room_id)
+                if room_id in room_ready_slots:
+                    active_room_slots = {p_slot for _, _, _, p_slot in room_entries}
+                    if len(active_room_slots) < 2 or not active_room_slots.issubset(room_ready_slots[room_id]):
+                        not_ready = True
+                if not not_ready:
+                    locked_rooms.add(room_id)
+                    room_ready_slots.pop(room_id, None)
+            if not_ready:
+                err_frame = encode_ws_frame(json.dumps({
+                    "type": "error",
+                    "code": "not_ready",
+                    "message": "All players must be Ready before starting Co-Op!"
+                }))
+                try:
+                    with sock_lock:
+                        sock.sendall(err_frame)
+                except Exception:
+                    return False
+                return True
         elif msg_type == "game_over" or (msg_type == "lobby_update" and parsed_msg.get("inGame") is False):
             with rooms_lock:
                 locked_rooms.discard(room_id)
+                if msg_type == "game_over":
+                    room_ready_slots.pop(room_id, None)
     else:
         if msg_type == "coop_pickup" and parsed_msg.get("kind") != "lamp_xp":
             return True
@@ -342,6 +367,27 @@ def _process_ws_text_message(sock, sock_lock, room_id, role, slot, payload):
                 if host_key in parsed_msg:
                     parsed_msg.pop(host_key, None)
                     msg_modified = True
+
+    if msg_type == "lobby_update":
+        with rooms_lock:
+            ready_set = room_ready_slots.setdefault(room_id, set())
+            if "ready" in parsed_msg:
+                if bool(parsed_msg.get("ready")):
+                    ready_set.add(current_slot)
+                else:
+                    ready_set.discard(current_slot)
+            if current_role == "host" and isinstance(parsed_msg.get("party"), list):
+                for p in parsed_msg["party"]:
+                    if (
+                        isinstance(p, dict)
+                        and isinstance(p.get("slot"), int)
+                        and not isinstance(p.get("slot"), bool)
+                        and 1 <= p["slot"] <= MAX_PEERS_PER_ROOM
+                    ):
+                        if bool(p.get("ready")):
+                            ready_set.add(p["slot"])
+                        else:
+                            ready_set.discard(p["slot"])
 
     if msg_type == "peer_leaving":
         return False
@@ -466,11 +512,14 @@ def _unregister_ws_client(sock, room_id, client_ip, registered, role, slot):
                 if remaining:
                     if departing_role == "host":
                         locked_rooms.discard(room_id)
+                    if room_id in room_ready_slots:
+                        room_ready_slots[room_id].discard(departing_slot)
                     rooms[room_id] = remaining
                     notify_peers = list(remaining)
                     active_slots_after = [p[3] for p in remaining]
                 else:
                     locked_rooms.discard(room_id)
+                    room_ready_slots.pop(room_id, None)
                     del rooms[room_id]
 
     if notify_peers:

@@ -72,6 +72,22 @@ export const mpLobbyUiMethods = {
             ready: this.localReady,
             isHost: this.role === 'host' || this.role === null
         });
+    },
+
+    toggleReady(forceState) {
+        this.localReady = typeof forceState === 'boolean' ? forceState : !this.localReady;
+        this.syncLocalToLobbyPlayers();
+        this.sendLobbyUpdate();
+        this.updateLobbyUI();
+    },
+
+    areAllPlayersReady() {
+        this.syncLocalToLobbyPlayers();
+        if (this.lobbyPlayers.size < 2) return false;
+        for (const p of this.lobbyPlayers.values()) {
+            if (!p || !p.ready) return false;
+        }
+        return true;
     }
 ,
 
@@ -346,6 +362,11 @@ export const mpLobbyUiMethods = {
             this.showToast('Need at least 2 players to start Co-Op!');
             return;
         }
+        if (!this.areAllPlayersReady()) {
+            this.showToast('All players must be Ready before starting Co-Op!');
+            this.updateLobbyUI();
+            return;
+        }
 
         const selectedRegion = ALL_REGIONS.find(r => r.id === this.selectedMapId) || ALL_REGIONS[0];
         const startBtn = document.getElementById('coop-start-btn');
@@ -361,6 +382,11 @@ export const mpLobbyUiMethods = {
                 startBtn.textContent = `Enter ${selectedRegion.name} (Start Co-Op)`;
                 startBtn.disabled = false;
             }
+            return;
+        }
+        if (this.lobbyPlayers.size < 2 || !this.areAllPlayersReady()) {
+            this.showToast('All players must be Ready before starting Co-Op!');
+            this.updateLobbyUI();
             return;
         }
 
@@ -502,7 +528,6 @@ export const mpLobbyUiMethods = {
             this.roomId === targetRoom
         ) {
             if (this.ws.readyState === WebSocket.OPEN) {
-                this.localReady = true;
                 this.syncLocalToLobbyPlayers();
                 this.sendLobbyUpdate();
             }
@@ -619,9 +644,9 @@ export const mpLobbyUiMethods = {
         const spawnScaleLabel = `${diffWeights.spawnMult}x Spawns (+${Math.round(diffWeights.heavyWeightBias * 100)}% Heavy Weight)`;
         const dmgScaleLabel = `${(diffWeights.dmgMult * customDiff).toFixed(2)}x Dmg`;
         const weights = diffWeights;
-        const allGuestsReady = Array.from(this.lobbyPlayers.values())
-            .filter(p => p.slot !== this.localSlot)
-            .every(p => p.ready);
+        const readyCount = Array.from(this.lobbyPlayers.values()).filter(p => p && p.ready).length;
+        const allPlayersReady = this.areAllPlayersReady();
+        const canStartRun = partyCount >= 2 && allPlayersReady;
 
         // Render 4 player slots (2x2 grid)
         const slotsHtml = [1, 2, 3, 4].map(slotNum => {
@@ -629,7 +654,7 @@ export const mpLobbyUiMethods = {
             const isLocal = slotNum === this.localSlot;
             const isSlotHost = p ? Boolean(p.isHost || slotNum === this.hostSlot) : (slotNum === 1 && isHost);
             const roleBadge = isSlotHost ? 'HOST' : 'GUEST';
-            const borderColor = isLocal ? '#ff981f' : (p ? '#6b5842' : '#2d2319');
+            const borderColor = isLocal ? (this.localReady ? '#00cc44' : '#ff981f') : (p ? (p.ready ? '#00cc44' : '#6b5842') : '#2d2319');
 
             if (isLocal) {
                 return `
@@ -645,6 +670,14 @@ export const mpLobbyUiMethods = {
                         <select id="coop-local-char" style="width: 100%; background: #0c0906; border: 1px solid #5a4a35; color: #ff981f; padding: 5px; font-family: 'OSRS Small', monospace; font-size: 13px;">
                             ${charOptionsHtml}
                         </select>
+                        <button id="coop-slot-ready-btn" type="button" style="
+                            width: 100%; margin-top: 8px; padding: 5px 8px;
+                            background: ${this.localReady ? '#194d22' : '#4a3618'};
+                            border: 2px solid ${this.localReady ? '#00ff00' : '#ff981f'};
+                            color: ${this.localReady ? '#00ff00' : '#ffff00'};
+                            cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px;">
+                            ${this.localReady ? '● READY (Click to Unready)' : '○ NOT READY (Click to Ready Up)'}
+                        </button>
                     </div>
                 `;
             }
@@ -665,8 +698,8 @@ export const mpLobbyUiMethods = {
                                 Class: <strong>${safePChar}</strong>
                             </div>
                         </div>
-                        <div style="font-size: 11px; color: ${p.ready || isSlotHost ? '#00ff00' : '#ffff00'}; margin-top: 8px;">
-                            ${p.ready || isSlotHost ? '● Ready' : '⏳ Loading Assets...'}
+                        <div style="font-size: 11px; color: ${p.ready ? '#00ff00' : '#ff981f'}; margin-top: 8px;">
+                            ${p.ready ? '● READY' : '○ Not Ready'}
                         </div>
                     </div>
                 `;
@@ -699,6 +732,9 @@ export const mpLobbyUiMethods = {
                 </span>
                 <span style="background: #231a12; border: 1px solid #6b5842; color: #ffff00; padding: 3px 8px; border-radius: 3px;">
                     ★ Classes: ${unlockedChars.length}/${visibleTotal}
+                </span>
+                <span id="coop-ready-count" style="background: #231a12; border: 1px solid ${allPlayersReady ? '#00cc44' : '#6b5842'}; color: ${allPlayersReady ? '#00ff00' : '#ffff00'}; padding: 3px 8px; border-radius: 3px;">
+                    ✓ Ready: ${readyCount}/${partyCount}
                 </span>
             </div>
 
@@ -780,18 +816,26 @@ export const mpLobbyUiMethods = {
                     cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 15px;">
                     Leave Lobby
                 </button>
+                <button id="coop-ready-btn" type="button" style="
+                    flex: 1;
+                    background: ${this.localReady ? '#194d22' : '#5c3c10'};
+                    border: 2px solid ${this.localReady ? '#00ff00' : '#ff981f'};
+                    color: ${this.localReady ? '#00ff00' : '#ffff00'};
+                    padding: 9px; cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 15px; text-shadow: 1px 1px #000;">
+                    ${this.localReady ? '✓ Ready! (Unready)' : 'Ready Up'}
+                </button>
                 ${isHost ? `
-                    <button id="coop-start-btn" ${partyCount < 2 ? 'disabled' : ''} style="
-                        flex: 2; background: ${partyCount >= 2 ? '#8a6414' : '#332719'}; 
-                        border: 2px solid ${partyCount >= 2 ? '#d4af37' : '#443522'}; 
-                        color: ${partyCount >= 2 ? '#fff' : '#665'}; padding: 9px;
-                        cursor: ${partyCount >= 2 ? 'pointer' : 'not-allowed'}; 
+                    <button id="coop-start-btn" ${!canStartRun ? 'disabled' : ''} style="
+                        flex: 2; background: ${canStartRun ? '#8a6414' : '#332719'}; 
+                        border: 2px solid ${canStartRun ? '#d4af37' : '#443522'}; 
+                        color: ${canStartRun ? '#fff' : '#665'}; padding: 9px;
+                        cursor: ${canStartRun ? 'pointer' : 'not-allowed'}; 
                         font-family: 'OSRS Bold', monospace; font-size: 16px; text-shadow: 1px 1px #000;">
-                        ${partyCount >= 2 ? (allGuestsReady ? `Enter ${escapeHtml(currentRegion.name)} (${partyCount}P Co-Op)` : `Start ${partyCount}P Co-Op (Guests Loading...)`) : 'Waiting for at least 1 more player...'}
+                        ${partyCount < 2 ? 'Waiting for at least 1 more player...' : (allPlayersReady ? `Enter ${escapeHtml(currentRegion.name)} (${partyCount}P Co-Op)` : `Waiting for Ready (${readyCount}/${partyCount})...`)}
                     </button>
                 ` : `
                     <div id="coop-guest-status" style="flex: 2; padding: 9px; color: #ffff00; font-size: 14px; align-self: center;">
-                        ${this.localReady ? `Ready (${partyCount}/4)! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : 'Loading assets...'}
+                        ${!this.localReady ? 'Click Ready Up to prepare for Co-Op!' : (allPlayersReady ? `All Ready (${partyCount}/${partyCount})! Waiting for Host to enter ${escapeHtml(currentRegion.name)}...` : `Ready (${readyCount}/${partyCount})! Waiting for all players...`)}
                     </div>
                 `}
             </div>
@@ -868,8 +912,18 @@ export const mpLobbyUiMethods = {
             localCharSelect.onchange = (e) => this.selectCharacter(e.target.value);
         }
 
+        const slotReadyBtn = box.querySelector('#coop-slot-ready-btn');
+        if (slotReadyBtn) {
+            slotReadyBtn.onclick = () => this.toggleReady();
+        }
+
+        const readyBtn = box.querySelector('#coop-ready-btn');
+        if (readyBtn) {
+            readyBtn.onclick = () => this.toggleReady();
+        }
+
         const startBtn = box.querySelector('#coop-start-btn');
-        if (startBtn && partyCount >= 2) {
+        if (startBtn && canStartRun) {
             startBtn.onclick = () => this.startRun();
         }
 

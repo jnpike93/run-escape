@@ -50,6 +50,7 @@ export const mpTransportMethods = {
         this.roomId = safeRoom;
         this.role = null;
         this.lobbyLockedReason = null;
+        this.localReady = false;
         this.lobbyPlayers.clear();
         this.syncLocalToLobbyPlayers();
 
@@ -111,9 +112,7 @@ export const mpTransportMethods = {
     async checkLocalReady() {
         const client = window.gameClient;
         if (client && client.assets && client.assets.models && client.assets.models.size >= 250) {
-            this.localReady = true;
-            this.syncLocalToLobbyPlayers();
-            this.sendLobbyUpdate();
+            this.localAssetsReady = true;
             this.updateLobbyUI();
         } else {
             setTimeout(() => this.checkLocalReady(), 500);
@@ -196,6 +195,7 @@ export const mpTransportMethods = {
                     this.localName = 'Player ' + this.localSlot;
                     this.localNameDraft = this.localName;
                 }
+                this.localReady = false;
                 this.lobbyPlayers.clear();
                 this.syncLocalToLobbyPlayers();
                 if (Array.isArray(msg.activeSlots)) {
@@ -631,7 +631,7 @@ export const mpTransportMethods = {
                     slot: s,
                     name: pName,
                     character: sanitizeCharacter(p.character, SLOT_DEFAULT_CHARS[s] || 'warrior'),
-                    ready: true,
+                    ready: false,
                     isHost: Boolean(p.isHost || s === this.hostSlot)
                 });
             }
@@ -645,20 +645,25 @@ export const mpTransportMethods = {
                 slot: s,
                 name: pName,
                 character: sanitizeCharacter(peer.characterId, SLOT_DEFAULT_CHARS[s] || 'warrior'),
-                ready: true,
+                ready: false,
                 isHost: s === this.hostSlot
             });
+        }
+        for (const existing of this.lobbyPlayers.values()) {
+            if (existing) existing.ready = false;
         }
         for (const [s, lp] of prevPlayers.entries()) {
             if (!this.lobbyPlayers.has(s)) {
                 this.lobbyPlayers.set(s, lp);
             } else {
                 const existing = this.lobbyPlayers.get(s);
+                existing.ready = false;
                 if (!existing.name || /^Player\s+[1-4]$/i.test(existing.name)) {
                     existing.name = lp.name;
                 }
             }
         }
+        this.localReady = false;
         this.localName = (this.getRememberedPlayerName && this.getRememberedPlayerName(this.localSlot)) || this.localName;
         this.localNameDraft = this.localName;
 
@@ -685,11 +690,12 @@ export const mpTransportMethods = {
         }
 
         if (this.ws && this.ws.readyState === WebSocket.OPEN && this.roomId) {
-            this.localReady = true;
+            this.localReady = false;
             this.syncLocalToLobbyPlayers();
             this.sendLobbyUpdate();
             this.renderLobbyModal();
         } else {
+            this.syncLocalToLobbyPlayers();
             this.openLobbyModal(this.roomId || null);
         }
     }

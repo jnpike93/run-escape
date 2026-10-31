@@ -8,10 +8,33 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add Secret Adventurer "Nova the Cat" (NPC `2638` Neite, Code `novathecat`), Bronze-Rune Claws (`claws`) & Rebuild Slim Cache
+### [2026-10-30] Add Co-Op Multiplayer Lobby Ready Check & Require All Players Ready Before Starting
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
+**Bundle**: `index-CzfrEO3D.js` (`?v=8.6`, MapViewer `MapViewerApp-B4ZvNkxl.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-9rXEPkLn.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
+
+**Scope**: Added an explicit Ready Up toggle and all-players-ready gate in the Co-Op Multiplayer lobby on both the client (`src/custom/multiplayer.js`, `src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`) and the WebSocket server (`server/serve.py`).
+
+**Changes implemented**:
+- **Client Ready State & Lifecycle (`src/custom/multiplayer.js`, `src/custom/multiplayer/mp-transport.js`)**:
+  - Separated asset model readiness (`this.localAssetsReady = true` in `checkLocalReady()`) from explicit lobby readiness (`this.localReady = false`), so players start unready when joining or creating a room instead of auto-readying once models load.
+  - Reset `this.localReady = false` in `connect()`, `welcome` handling, and `returnToLobby()`, and reset `ready: false` for all players in `lobbyPlayers` when returning to the lobby after a run.
+- **Lobby Ready Toggle, UI & Start Gate (`src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/multiplayer.test.ts`)**:
+  - Added `toggleReady(forceState)` and `areAllPlayersReady()` on `mpLobbyUiMethods`.
+  - Added `#coop-ready-count` (`✓ Ready: X/Y` badge), `#coop-slot-ready-btn` on the local player's slot card, accurate `p.ready` indicators (`● READY` / `○ Not Ready`) for all remote players (Host and Guests), and `#coop-ready-btn` in the bottom action bar.
+  - Updated `#coop-start-btn` and `startRun()` (both before and after `waitForGameClient`) so the Host cannot start the Co-Op run until `this.lobbyPlayers.size >= 2` and `this.areAllPlayersReady()` is `true`.
+- **Server-Side Ready Enforcement (`server/serve.py`, `server/test_serve.py`)**:
+  - Added `room_ready_slots` tracking per room on `lobby_update` (and cleaned up on `game_start`, `game_over`, and `_unregister_ws_client`), blocking `game_start` with `{"type": "error", "code": "not_ready", "message": "All players must be Ready before starting Co-Op!"}` if any connected player in the room is not ready.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified), `python -m unittest server/test_serve.py` (61 tests OK).
+
+---
+
+### [2026-10-30] Add Secret Adventurer "Nova the Cat" (NPC `2638` Neite, Code `novathecat`), Bronze-Rune Claws (`claws`) & Rebuild Slim Cache
+
+**Model**: Gemini (Antigravity)
+**Commit**: `d55c888`
 **Bundle**: `index-B1spSU4f.js` (`?v=8.6`, MapViewer `MapViewerApp-DoQ_Kdpu.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-MGZMH5Cd.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
 
 **Scope**: Added secret adventurer **Nova** (`id: "nova"`, NPC ID `2638` "Neite", unlocked by secret code `"novathecat"`, starting with `dragon_claws`) in the **Special** section alongside Dipper and Elias across Singleplayer and Co-Op Multiplayer, added the **Bronze through Rune Claws** (`id: "claws"`, OSRS item IDs `3095-3101`) weapon line with double-slash attacks (`hits: [0.6, 1]`), and rebuilt the slim cache.
