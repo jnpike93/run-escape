@@ -1834,10 +1834,31 @@ export const mpSyncEngineMethods = {
                             anim = model.getAnim(836) || model.anims[0];
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - (p2.deathTick >= 0 ? p2.deathTick : s.tick)), false) : 0;
                         } else if (isDog) {
-                            anim = p2.moving ?
-                                (model.getAnim(6560) || model.getAnim(314) || model.anims[0]) :
-                                (model.getAnim(6561) || model.getAnim(317) || model.anims[0]);
-                            frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                            if (isDeadPeer && isCat) {
+                                anim = model.getAnim(320) || model.anims[0];
+                                frame = anim ? anim.getFrame(Math.max(0, s.tick - (p2.deathTick >= 0 ? p2.deathTick : s.tick)), false) : 0;
+                            } else if (isCat && p2.attackSeq !== -1) {
+                                const catAtk = model.getAnim(315) || model.getAnim(316);
+                                const isCatAttacking = Boolean(
+                                    catAtk &&
+                                    (s.tick - p2.attackStart) >= 0 &&
+                                    (s.tick - p2.attackStart) < (catAtk.totalTicks || 32)
+                                );
+                                if (isCatAttacking) {
+                                    anim = catAtk;
+                                    frame = anim.getFrame(Math.max(0, s.tick - p2.attackStart), false);
+                                } else {
+                                    anim = p2.moving ?
+                                        (model.getAnim(2662) || model.getAnim(314) || model.anims[0]) :
+                                        (model.getAnim(317) || model.anims[0]);
+                                    frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                                }
+                            } else {
+                                anim = p2.moving ?
+                                    (isCat ? (model.getAnim(2662) || model.getAnim(314) || model.anims[0]) : (model.getAnim(6560) || model.anims[0])) :
+                                    (isCat ? (model.getAnim(317) || model.anims[0]) : (model.getAnim(6561) || model.anims[0]));
+                                frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                            }
                         } else if (isSledding) {
                             anim = p2.moving ?
                                 (model.getAnim(1462) || model.anims[0]) :
@@ -2910,7 +2931,7 @@ export const mpSyncEngineMethods = {
         }
         p2.moving = moving;
 
-        if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1 && !p2.moving) {
+        if (Number.isFinite(msg.attackSeq) && msg.attackSeq !== -1 && (!p2.moving || p2.characterId === 'nova')) {
             p2.attackSeq = msg.attackSeq;
             if (Number.isFinite(msg.attackStart)) {
                 p2.attackStart = msg.attackStart;

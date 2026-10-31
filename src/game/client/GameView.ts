@@ -39,6 +39,7 @@ import { Overlay, ScreenPoint } from "./Overlay";
 import {
     DOG_ACTOR_SCALE,
     DOG_HEIGHT_OFFSET,
+    getPetCharacterAnim,
     getPlayerOrDogModel,
     isDogCharacter,
     resolveCoopEventPlayer,
@@ -590,10 +591,9 @@ export class GameView {
         let anim: ActorAnim | undefined;
         let frame: number;
         if (isDog) {
-            anim = player.moving
-                ? model.getAnim(6560) || model.getAnim(314) || model.anims[0]
-                : model.getAnim(6561) || model.getAnim(317) || model.anims[0];
-            frame = anim ? anim.getFrame(tick - player.moveStart) : 0;
+            const petPose = getPetCharacterAnim(model, cId, player, tick, MAX_DEATH_ANIM_TICKS);
+            anim = petPose.anim;
+            frame = petPose.frame;
         } else {
             const attack = player.attackSeq !== -1 ? model.getAnim(player.attackSeq) : undefined;
             if (look && lookModel) {

@@ -12,7 +12,7 @@
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
-**Bundle**: `index-k40f1cu9.js` (`?v=8.6`, MapViewer `MapViewerApp-DJYeqslD.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-CzY2WkH1.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-47e97bee`)
+**Bundle**: `index-B1spSU4f.js` (`?v=8.6`, MapViewer `MapViewerApp-DoQ_Kdpu.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-MGZMH5Cd.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
 
 **Scope**: Added secret adventurer **Nova** (`id: "nova"`, NPC ID `2638` "Neite", unlocked by secret code `"novathecat"`, starting with `dragon_claws`) in the **Special** section alongside Dipper and Elias across Singleplayer and Co-Op Multiplayer, added the **Bronze through Rune Claws** (`id: "claws"`, OSRS item IDs `3095-3101`) weapon line with double-slash attacks (`hits: [0.6, 1]`), and rebuilt the slim cache.
 
@@ -26,15 +26,15 @@
     - `unlock: { kind: "code", code: "novathecat" }`.
   - Added `"novathecat"` handling in `redeemSecretCode` (and included `"novathecat"` in `l33th4x0r`) and `VALID_SECRET_CODES` / `migrateCustomSaveFields` in `customSave.ts`.
 - **3D Model, Animations & Icon Rendering (`src/game/client/GameAssets.ts`, `src/game/client/custom/dogActors.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/rs/config/npctype/NpcModelLoader.ts`, `src/mapviewer/worker/customNpcIcon.ts`)**:
-  - Added `{ kind: "npc", key: "neite", npcId: 2638, seqIds: [317, 314] }` to `GameAssets.getBaseRequests()`.
-  - Updated `isDogCharacter` to include `"nova"` and `getPlayerOrDogModel` to return `assets.get("neite") || assets.getPlayer()`.
-  - Updated `GameClient.submitActors` and `GameView.drawPlayer` to support both dog (`6561` idle / `6560` walk) and cat (`317` idle / `314` walk) sequences.
+  - Added `{ kind: "npc", key: "neite", npcId: 2638, seqIds: [317, 314, 2662, 315, 316, 320] }` to `GameAssets.getBaseRequests()`.
+  - Added `CAT_SEQS` (`317` idle, `314` walk, `2662` fast rat-chase run, `315` rat-pounce claw attack, `316` hiss/swipe, `320` death) and `getPetCharacterAnim` in `dogActors.ts`.
+  - Updated `GameView.drawPlayer` and `mp-sync-engine.js` so Nova plays `315` (cat pounce/claw swipe, 32 ticks) whenever attacking, `2662` (fast rat-chase run, 18 ticks) when moving, `317` when idle, and `320` when dying.
   - Added `npcType.id === 2638` to the `+135` ambient boost in `NpcModelLoader.ts` so Neite's black-and-white fur has crisp contrast, and updated `renderNpcItemIcon` in `customNpcIcon.ts` to use `npcType.idleSeqId !== -1 ? npcType.idleSeqId : 6561`.
 - **Co-Op Multiplayer Support (`src/custom/multiplayer/mp-constants.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/mp-actor-renderer.js`, `src/custom/multiplayer/mp-hud-leaderboard.js`, `src/custom/multiplayer/mp-sync-engine.js`)**:
   - Added `{ id: 'nova', name: 'Nova (Cat)', weapon: 'dragon_claws', defaultUnlocked: false, secretCode: true }` to `ALL_CHARACTERS`.
   - Updated lobby unlock checks (`novathecat`), `ensureAllCharacterModels` (`neite` NPC `2638`), remote peer rendering (`isCat`, sequences `314`/`317`), nametag height, and Party HUD label (`CAT`).
 
-**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-47e97bee` verified), `python -m unittest server/test_serve.py` (59 tests OK).
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified), `python -m unittest server/test_serve.py` (59 tests OK).
 
 ---
 

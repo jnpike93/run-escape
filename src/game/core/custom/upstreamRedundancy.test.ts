@@ -9,6 +9,7 @@ import { Camera } from "../../../mapviewer/Camera";
 import { MapManager, MapSquare } from "../../../mapviewer/MapManager";
 import { Dat2SeqFrameLoader } from "../../../rs/model/seq/SeqFrameLoader";
 import { CUSTOM_MUSIC, TITLE_MUSIC } from "../../client/custom/customMusic";
+import { CAT_SEQS, getPetCharacterAnim } from "../../client/custom/dogActors";
 import { MobileTouchInput } from "../../client/custom/mobileInput";
 import { CHARACTERS, getCharacter } from "../../content/characters";
 import { CUSTOM_ENEMIES } from "../../content/custom/customEnemies";
@@ -141,6 +142,48 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
             "Rune claws",
         ]);
         expect(getCharacter("nova").startingWeapon).toBe("dragon_claws");
+        const fakeAnims = new Map<number, any>(
+            Object.values(CAT_SEQS).map((seqId) => [
+                seqId,
+                { seqId, totalTicks: 32, getFrame: (t: number) => t },
+            ]),
+        );
+        const fakeCatModel: any = {
+            anims: [...fakeAnims.values()],
+            getAnim: (seqId: number) => fakeAnims.get(seqId),
+        };
+        expect(
+            getPetCharacterAnim(
+                fakeCatModel,
+                "nova",
+                { moving: false, moveStart: 0, attackSeq: -1, attackStart: 0, deathTick: -1 },
+                10,
+            ).anim?.seqId,
+        ).toBe(CAT_SEQS.idle);
+        expect(
+            getPetCharacterAnim(
+                fakeCatModel,
+                "nova",
+                { moving: true, moveStart: 0, attackSeq: -1, attackStart: 0, deathTick: -1 },
+                10,
+            ).anim?.seqId,
+        ).toBe(CAT_SEQS.run);
+        expect(
+            getPetCharacterAnim(
+                fakeCatModel,
+                "nova",
+                { moving: true, moveStart: 0, attackSeq: 393, attackStart: 10, deathTick: -1 },
+                20,
+            ).anim?.seqId,
+        ).toBe(CAT_SEQS.attack);
+        expect(
+            getPetCharacterAnim(
+                fakeCatModel,
+                "nova",
+                { moving: false, moveStart: 0, attackSeq: 393, attackStart: 10, deathTick: 15 },
+                25,
+            ).anim?.seqId,
+        ).toBe(CAT_SEQS.death);
         const bloodBurst = getWeapon("blood_burst");
         expect(bloodBurst.evolution?.into).toBe("blood_barrage");
         expect(getWeapon("blood_barrage").name).toBe("Blood Barrage");

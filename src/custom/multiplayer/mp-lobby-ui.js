@@ -275,7 +275,7 @@ export const mpLobbyUiMethods = {
                 kind: 'npc',
                 key: 'neite',
                 npcId: 2638,
-                seqIds: [317, 314]
+                seqIds: [317, 314, 2662, 315, 316, 320]
             });
         }
 
