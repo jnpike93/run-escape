@@ -160,7 +160,7 @@ export const mpActorRendererMethods = {
                     seqIds: [819, 1461, 1462]
                 }
             ]);
-            if (bakeRes.loadedTextures?.length > 0) {
+            if (bakeRes.loadedTextures && (bakeRes.loadedTextures.size > 0 || bakeRes.loadedTextures.length > 0)) {
                 client.assets.renderer.updateTextureArray(bakeRes.loadedTextures);
             }
             const added = client.assets.actors.addBake(bakeRes);

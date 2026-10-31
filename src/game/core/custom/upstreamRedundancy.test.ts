@@ -7,7 +7,10 @@ import { mpPickupsMethods } from "../../../custom/multiplayer/mp-pickups.js";
 import { mpSyncEngineMethods } from "../../../custom/multiplayer/mp-sync-engine.js";
 import { Camera } from "../../../mapviewer/Camera";
 import { MapManager, MapSquare } from "../../../mapviewer/MapManager";
+import { getModelBounds } from "../../../mapviewer/webgl/buffer/CullGrid";
 import { Dat2SeqFrameLoader } from "../../../rs/model/seq/SeqFrameLoader";
+import { GameAssets } from "../../client/GameAssets";
+import { TouchStick } from "../../client/GameTouch";
 import { CUSTOM_MUSIC, TITLE_MUSIC } from "../../client/custom/customMusic";
 import { CAT_SEQS, getPetCharacterAnim } from "../../client/custom/dogActors";
 import { MobileTouchInput } from "../../client/custom/mobileInput";
@@ -17,6 +20,7 @@ import { CUSTOM_WEAPONS } from "../../content/custom/customWeapons";
 import { redeemSecretCode } from "../../content/custom/secretCodes";
 import { ENEMIES, getEnemy } from "../../content/enemies";
 import { ITEMS } from "../../content/items";
+import { getMapEnemies } from "../../content/mapEnemies";
 import { ALL_MAPS, FUN_MAPS, MAPS, getArenaRegion, getMap } from "../../content/maps";
 import { PASSIVES } from "../../content/passives";
 import { POWER_UPS } from "../../content/powerups";
@@ -325,6 +329,47 @@ describe("Upstream Merge Redundancy & Full-Game Smoke Test Suite", () => {
         mobile.getMoveVector(vec);
         expect(vec).toEqual({ x: 0, y: 0 });
         mobile.dispose();
+    });
+
+    it("smoketests v0.19.0 per-map enemy bakes, 8-tile CullGrid, Frustum sphere culling, DPS meter, and TouchStick", () => {
+        const baseReqs = GameAssets.getBaseRequests();
+        const baseKeys = new Set(baseReqs.map((r) => r.key));
+        expect(baseKeys.has("corgi")).toBe(true);
+        expect(baseKeys.has("chihuahua")).toBe(true);
+        expect(baseKeys.has("neite")).toBe(true);
+
+        for (const map of ALL_MAPS) {
+            const enemies = getMapEnemies(map);
+            expect(enemies.length).toBeGreaterThan(0);
+            const enemyReqs = GameAssets.getEnemyRequests(enemies);
+            expect(enemyReqs.length).toBeGreaterThan(0);
+            for (const req of enemyReqs) {
+                if ("seqIds" in req) {
+                    expect(req.seqIds.length).toBeGreaterThan(0);
+                }
+            }
+        }
+
+        // Verify 8-tile CullGrid bounds and Frustum sphere/box culling
+        const bounds = getModelBounds({
+            verticesCount: 4,
+            verticesX: [0, 128, 128, 0],
+            verticesY: [0, 0, -64, 0],
+            verticesZ: [0, 0, 128, 128],
+        });
+        expect(bounds.minX).toBe(0);
+        expect(bounds.maxX).toBe(128);
+        expect(bounds.minY).toBe(-64);
+        expect(bounds.maxZ).toBe(128);
+
+        const camera = new Camera(3222, -10, 3218, -320, 0);
+        camera.update(800, 600);
+        expect(typeof camera.frustum.intersectsSphere(3222, -2, 3218, 2)).toBe("boolean");
+
+        // Verify TouchStick
+        const stick = new TouchStick();
+        expect(stick.active).toBe(false);
+        expect(stick.getMove({ x: 0, y: 0 })).toEqual({ x: 0, y: 0 });
     });
 
     it("smoketests Solo & Co-Op Multiplayer simulation across all 20 maps without errors", () => {

@@ -8,19 +8,41 @@
 
 ## Chronological Agent Handoff Log
 
-### [2026-10-30] Add About Field & GitHub Repository Link in Settings
+### [2026-10-31] Merge Upstream v0.19.0 (`f14e888`) & Run Full Rendering/Simulation Smoke Tests
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-B3XKGrj-.js` (`?v=8.6`, MapViewer `MapViewerApp-CtLFLcYd.js`, Worker `RenderDataWorker-BKY0RJEX.js`, WASM loader `module-COqn9Hxd.js`, styles `index-BYZRPd9v.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
+
+**Scope**: Merged `upstream/main` (`v0.19.0`, commit `f14e888`) into `main`, resolving conflicts across 12 files and updating Co-Op Multiplayer actor rendering / asset readiness checks for compatibility with per-map enemy model baking and 8-tile / sphere frustum culling.
+
+**Changes implemented**:
+- **Per-Map Enemy Baking, 8-Tile Map Culling & Actor Sphere Culling (`src/game/client/GameAssets.ts`, `src/game/client/GameClient.ts`, `src/game/content/mapEnemies.ts`, `src/mapviewer/webgl/WebGLMapViewerRenderer.ts`, `scripts/cache/slim-cache.ts`)**:
+  - Merged upstream's per-map enemy model baking (`getMapEnemies(map)`, `GameAssets.getEnemyRequests(enemies)`, `loadEnemies`) while retaining custom pet character base bakes (`corgi`, `chihuahua`, `neite` with `seqIds: [317, 314, 2662, 315, 316, 320]`) in `GameAssets.getBaseRequests()` and custom maps (`barbarian_village`, `fight_caves`) / `CUSTOM_ENEMIES` coverage in `mapEnemies.ts` and `slim-cache.ts`.
+  - Merged 8-tile `CullGrid` scene cell culling, `Frustum.intersectsSphere` actor culling (`model.reach`), and removal of the unused interact buffer / canvas multisampling in `WebGLMapViewerRenderer.ts` and `GameWebGLRenderer.ts`.
+- **DPS Meter, Auto-Alch Chests, Endless 25% Late Chests & Touch Controls (`src/game/ui/GameUi.tsx`, `src/game/ui/GameUi.css`, `src/game/ui/TouchControls.tsx`, `src/game/ui/Mobile.css`, `src/game/client/DisplaySettings.ts`, `src/game/client/GameInput.ts`, `src/game/client/GameAudio.ts`, `src/util/DeviceUtil.ts`)**:
+  - Integrated upstream's HUD DPS meter (`hud.dps`), `AutoAlchSetting` (`autoAlch` toggle for chests in `SettingsPanel` and `PauseModal`), `<TouchControls />` + `RotateNotice`, and `TouchStick` alongside our custom Settings controls (`<FullscreenSetting />`, `<UiScaleButtons />`, `Tile coordinates`, `<SecretCodeSection />`, `<AboutSection />`), Co-Op Lobby/GameOver UI, Leaderboard screen, Challenge Modes, and OSRS soundtrack playback.
+- **Co-Op Multiplayer Compatibility (`src/custom/multiplayer/mp-transport.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/mp-actor-renderer.js`)**:
+  - Updated `checkLocalReady()` in `mp-transport.js` and `launchCoopRun()` in `mp-lobby-ui.js` to check `client.assets.models.size >= 50` (matching v0.19.0's `loadBase` count now that enemy models are baked per-map in `loadEnemies`), and supported `Map` (`size`) or `Array` (`length`) on `bakeRes.loadedTextures`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 28 test suites passed, 511 tests including `GameAssets.test.ts`, `mapEnemies.test.ts`, `CullGrid.test.ts`, `GameTouch.test.ts`, `GameClient.test.ts`, and `upstreamRedundancy.test.ts`), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified, 14,550 groups), `python -m unittest server/test_serve.py` (61 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Add About Field & GitHub Repository Link in Settings & Update README Summary
 
 **Model**: Gemini (Antigravity)
 **Commit**: (see git log)
 **Bundle**: `index-Cvvc9cfz.js` (`?v=8.6`, MapViewer `MapViewerApp-DIOWMG9G.js`, Worker `RenderDataWorker-_bgrGOLa.js`, WASM loader `module-WE-eQwVm.js`, styles `index-DlwMxG_O.css`, slim cache `osrs-241_2026-09-30-slim-445fb976`)
 
-**Scope**: Added an **About** section at the bottom of `SettingsPanel` displaying the GitHub repository link (`https://github.com/jnpike93/run-escape`).
+**Scope**: Added an **About** section at the bottom of `SettingsPanel` displaying the GitHub repository link (`https://github.com/jnpike93/run-escape`) and updated `README.md` with the complete summary of all custom additions and differences from upstream.
 
 **Changes implemented**:
 - **Custom Settings Controls (`src/game/ui/CustomSettingsControls.tsx`)**:
   - Exported `GITHUB_REPO_URL` (`"https://github.com/jnpike93/run-escape"`), `AboutSetting`, and `AboutSection` rendering the **About** section with a direct link to `https://github.com/jnpike93/run-escape` (`target="_blank" rel="noopener noreferrer"`).
-- **Settings Panel (`src/game/ui/GameUi.tsx`, `src/game/core/custom/upstreamRedundancy.test.ts`, `docs/CHANGELOG.md`)**:
+- **Settings Panel (`src/game/ui/GameUi.tsx`, `src/game/core/custom/upstreamRedundancy.test.ts`, `docs/CHANGELOG.md`, `README.md`)**:
   - Rendered `<AboutSection />` at the bottom of `SettingsPanel` via a 1-line component tag.
+  - Updated `## Custom Edition Additions & Differences` in `README.md` to cover all differences from `upstream/main` and removed duplicate trailing sections.
   - Added verification assertions in `upstreamRedundancy.test.ts` and updated `docs/CHANGELOG.md`.
 
 **Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 24 test suites passed, 437 tests), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-445fb976` verified), `python -m unittest server/test_serve.py` (61 tests OK), `node --check src/custom/multiplayer.js` (OK).

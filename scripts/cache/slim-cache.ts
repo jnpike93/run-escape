@@ -337,14 +337,18 @@ async function loadWhatTheGameLoads(
         state.textureLoader.getPixelsArgb(id, 128, true, 1.0);
     }
 
-    const baseReqs = GameAssets.getBaseRequests();
+    const baseReqs = [...GameAssets.getBaseRequests(), ...GameAssets.getEnemyRequests(ENEMIES)];
     const playerSeqSet = new Set<number>([...Object.values(PLAYER_SEQS), ...getPlayerAttackSeqs()]);
     const npcSeqMap = new Map<number, Set<number>>();
     const otherReqs: BakeRequest[] = [];
+    const seenOtherKeys = new Set<string>();
     for (const req of baseReqs) {
         if (req.kind === "player") {
             for (const seqId of req.seqIds) playerSeqSet.add(seqId);
-            otherReqs.push({ ...req, seqIds: [] });
+            if (!seenOtherKeys.has(req.key)) {
+                seenOtherKeys.add(req.key);
+                otherReqs.push({ ...req, seqIds: [] });
+            }
         } else if (req.kind === "npc") {
             let set = npcSeqMap.get(req.npcId);
             if (!set) {
@@ -352,7 +356,8 @@ async function loadWhatTheGameLoads(
                 npcSeqMap.set(req.npcId, set);
             }
             for (const seqId of req.seqIds) set.add(seqId);
-        } else {
+        } else if (!seenOtherKeys.has(req.key)) {
+            seenOtherKeys.add(req.key);
             otherReqs.push(req);
         }
     }

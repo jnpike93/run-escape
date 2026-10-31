@@ -111,7 +111,7 @@ export const mpTransportMethods = {
 
     async checkLocalReady() {
         const client = window.gameClient;
-        if (client && client.assets && client.assets.models && client.assets.models.size >= 250) {
+        if (client && client.assets && client.assets.models && client.assets.models.size >= 50) {
             this.localAssetsReady = true;
             this.updateLobbyUI();
         } else {

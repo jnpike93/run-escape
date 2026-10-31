@@ -340,7 +340,7 @@ export const mpLobbyUiMethods = {
             console.log('[Multiplayer] Pre-baking player models:', bakes.map(b => b.key));
             try {
                 const bakeRes = await client.assets.bake(bakes);
-                if (bakeRes.loadedTextures?.length > 0) {
+                if (bakeRes.loadedTextures && (bakeRes.loadedTextures.size > 0 || bakeRes.loadedTextures.length > 0)) {
                     client.assets.renderer.updateTextureArray(bakeRes.loadedTextures);
                 }
                 const added = client.assets.actors.addBake(bakeRes);
@@ -448,7 +448,7 @@ export const mpLobbyUiMethods = {
         }
 
         const modelWaitStart = Date.now();
-        while (client.assets?.models?.size < 250 && (Date.now() - modelWaitStart) < 20000) {
+        while ((client.assets?.models?.size ?? 0) < 50 && (Date.now() - modelWaitStart) < 20000) {
             await new Promise(r => setTimeout(r, 250));
         }
 
