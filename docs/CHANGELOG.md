@@ -7,10 +7,11 @@ the version in the corner), so it's written for players.
 
 ### Co-Op Multiplayer & Leaderboards
 
-- **2-4 Player Co-Op Rooms**: Host or join Co-Op lobbies across all maps with synchronized waves, enemies, bosses, revives, overhead chat, and a Host-selectable **Difficulty Multiplier (1x - 3x)**.
+- **2-4 Player Co-Op Rooms**: Host or join Co-Op lobbies across all maps with synchronized waves, enemies, bosses, revives, overhead chat, per-weapon stances, power-ups (Sled, Giant rune essence, Evil Bob, Fairy ring, Drill Demon), and a Host-selectable **Difficulty Multiplier (1x - 3x)**.
 - **Shared Progression & Casket Rolls**: Co-Op runs share the Host's shop upgrades and pool party XP bonuses. Bones, coins, and Antique Lamps split across the party, while each casket opens once to grant every player their own unique item roll.
 - **Party HUD & Leaderboards**: Live party cards with player levels, health, and active prayers, a post-run **Co-Op Run Leaderboard** with individual damage and point scores, and a **Level Points & Best Times Leaderboard** on the Title screen and Map Select panel.
 - **Level Top Score System**: Earn a run score on every level based on monsters slain, kill pace (kills/min), bosses defeated, fast boss clear speed, character level, survival time, and endless rounds, scaled by each map's difficulty multiplier (`1.00x` Lumbridge to `3.33x` The Inferno).
+- **Challenge Modes (Extreme One Chunk Man & Nightmare Man)**: Choose **Extreme One Chunk Man** (**2x** map difficulty for **1.5x** points) or **Nightmare Man** (**3x** map difficulty for **2.5x** points) on the Map Selection screen or in Co-Op lobbies to test your build against 2x or 3x monster and boss HP and damage for massive leaderboard scores.
 
 ### Maps, Bosses, Quests & Adventurers
 
@@ -28,4 +29,5 @@ the version in the corner), so it's written for players.
 - **Rapid Heal**: Rebalanced to **+2.5 HP/min per level** (+12.5 HP/min at level 5); taking a hit pauses Rapid Heal regeneration for **5 seconds**.
 - **God Wars Dungeon Faction Warfare**: Rival God Wars armies spot each other from further away (`14` tiles), ranged and magic troops fire projectiles at rival factions, and monsters slain by rival factions drop XP bones.
 - **Unreachable Loot Recovery**: Pickups dropped over walls, water, lava, trees, rocks, or impassable terrain by flying or ghost monsters automatically slide onto the nearest walkable tile.
-- **Armoury Refund & Settings**: Added a **Refund all** button in the Armoury, **UI Scale** options up to **2x**, and a **Tile Coordinates** HUD toggle in Settings.
+- **Armoury Refund & Settings**: Added a **Refund all** button in the Armoury, **UI Scale** options up to **2x**, a **Music** volume slider in Settings, and a **Tile Coordinates** HUD toggle in Settings.
+- **Full OSRS Soundtrack**: Added OSRS music tracks across the Title screen (**Scape Main**) and all 20 campaign and fun maps (**Harmony**, **Barbarianism**, **Dangerous Way**, **Wilderness**, **Arabian**, **Rellekka**, **Jungle Troubles**, **March of the Shayzien**, **Mistrock**, **The Curtain Closes**, **Armageddon**, **Elven Seed**, **Inferno**, **Fire and Brimstone**, **The Trade Parade**, **Adventure**, **Massacre**, **Last Man Standing**, **Melodrama**, and **Null and Void**).

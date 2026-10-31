@@ -102,7 +102,7 @@ const GODSWORD_SOUND = 2500;
 function godswordLevels(objId?: number): WeaponLevel[] {
     return levels(
         {
-            damage: 20,
+            damage: 44,
             cooldown: 1.9,
             amount: 1,
             area: 2.8,
@@ -113,10 +113,10 @@ function godswordLevels(objId?: number): WeaponLevel[] {
             knockback: 1,
             objId,
         },
-        { damage: 24, description: "+4 damage." },
+        { damage: 53, description: "+9 damage." },
         { area: 3.1, description: "+11% reach." },
         { cooldown: 1.7, description: "Swings a little faster." },
-        { damage: 30, description: "+6 damage." },
+        { damage: 66, description: "+13 damage." },
     );
 }
 
@@ -140,6 +140,7 @@ function godsword(
         rarity: "rare",
         style: "melee",
         family: "godsword",
+        evolution: { into: "ancient_godsword", requiresPassive: "piety" },
         special,
         levels: godswordLevels(objId),
     };
@@ -147,6 +148,18 @@ function godsword(
 
 // The blade takes its hilt at this level
 const HILT_LEVEL = 2;
+
+// An evolved weapon's levels: what it evolves into, then two more steps of
+// damage
+function evolvedLevels(
+    first: Omit<WeaponLevel, "description"> & { description: string },
+): WeaponLevel[] {
+    return levels(
+        first,
+        { damage: Math.round(first.damage * 1.15), description: "+15% damage." },
+        { damage: Math.round(first.damage * 1.3), description: "+15% damage." },
+    );
+}
 
 export const WEAPONS: WeaponDef[] = [
     {
@@ -163,7 +176,7 @@ export const WEAPONS: WeaponDef[] = [
         levels: levels(
             {
                 name: "Bronze scimitar",
-                damage: 10,
+                damage: 16,
                 cooldown: 1.35,
                 amount: 1,
                 area: 2.2,
@@ -179,13 +192,13 @@ export const WEAPONS: WeaponDef[] = [
                 amount: 2,
                 description: "Also slashes behind you.",
             },
-            { name: "Steel scimitar", objId: SCIMITARS[2], damage: 13, description: "+3 damage." },
+            { name: "Steel scimitar", objId: SCIMITARS[2], damage: 21, description: "+5 damage." },
             { name: "Black scimitar", objId: SCIMITARS[3], area: 2.4, description: "+10% reach." },
             {
                 name: "Mithril scimitar",
                 objId: SCIMITARS[4],
-                damage: 15,
-                description: "+2 damage.",
+                damage: 24,
+                description: "+3 damage.",
             },
             {
                 name: "Adamant scimitar",
@@ -196,16 +209,16 @@ export const WEAPONS: WeaponDef[] = [
             {
                 name: "Rune scimitar",
                 objId: SCIMITARS[6],
-                damage: 17,
+                damage: 27,
                 area: 2.6,
-                description: "+2 damage, +8% reach.",
+                description: "+3 damage, +8% reach.",
             },
             {
                 name: "Dragon scimitar",
                 objId: SCIMITARS[7],
-                damage: 20,
+                damage: 32,
                 cooldown: 1.15,
-                description: "+3 damage, slashes a little faster.",
+                description: "+5 damage, slashes a little faster.",
             },
         ),
         evolution: { into: "abyssal_whip", requiresPassive: "piety" },
@@ -222,16 +235,16 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "veryRare",
         evolved: true,
-        levels: levels({
+        levels: evolvedLevels({
             name: "Abyssal whip",
-            damage: 28,
+            damage: 42,
             cooldown: 0.95,
             amount: 2,
             area: 3.1,
             pierce: 0,
             speed: 0,
             duration: 0,
-            knockback: 0.7,
+            knockback: 1.1,
             objId: 4151,
             description: "Evolved from the dragon scimitar with Piety.",
         }),
@@ -304,7 +317,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         // More pillars on big things, which a strike only hits once
         bigHits: [0.75, 0.75, 0.75],
-        levels: levels({
+        levels: evolvedLevels({
             damage: 30,
             cooldown: 2,
             amount: 6,
@@ -389,7 +402,7 @@ export const WEAPONS: WeaponDef[] = [
         rarity: "veryRare",
         evolved: true,
         unlock: { kind: "killBoss", mapId: "karamja", enemyId: "ket_zek" },
-        levels: levels({
+        levels: evolvedLevels({
             damage: 14,
             cooldown: 0.5,
             amount: 5,
@@ -454,7 +467,7 @@ export const WEAPONS: WeaponDef[] = [
         // Still the one Ancient spell at a time
         family: "ancient_burst",
         freezes: true,
-        levels: levels({
+        levels: evolvedLevels({
             name: "Ice Barrage",
             damage: 16,
             cooldown: 1.6,
@@ -599,7 +612,7 @@ export const WEAPONS: WeaponDef[] = [
         rarity: "veryRare",
         evolved: true,
         family: "ancient_burst",
-        levels: levels({
+        levels: evolvedLevels({
             name: "Smoke Barrage",
             damage: 13,
             cooldown: 1.6,
@@ -629,7 +642,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         family: "ancient_burst",
         drain: 0.3,
-        levels: levels({
+        levels: evolvedLevels({
             name: "Shadow Barrage",
             damage: 16,
             cooldown: 1.6,
@@ -658,7 +671,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         family: "ancient_burst",
         lifesteal: { chance: 0.08, fraction: 0.5, max: 4, spotAnim: 1542 },
-        levels: levels({
+        levels: evolvedLevels({
             name: "Blood Barrage",
             damage: 17,
             cooldown: 1.6,
@@ -721,7 +734,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         freezes: true,
         unlock: { kind: "killBoss", mapId: "kourend", enemyId: "skotizo" },
-        levels: levels({
+        levels: evolvedLevels({
             damage: 26,
             cooldown: 2.6,
             amount: 6,
@@ -747,7 +760,7 @@ export const WEAPONS: WeaponDef[] = [
         levels: levels(
             {
                 name: "Bronze 2h sword",
-                damage: 14,
+                damage: 19,
                 cooldown: 1.6,
                 amount: 1,
                 area: 2.5,
@@ -767,8 +780,8 @@ export const WEAPONS: WeaponDef[] = [
             {
                 name: "Steel 2h sword",
                 objId: TWO_HANDED_SWORDS[2],
-                damage: 17,
-                description: "+3 damage.",
+                damage: 23,
+                description: "+4 damage.",
             },
             {
                 name: "Black 2h sword",
@@ -779,8 +792,8 @@ export const WEAPONS: WeaponDef[] = [
             {
                 name: "Mithril 2h sword",
                 objId: TWO_HANDED_SWORDS[4],
-                damage: 20,
-                description: "+3 damage.",
+                damage: 27,
+                description: "+4 damage.",
             },
             {
                 name: "Adamant 2h sword",
@@ -797,8 +810,8 @@ export const WEAPONS: WeaponDef[] = [
             {
                 name: "Dragon 2h sword",
                 objId: TWO_HANDED_SWORDS[7],
-                damage: 24,
-                description: "+4 damage.",
+                damage: 32,
+                description: "+5 damage.",
             },
         ),
         evolution: { into: "colossal_blade", requiresPassive: "dizanas_quiver" },
@@ -817,8 +830,8 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         bigHits: [0.5],
         unlock: { kind: "beatMap", mapId: "varlamore" },
-        levels: levels({
-            damage: 34,
+        levels: evolvedLevels({
+            damage: 54,
             cooldown: 1.5,
             amount: 2,
             area: 3.6,
@@ -826,7 +839,7 @@ export const WEAPONS: WeaponDef[] = [
             pierce: 0,
             speed: 0,
             duration: 0,
-            knockback: 1.2,
+            knockback: 1.4,
             objId: 27021,
             description: "Evolved from the dragon 2h sword with Dizana's quiver.",
         }),
@@ -919,7 +932,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "veryRare",
         evolved: true,
-        levels: levels({
+        levels: evolvedLevels({
             name: "Dark bow",
             damage: 40,
             cooldown: 1,
@@ -1027,7 +1040,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "veryRare",
         evolved: true,
-        levels: levels({
+        levels: evolvedLevels({
             name: "Chain-hit axes",
             damage: 20,
             cooldown: 0.9,
@@ -1092,7 +1105,7 @@ export const WEAPONS: WeaponDef[] = [
         // Astral, death and earth: what Vengeance takes
         orbitObjIds: [9075, 560, 557],
         // They last as long as the wait to cast them again
-        levels: levels({
+        levels: evolvedLevels({
             damage: 13,
             cooldown: 4,
             amount: 6,
@@ -1123,11 +1136,12 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "veryRare",
         style: "melee",
+        evolution: { into: "sanguine_scythe", requiresPassive: "chivalry" },
         // Its second and third hits on big targets, like in OSRS
         bigHits: [0.5, 0.25],
         levels: levels(
             {
-                damage: 21,
+                damage: 38,
                 cooldown: 1.25,
                 amount: 1,
                 area: 2.9,
@@ -1138,11 +1152,49 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.6,
                 objId: 22325,
             },
-            { damage: 25, description: "+4 damage." },
+            { damage: 45, description: "+7 damage." },
             { area: 3.3, description: "+14% reach." },
             { cooldown: 1.1, description: "Sweeps a little faster." },
-            { damage: 30, description: "+5 damage." },
+            { damage: 54, description: "+9 damage." },
         ),
+    },
+    {
+        id: "sanguine_scythe",
+        name: "Sanguine Scythe of Vitur",
+        kind: "sweep",
+        description:
+            "Evolved Scythe of Vitur. A wider sweep. Bosses and elites are hit three times, and every fourth sweep is Blood Harvest, which heals you.",
+        iconObjId: 25739,
+        playerSeq: 8056,
+        // hacksword_slash stands in for the scythe's
+        sound: 2500,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "melee",
+        evolved: true,
+        bigHits: [0.5, 0.25],
+        special: {
+            name: "Blood Harvest",
+            every: 4,
+            damage: 1.5,
+            playerSeq: 8056,
+            // Blood Barrage's healing
+            spotAnim: 1542,
+            effect: { kind: "heal", fraction: 0.5, max: 2 },
+        },
+        levels: evolvedLevels({
+            damage: 60,
+            cooldown: 1.1,
+            amount: 1,
+            area: 3.5,
+            arc: 2.1,
+            pierce: 0,
+            speed: 0,
+            duration: 0,
+            knockback: 1,
+            objId: 25739,
+            description: "Evolved from the Scythe of Vitur with Chivalry.",
+        }),
     },
     godsword(
         "armadyl_godsword",
@@ -1213,6 +1265,7 @@ export const WEAPONS: WeaponDef[] = [
         rarity: "rare",
         style: "melee",
         family: "godsword",
+        evolution: { into: "ancient_godsword", requiresPassive: "piety" },
         hilts: {
             level: HILT_LEVEL,
             into: [
@@ -1229,6 +1282,45 @@ export const WEAPONS: WeaponDef[] = [
         unlock: { kind: "beatMap", mapId: "god_wars" },
     },
     {
+        id: "ancient_godsword",
+        name: "Ancient godsword",
+        kind: "sweep",
+        description:
+            "Evolved godsword. Every third swing is Blood Sacrifice: it hits everything around you and heals you.",
+        iconObjId: 26233,
+        playerSeq: GODSWORD_SEQ,
+        sound: GODSWORD_SOUND,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "melee",
+        // Still the one godsword at a time
+        family: "godsword",
+        evolved: true,
+        special: {
+            name: "Blood Sacrifice",
+            every: 3,
+            damage: 1.6,
+            playerSeq: 9171,
+            // Blood Barrage's healing, on the player and what it hits
+            spotAnim: 1542,
+            aoe: { radius: 4.5, impactSpotAnim: 1542 },
+            effect: { kind: "heal", fraction: 0.5, max: 3 },
+        },
+        levels: evolvedLevels({
+            damage: 74,
+            cooldown: 1.7,
+            amount: 1,
+            area: 3.4,
+            arc: 0.95,
+            pierce: 0,
+            speed: 0,
+            duration: 0,
+            knockback: 1.4,
+            objId: 26233,
+            description: "Evolved from a godsword with Piety.",
+        }),
+    },
+    {
         id: "dragon_claws",
         name: "Dragon claws",
         kind: "slash",
@@ -1240,10 +1332,11 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "rare",
         style: "melee",
+        evolution: { into: "burning_claws", requiresPassive: "tome_of_fire" },
         hits: [0.4, 0.5, 0.6, 1],
         levels: levels(
             {
-                damage: 9,
+                damage: 11,
                 cooldown: 1.2,
                 amount: 1,
                 area: 2.3,
@@ -1253,12 +1346,48 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.2,
                 objId: 13652,
             },
-            { damage: 11, description: "+2 damage a slash." },
+            { damage: 14, description: "+3 damage a slash." },
             { area: 2.6, description: "+13% reach." },
             { cooldown: 1.05, description: "Slashes a little faster." },
-            { damage: 13, amount: 2, description: "+2 damage a slash; also slashes behind you." },
+            { damage: 16, amount: 2, description: "+2 damage a slash; also slashes behind you." },
         ),
         unlock: { kind: "killBoss", mapId: "morytania", enemyId: "pestilent_bloat" },
+    },
+    {
+        id: "burning_claws",
+        name: "Burning claws",
+        kind: "slash",
+        description:
+            "Evolved Dragon claws. Four quick slashes each time, and every third set burns what it hits.",
+        iconObjId: 29577,
+        playerSeq: 393,
+        sound: 2500,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "melee",
+        evolved: true,
+        hits: [0.4, 0.5, 0.6, 1],
+        special: {
+            name: "Burning Slice",
+            every: 3,
+            damage: 1.25,
+            // The claws' own special
+            playerSeq: 7514,
+            spotAnim: 1171,
+            effect: { kind: "burn", damage: 0.4, seconds: 4 },
+        },
+        levels: evolvedLevels({
+            damage: 18,
+            cooldown: 1.05,
+            amount: 2,
+            area: 2.6,
+            pierce: 0,
+            speed: 0,
+            duration: 0,
+            knockback: 0.6,
+            objId: 29577,
+            description: "Evolved from the Dragon claws with the Tome of fire.",
+        }),
     },
     {
         id: "ivandis_flail",
@@ -1275,7 +1404,7 @@ export const WEAPONS: WeaponDef[] = [
         slayer: VAMPYRES_AND_UNDEAD,
         levels: levels(
             {
-                damage: 16,
+                damage: 20,
                 cooldown: 1.1,
                 amount: 1,
                 area: 2.5,
@@ -1285,10 +1414,10 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.5,
                 objId: 22398,
             },
-            { damage: 19, description: "+3 damage." },
+            { damage: 24, description: "+4 damage." },
             { amount: 2, description: "Also flails behind you." },
             { cooldown: 1, area: 2.8, description: "Flails a little faster and further." },
-            { damage: 23, description: "+4 damage." },
+            { damage: 29, description: "+5 damage." },
         ),
         evolution: { into: "blisterwood_flail", requiresPassive: "book_of_the_dead" },
         unlock: { kind: "beatMap", mapId: "morytania" },
@@ -1308,7 +1437,7 @@ export const WEAPONS: WeaponDef[] = [
         slayer: VAMPYRES_AND_UNDEAD,
         // Crumble Undead's impact on each one it passes to
         chain: { tags: ["vampyre", "undead"], count: 3, range: 4, damage: 0.6, spotAnim: 147 },
-        levels: levels({
+        levels: evolvedLevels({
             damage: 32,
             cooldown: 0.95,
             amount: 2,
@@ -1316,7 +1445,7 @@ export const WEAPONS: WeaponDef[] = [
             pierce: 0,
             speed: 0,
             duration: 0,
-            knockback: 0.6,
+            knockback: 0.9,
             objId: 24699,
             description: "Evolved from the Ivandis flail with the Book of the dead.",
         }),
@@ -1338,7 +1467,7 @@ export const WEAPONS: WeaponDef[] = [
         unlock: { kind: "beatMap", mapId: "desert" },
         levels: levels(
             {
-                damage: 15,
+                damage: 24,
                 cooldown: 0.85,
                 amount: 1,
                 area: 2.3,
@@ -1348,10 +1477,10 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.3,
                 objId: 26219,
             },
-            { damage: 18, description: "+3 damage." },
+            { damage: 29, description: "+5 damage." },
             { area: 2.6, description: "+13% reach." },
             { cooldown: 0.75, description: "Stabs a little faster." },
-            { damage: 22, description: "+4 damage." },
+            { damage: 35, description: "+6 damage." },
         ),
     },
     {
@@ -1379,7 +1508,7 @@ export const WEAPONS: WeaponDef[] = [
         },
         levels: levels(
             {
-                damage: 24,
+                damage: 53,
                 cooldown: 2.1,
                 amount: 1,
                 area: 2.7,
@@ -1390,10 +1519,10 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 2,
                 objId: 6528,
             },
-            { damage: 28, description: "+4 damage." },
+            { damage: 62, description: "+9 damage." },
             { area: 3, description: "+11% reach." },
             { cooldown: 1.9, description: "Swings a little faster." },
-            { damage: 34, description: "+6 damage." },
+            { damage: 75, description: "+13 damage." },
         ),
     },
     {
@@ -1409,6 +1538,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "rare",
         style: "melee",
+        evolution: { into: "elder_maul", requiresPassive: "protect_melee" },
         unlock: { kind: "killBoss", mapId: "kourend", enemyId: "lizardman_shaman" },
         special: {
             name: "Smash",
@@ -1420,7 +1550,7 @@ export const WEAPONS: WeaponDef[] = [
         },
         levels: levels(
             {
-                damage: 18,
+                damage: 36,
                 cooldown: 1.4,
                 amount: 1,
                 area: 2.3,
@@ -1430,11 +1560,121 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.8,
                 objId: 13576,
             },
-            { damage: 21, description: "+3 damage." },
+            { damage: 42, description: "+6 damage." },
             { area: 2.6, description: "+13% reach." },
             { cooldown: 1.25, description: "Swings a little faster." },
-            { damage: 26, description: "+5 damage." },
+            { damage: 52, description: "+10 damage." },
         ),
+    },
+    {
+        id: "elder_maul",
+        name: "Elder maul",
+        kind: "sweep",
+        description:
+            "Evolved Dragon warhammer. A heavy sweep. Every third is Shockwave: it hits everything around you, and they take 30% more damage for 8s.",
+        iconObjId: 21003,
+        playerSeq: 7516,
+        // hacksword_slash stands in for its sound
+        sound: 2500,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "melee",
+        evolved: true,
+        special: {
+            name: "Shockwave",
+            every: 3,
+            damage: 1.5,
+            playerSeq: 7516,
+            spotAnim: 1292,
+            aoe: { radius: 4 },
+            effect: { kind: "drain", amount: 0.3, seconds: 8 },
+        },
+        levels: evolvedLevels({
+            damage: 72,
+            cooldown: 1.5,
+            amount: 1,
+            area: 2.9,
+            arc: 1.2,
+            pierce: 0,
+            speed: 0,
+            duration: 0,
+            knockback: 1.2,
+            objId: 21003,
+            description: "Evolved from the Dragon warhammer with Protect from Melee.",
+        }),
+    },
+    {
+        id: "dinhs_bulwark",
+        name: "Dinh's bulwark",
+        kind: "sweep",
+        description: "A slow, heavy bash that hits everything around you, far out.",
+        iconObjId: 21015,
+        playerSeq: 7511,
+        // hacksword_slash stands in for its sound
+        sound: 2500,
+        hitSound: -1,
+        rarity: "rare",
+        style: "melee",
+        evolution: { into: "dinhs_blazing_bulwark", requiresPassive: "vengeance" },
+        unlock: { kind: "beatMap", mapId: "kourend" },
+        levels: levels(
+            {
+                damage: 60,
+                cooldown: 3.4,
+                amount: 1,
+                area: 4,
+                // All the way round
+                arc: Math.PI,
+                pierce: 0,
+                speed: 0,
+                duration: 0,
+                knockback: 1.2,
+                objId: 21015,
+            },
+            { damage: 78, description: "+18 damage." },
+            { area: 4.6, description: "+15% reach." },
+            { cooldown: 3, description: "Bashes a little faster." },
+            { damage: 96, description: "+18 damage." },
+        ),
+    },
+    {
+        id: "dinhs_blazing_bulwark",
+        name: "Dinh's blazing bulwark",
+        kind: "sweep",
+        description:
+            "Evolved Dinh's bulwark. A slow bash all around you. Every third is Shield Bash: it reaches further and burns what it hits.",
+        iconObjId: 28682,
+        playerSeq: 7511,
+        // hacksword_slash stands in for its sound
+        sound: 2500,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "melee",
+        evolved: true,
+        special: {
+            name: "Shield Bash",
+            every: 3,
+            damage: 1.4,
+            playerSeq: 7511,
+            // Fire Wave's cast and impact
+            spotAnim: 155,
+            aoe: { radius: 6.5, impactSpotAnim: 157 },
+            effect: { kind: "burn", damage: 0.3, seconds: 4 },
+        },
+        levels: evolvedLevels({
+            damage: 110,
+            cooldown: 2.8,
+            amount: 1,
+            area: 5,
+            // All the way round
+            arc: Math.PI,
+            pierce: 0,
+            speed: 0,
+            duration: 0,
+            knockback: 1.6,
+            objId: 28682,
+            description: "Evolved from Dinh's bulwark with Vengeance.",
+        }),
     },
     {
         id: "dual_macuahuitl",
@@ -1451,7 +1691,7 @@ export const WEAPONS: WeaponDef[] = [
         unlock: { kind: "killBoss", mapId: "varlamore", enemyId: "manticore" },
         levels: levels(
             {
-                damage: 11,
+                damage: 14,
                 cooldown: 0.75,
                 amount: 2,
                 area: 2.1,
@@ -1461,10 +1701,53 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.4,
                 objId: 28997,
             },
-            { damage: 13, description: "+2 damage." },
+            { damage: 16, description: "+2 damage." },
             { cooldown: 0.65, description: "Slashes a little faster." },
             { area: 2.4, description: "+14% reach." },
-            { damage: 16, description: "+3 damage." },
+            { damage: 20, description: "+4 damage." },
+        ),
+    },
+
+    {
+        id: "thunder_khopesh",
+        name: "Thunder khopesh",
+        kind: "slash",
+        description:
+            "Quick slashes at the closest enemy. Every third is Thunderclap: it hits everything around you.",
+        iconObjId: 30388,
+        playerSeq: 390,
+        // hacksword_slash
+        sound: 2500,
+        hitSound: -1,
+        rarity: "rare",
+        style: "melee",
+        unlock: { kind: "beatMap", mapId: "varlamore" },
+        special: {
+            name: "Thunderclap",
+            every: 3,
+            damage: 1.6,
+            // The Dragon 2h sword's Powerstab, which hits all round too
+            playerSeq: 3157,
+            spotAnim: 559,
+            // Saradomin Strike's lightning on what it hits
+            aoe: { radius: 3.5, impactSpotAnim: 76 },
+        },
+        levels: levels(
+            {
+                damage: 26,
+                cooldown: 1.05,
+                amount: 1,
+                area: 2.4,
+                pierce: 0,
+                speed: 0,
+                duration: 0,
+                knockback: 0.6,
+                objId: 30388,
+            },
+            { damage: 30, description: "+4 damage." },
+            { area: 2.7, description: "+13% reach." },
+            { cooldown: 0.9, description: "Slashes a little faster." },
+            { damage: 38, description: "+8 damage." },
         ),
     },
 
@@ -1482,6 +1765,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "veryRare",
         style: "ranged",
+        evolution: { into: "corrupted_twisted_bow", requiresPassive: "rigour" },
         toughTargets: 1.5,
         levels: levels(
             {
@@ -1502,6 +1786,36 @@ export const WEAPONS: WeaponDef[] = [
             { cooldown: 1, description: "Fires a little faster." },
             { amount: 3, description: "Fires one more arrow." },
         ),
+    },
+    {
+        id: "corrupted_twisted_bow",
+        name: "Corrupted twisted bow",
+        kind: "missile",
+        description:
+            "Evolved Twisted bow. Shoots the toughest enemy in range, up to +180% on bosses, and bosses and elites are hit again.",
+        iconObjId: 28540,
+        playerSeq: 426,
+        sound: 2707,
+        hitSound: -1,
+        rarity: "veryRare",
+        style: "ranged",
+        evolved: true,
+        toughTargets: 1.8,
+        bigHits: [0.35],
+        levels: evolvedLevels({
+            damage: 24,
+            cooldown: 1,
+            amount: 3,
+            area: 0,
+            pierce: 0,
+            speed: 16,
+            duration: 0,
+            knockback: 0.3,
+            objId: 28540,
+            // Amethyst arrows
+            projectileSpotAnim: 1384,
+            description: "Evolved from the Twisted bow with Rigour.",
+        }),
     },
     {
         id: "bow_of_faerdhinen",
@@ -1704,7 +2018,7 @@ export const WEAPONS: WeaponDef[] = [
         rarity: "veryRare",
         evolved: true,
         split: { count: 5, damage: 0.35, pierce: 1 },
-        levels: levels({
+        levels: evolvedLevels({
             damage: 20,
             cooldown: 0.8,
             amount: 2,
@@ -1768,6 +2082,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: 163,
         rarity: "veryRare",
         style: "magic",
+        evolution: { into: "corrupted_tumekens_shadow", requiresPassive: "augury" },
         mightScale: 3,
         levels: levels(
             {
@@ -1791,6 +2106,37 @@ export const WEAPONS: WeaponDef[] = [
         ),
     },
     {
+        id: "corrupted_tumekens_shadow",
+        name: "Corrupted tumeken's shadow",
+        kind: "missile",
+        description:
+            "Evolved Tumeken's shadow. Bigger blasts that pass through two enemies. 3.5x your damage bonus for its hits.",
+        iconObjId: 28547,
+        playerSeq: 9493,
+        // Fire Wave's sounds stand in for the shadow's
+        sound: 162,
+        hitSound: 163,
+        rarity: "veryRare",
+        style: "magic",
+        evolved: true,
+        mightScale: 3.5,
+        levels: evolvedLevels({
+            damage: 32,
+            cooldown: 1.2,
+            amount: 3,
+            area: 1.6,
+            pierce: 2,
+            speed: 10,
+            duration: 0,
+            knockback: 0.4,
+            objId: 28547,
+            castSpotAnim: 2125,
+            projectileSpotAnim: 2126,
+            impactSpotAnim: 2127,
+            description: "Evolved from Tumeken's shadow with Augury.",
+        }),
+    },
+    {
         id: "harmonised_nightmare_staff",
         name: "Harmonised nightmare staff",
         kind: "missile",
@@ -1801,6 +2147,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: FIRE_SURGE.hitSound,
         rarity: "rare",
         style: "magic",
+        evolution: { into: "eldritch_nightmare_staff", requiresPassive: "amulet_of_glory" },
         levels: levels(
             {
                 ...FIRE_SURGE,
@@ -1821,6 +2168,34 @@ export const WEAPONS: WeaponDef[] = [
         ),
     },
     {
+        id: "eldritch_nightmare_staff",
+        name: "Eldritch nightmare staff",
+        kind: "missile",
+        description:
+            "Evolved Harmonised nightmare staff. Each Fire Surge splits into three more where it first hits.",
+        iconObjId: 24425,
+        playerSeq: 7855,
+        sound: FIRE_SURGE.sound,
+        hitSound: FIRE_SURGE.hitSound,
+        rarity: "veryRare",
+        style: "magic",
+        evolved: true,
+        split: { count: 3, damage: 0.4, pierce: 0 },
+        levels: evolvedLevels({
+            ...FIRE_SURGE,
+            damage: 14,
+            cooldown: 0.7,
+            amount: 2,
+            area: 1,
+            pierce: 1,
+            speed: 11,
+            duration: 0,
+            knockback: 0.25,
+            objId: 24425,
+            description: "Evolved from the Harmonised nightmare staff with the Amulet of glory.",
+        }),
+    },
+    {
         id: "sanguinesti_staff",
         name: "Sanguinesti staff",
         kind: "missile",
@@ -1833,6 +2208,7 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: 163,
         rarity: "rare",
         style: "magic",
+        evolution: { into: "holy_sanguinesti_staff", requiresPassive: "rapid_heal" },
         lifesteal: { chance: 1 / 6, fraction: 0.5, max: 2, spotAnim: 1542 },
         levels: levels(
             {
@@ -1854,6 +2230,37 @@ export const WEAPONS: WeaponDef[] = [
             { cooldown: 1.05, pierce: 1, description: "Faster; blasts pass through an enemy." },
             { damage: 24, description: "+5 damage." },
         ),
+    },
+    {
+        id: "holy_sanguinesti_staff",
+        name: "Holy sanguinesti staff",
+        kind: "missile",
+        description:
+            "Evolved Sanguinesti staff. Blood blasts that splash. One hit in four heals you for half its damage, up to 3 hitpoints.",
+        iconObjId: 25731,
+        playerSeq: 1167,
+        // Fire Wave's sounds stand in for the staff's
+        sound: 162,
+        hitSound: 163,
+        rarity: "veryRare",
+        style: "magic",
+        evolved: true,
+        lifesteal: { chance: 1 / 4, fraction: 0.5, max: 3, spotAnim: 1542 },
+        levels: evolvedLevels({
+            damage: 28,
+            cooldown: 1.05,
+            amount: 2,
+            area: 0.9,
+            pierce: 1,
+            speed: 10,
+            duration: 0,
+            knockback: 0.4,
+            objId: 25731,
+            castSpotAnim: 1540,
+            projectileSpotAnim: 1539,
+            impactSpotAnim: 1541,
+            description: "Evolved from the Sanguinesti staff with Rapid Heal.",
+        }),
     },
     {
         id: "kodai_wand",
@@ -1916,7 +2323,7 @@ export const WEAPONS: WeaponDef[] = [
                 knockback: 0.3,
                 objId: 23898,
             },
-            { damage: 11, description: "+2 damage." },
+            { damage: 11, description: "+1 damage." },
             { amount: 2, description: "Casts one more spell." },
             {
                 name: "Crystal staff (attuned)",
@@ -1953,8 +2360,8 @@ export const WEAPONS: WeaponDef[] = [
         hitSound: -1,
         rarity: "rare",
         style: "magic",
-        // Flames, looping on the burning ground
-        burns: { damage: 0.3, radius: 0.8, spotAnim: 1347 },
+        // Fire, the plain flames with no logs or stones under them
+        burns: { damage: 0.3, radius: 0.8, locId: 5499 },
         levels: levels(
             {
                 damage: 7,
@@ -2014,6 +2421,21 @@ export const WEAPONS: WeaponDef[] = [
     },
 ];
 applyCustomWeapons(WEAPONS);
+
+// Every other level of a melee weapon pushes harder
+const KNOCKBACK_STEP = 0.2;
+for (const weapon of WEAPONS) {
+    if (weapon.kind === "slash" || weapon.kind === "sweep") {
+        weapon.levels = weapon.levels.map((level, i) => ({
+            ...level,
+            knockback: level.knockback + KNOCKBACK_STEP * Math.floor(i / 2),
+            description:
+                i > 0 && i % 2 === 0
+                    ? `${level.description} +${KNOCKBACK_STEP} knockback.`
+                    : level.description,
+        }));
+    }
+}
 
 export const WEAPON_BY_ID: Map<string, WeaponDef> = new Map(WEAPONS.map((w) => [w.id, w]));
 

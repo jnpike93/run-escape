@@ -10,6 +10,7 @@ import { INVALID_HSL_COLOR } from "../../../rs/util/ColorUtil";
 import { InteractType } from "../../webgl/InteractType";
 import { ContourGroundType, SceneModel } from "../buffer/SceneBuffer";
 import { SceneLocEntity } from "./SceneLocEntity";
+import { isRoofLoc, isTileDrawn } from "./UpperLevels";
 
 export type SceneLocs = {
     locs: SceneModel[];
@@ -154,15 +155,13 @@ export function getSceneLocs(
                 // if (!tile || tile.minLevel > maxLevel) {
                 //     continue;
                 // }
-                if (
-                    !tile ||
-                    (tile.minLevel > maxLevel &&
-                        !scene.isPlayerLevel(level, tileX, tileY, maxLevel))
-                ) {
+                if (!tile || !isTileDrawn(scene, tile.minLevel, level, tileX, tileY, maxLevel)) {
                     continue;
                 }
 
-                if (tile.floorDecoration) {
+                const isHidden = (loc: SceneLoc) => tile.minLevel > maxLevel && isRoofLoc(loc);
+
+                if (tile.floorDecoration && !isHidden(tile.floorDecoration)) {
                     if (tile.floorDecoration.entity instanceof Model) {
                         locs.push(
                             createSceneModel(
@@ -193,7 +192,7 @@ export function getSceneLocs(
                     }
                 }
 
-                if (tile.wall) {
+                if (tile.wall && !isHidden(tile.wall)) {
                     if (tile.wall.entity0 instanceof Model) {
                         locs.push(
                             createSceneModel(
@@ -253,7 +252,7 @@ export function getSceneLocs(
                     }
                 }
 
-                if (tile.wallDecoration) {
+                if (tile.wallDecoration && !isHidden(tile.wallDecoration)) {
                     const offsetX = tile.wallDecoration.offsetX;
                     const offsetY = tile.wallDecoration.offsetY;
                     if (tile.wallDecoration.entity0 instanceof Model) {
@@ -316,7 +315,7 @@ export function getSceneLocs(
                 }
 
                 for (const loc of tile.locs) {
-                    if (loc.startX !== tileX || loc.startY !== tileY) {
+                    if (loc.startX !== tileX || loc.startY !== tileY || isHidden(loc)) {
                         continue;
                     }
 

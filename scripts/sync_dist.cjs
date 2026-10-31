@@ -20,6 +20,7 @@ const ROOT_INDEX = path.join(ROOT_DIR, "index.html");
 const PRESERVED_ASSETS = new Set([
     "multiplayer",
     "prayer",
+    "music",
     "multiplayer.js",
     "cooks-assistant.js",
     "tile-coords.js",

@@ -6,6 +6,7 @@ import { QUESTS, QUEST_BY_ID, describeQuest } from "../content/quests";
 import { LOCKABLE_ITEMS } from "../content/unlocks";
 import { RUN_LENGTH } from "../content/waves";
 import {
+    CHALLENGE_MODES,
     RunSummary,
     buyArmouryUpgrade,
     buyUpgrade,
@@ -17,6 +18,8 @@ import {
     exportSave,
     getArmourySpent,
     getArmouryStep,
+    getChallengeDifficultyMultiplier,
+    getChallengePointsMultiplier,
     getEarnedUnlocks,
     getFinishedQuests,
     getMapDifficultyMultiplier,
@@ -68,6 +71,13 @@ describe("save", () => {
         expect(save.runs).toBe(0);
         expect(migrateSave(null)).toEqual(createSave());
         expect(migrateSave("garbage")).toEqual(createSave());
+    });
+
+    test("Crystal armour comes in with beating Prifddinas, on old saves too", () => {
+        const pieces = ["crystal_helm", "crystal_body", "crystal_legs"];
+        expect(createSave().unlockedItems).not.toEqual(expect.arrayContaining(pieces));
+        const beaten = migrateSave({ ...createSave(), mapVictories: { prifddinas: 1 } });
+        expect(beaten.unlockedItems).toEqual(expect.arrayContaining(pieces));
     });
 
     test("buying upgrades costs coins and raises later prices", () => {
@@ -415,6 +425,37 @@ describe("the Armoury", () => {
         expect(save.coins).toBe(100000);
         expect(save.armoury).toEqual({});
         expect(getArmourySpent(save)).toBe(0);
+    });
+});
+
+describe("evolutions made", () => {
+    test("runs add to them once each, and they survive a save", () => {
+        const save = createSave();
+        const run = {
+            mapId: "lumbridge",
+            victory: false,
+            seconds: 60,
+            level: 2,
+            kills: 1,
+            coins: 0,
+            bossesKilled: [],
+            evolutionsMade: ["abyssal_whip"],
+        };
+        recordRun(save, run);
+        recordRun(save, run);
+        expect(save.evolutionsMade).toEqual(["abyssal_whip"]);
+        expect(migrateSave(JSON.parse(JSON.stringify(save))).evolutionsMade).toEqual([
+            "abyssal_whip",
+        ]);
+    });
+
+    test("older saves start with none, and unknown ids are dropped", () => {
+        const { evolutionsMade: _, ...old } = createSave();
+        expect(migrateSave({ ...old, version: 6 }).evolutionsMade).toEqual([]);
+        expect(
+            migrateSave({ ...old, evolutionsMade: ["abyssal_whip", "no_such_weapon"] })
+                .evolutionsMade,
+        ).toEqual(["abyssal_whip"]);
     });
 });
 
@@ -786,5 +827,54 @@ describe("Barbarian Village campaign & unlocks", () => {
                 "gunthors_longhall",
             ]),
         );
+    });
+
+    test("Extreme One Chunk Man (2x diff, 1.5x pts) and Nightmare Man (3x diff, 2.5x pts) scale run points and persist in mapBest", () => {
+        expect(CHALLENGE_MODES.map((m) => m.id)).toEqual([
+            "normal",
+            "extreme_one_chunk",
+            "nightmare",
+        ]);
+        expect(getChallengeDifficultyMultiplier("normal")).toBe(1);
+        expect(getChallengePointsMultiplier("normal")).toBe(1);
+        expect(getChallengeDifficultyMultiplier("extreme_one_chunk")).toBe(2);
+        expect(getChallengePointsMultiplier("extreme_one_chunk")).toBe(1.5);
+        expect(getChallengeDifficultyMultiplier("nightmare")).toBe(3);
+        expect(getChallengePointsMultiplier("nightmare")).toBe(2.5);
+
+        const baseRun = run("lumbridge", {
+            victory: true,
+            seconds: 900,
+            kills: 1200,
+            level: 32,
+            bossesKilled: ["count_draynor", "wise_old_man"],
+        });
+        const normalBreakdown = calculateRunPointsBreakdown(baseRun);
+        const extremeBreakdown = calculateRunPointsBreakdown({
+            ...baseRun,
+            challengeMode: "extreme_one_chunk",
+        });
+        const nightmareBreakdown = calculateRunPointsBreakdown({
+            ...baseRun,
+            challengeMode: "nightmare",
+        });
+
+        expect(extremeBreakdown.modePointsMultiplier).toBe(1.5);
+        expect(extremeBreakdown.totalPoints).toBe(Math.round(normalBreakdown.totalPoints * 1.5));
+        expect(nightmareBreakdown.modePointsMultiplier).toBe(2.5);
+        expect(nightmareBreakdown.totalPoints).toBe(Math.round(normalBreakdown.totalPoints * 2.5));
+
+        const save = createSave();
+        recordRun(save, { ...baseRun, challengeMode: "extreme_one_chunk" });
+        expect(save.mapBest.lumbridge.challengeMode).toBe("extreme_one_chunk");
+        expect(calculateLevelPoints(save, "lumbridge")).toBe(extremeBreakdown.totalPoints);
+
+        recordRun(save, { ...baseRun, challengeMode: "nightmare" });
+        expect(save.mapBest.lumbridge.challengeMode).toBe("nightmare");
+        expect(calculateLevelPoints(save, "lumbridge")).toBe(nightmareBreakdown.totalPoints);
+
+        const roundTrip = importSave(exportSave(save));
+        expect(roundTrip.mapBest.lumbridge.challengeMode).toBe("nightmare");
+        expect(calculateLevelPointsBreakdown(roundTrip, "lumbridge").modePointsMultiplier).toBe(2.5);
     });
 });

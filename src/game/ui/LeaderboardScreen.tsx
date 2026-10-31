@@ -6,7 +6,7 @@ import { formatTime } from "../client/GameView";
 import { CHARACTERS } from "../content/characters";
 import { FUN_MAPS, MAPS } from "../content/maps";
 import { MapDef } from "../content/types";
-import { calculateLevelPointsBreakdown } from "../core/save";
+import { calculateLevelPointsBreakdown, getChallengeMode } from "../core/save";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
 
@@ -37,9 +37,14 @@ export function LeaderboardScreen({ ui, client }: Props): JSX.Element {
         const breakdown = calculateLevelPointsBreakdown(save, m.id);
         const pts = breakdown.totalPoints;
         const bestKills = mb?.kills ?? 0;
+        const modeDef = getChallengeMode(breakdown.challengeMode);
+        const modeBonusLine =
+            breakdown.challengeMode !== "normal"
+                ? `\n• ${modeDef.name} (${modeDef.difficultyMultiplier}x diff): ${breakdown.modePointsMultiplier}x points`
+                : "";
         const pointsTooltip =
             pts > 0
-                ? `${m.name} Top Score (${breakdown.difficultyMultiplier}x difficulty):\n• Best Run Kills (${bestKills.toLocaleString()}): +${breakdown.killPoints.toLocaleString()} base\n• Survival & Level: +${breakdown.progressionPoints.toLocaleString()} base\n• Bosses & Clear Speed: +${breakdown.clearPoints.toLocaleString()} base${breakdown.endlessPoints > 0 ? `\n• Endless Rounds: +${breakdown.endlessPoints.toLocaleString()} base` : ""}\n= ${pts.toLocaleString()} pts`
+                ? `${m.name} Top Score (${breakdown.difficultyMultiplier}x difficulty${breakdown.challengeMode !== "normal" ? `, ${modeDef.name}` : ""}):\n• Best Run Kills (${bestKills.toLocaleString()}): +${breakdown.killPoints.toLocaleString()} base\n• Survival & Level: +${breakdown.progressionPoints.toLocaleString()} base\n• Bosses & Clear Speed: +${breakdown.clearPoints.toLocaleString()} base${breakdown.endlessPoints > 0 ? `\n• Endless Rounds: +${breakdown.endlessPoints.toLocaleString()} base` : ""}${modeBonusLine}\n= ${pts.toLocaleString()} pts`
                 : `${m.name} (${breakdown.difficultyMultiplier}x difficulty): Play a run to set a top score!`;
         return (
             <div

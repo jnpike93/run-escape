@@ -10,7 +10,12 @@ version and how to run it.
   bones, Dragon bones, Wyvern bones, Lava dragon bones, then Superior dragon bones. Coins gather
   into bigger stacks the same way. Levels follow the OSRS experience table (stretched for the
   later levels), and each one offers a choice of three: a new weapon, a weapon upgrade or a
-  passive. **1-4** pick with the keyboard.
+  passive. **1-4** pick with the keyboard. **R** rerolls the offer (one reroll a run, more from
+  the Pirate and the shop), and **X** skips it for coins from the run: 25 the first time, then
+  50, 100, 200 and 400, doubling each time.
+- When a run ends, the results screen shows its stats: damage, kills and damage a second for
+  each weapon (and the utility items and power-ups that did damage), the biggest hit, damage
+  taken, hitpoints healed and when each boss went down.
 - You carry at most **4 weapons and 4 passives**, so a build is about what you leave out.
 - **Rarity**, in OSRS drop table terms: every weapon and passive is Common, Uncommon, Rare or
   Very rare, which sets how often it's offered. Every offer also rolls its own rarity: a Common
@@ -32,12 +37,30 @@ version and how to run it.
   **Toktz-xil-ul**, obsidian rings that fly through everything; maxed Saradomin Strike with the
   Book of the dead becomes **Undead Grasp**, whose hands hold what they hit; and a maxed dragon 2h
   sword with Dizana's quiver becomes the **Colossal blade**, which hits bosses and elites again.
-  Every weapon that can be offered evolves now: the shortbow with **Rigour** into the **Dark
-  bow**, the fire spells with **Augury** into **Flames of Zamorak**, the thrownaxes with the Tome
-  of fire into **Chain-hit axes**, Blood Burst with Rapid Heal into **Blood Barrage**, Smoke and
-  Shadow Burst with the **Ancient sceptre** into **Smoke** and **Shadow Barrage**, the Ivandis
-  flail with the Book of the dead into the **Blisterwood flail** and the Crystal bow with the
-  Graceful outfit into the **Corrupted bow**.
+  The shortbow with **Rigour** becomes the **Dark bow**, the fire spells with **Augury**
+  **Flames of Zamorak**, the thrownaxes with the Tome of fire **Chain-hit axes**, Blood Burst with
+  Rapid Heal **Blood Barrage**, Smoke and Shadow Burst with the **Ancient sceptre** **Smoke** and
+  **Shadow Barrage**, the Ivandis flail with the Book of the dead the **Blisterwood flail** and the
+  Crystal bow with the Graceful outfit the **Corrupted bow**.
+- **Class weapon evolutions**: the Scythe of Vitur with **Chivalry** becomes the **Sanguine Scythe
+  of Vitur**, which sweeps wider and heals every fourth sweep; a godsword with **Piety** becomes the
+  **Ancient godsword**, whose Blood Sacrifice hits all round and heals; the Dragon claws with the
+  Tome of fire become the **Burning claws**; the Dragon warhammer with Protect from Melee becomes the
+  **Elder maul**, whose Shockwave weakens everything around you; Dinh's bulwark with Vengeance becomes
+  **Dinh's blazing bulwark**, whose Shield Bash reaches further and burns; the Twisted bow with Rigour
+  becomes the **Corrupted twisted bow**; Tumeken's shadow with Augury becomes the **Corrupted
+  tumeken's shadow**; the Sanguinesti staff with Rapid Heal becomes the **Holy sanguinesti staff**;
+  and the Harmonised nightmare staff with the Amulet of glory becomes the **Eldritch nightmare staff**,
+  whose surges split where they hit.
+- **Evolving**: a weapon at its last level with its passive (at any level) offers its evolution first
+  on every level up. An evolved weapon has three levels of its own and keeps the weapon's bonus
+  damage. Most other class weapons, like the Toxic blowpipe and the Thunder khopesh, don't evolve.
+  Level up cards say what evolves with what, the HUD and pause menu show how close a weapon is and
+  its slot glows gold once it's ready, and the **Collection log** on the title screen lists every
+  recipe, keeping what it makes as ??? until you've made it.
+- **Style prayers**: **Chivalry** makes slashes and sweeps hit harder and adds max hitpoints for
+  fighting up close, **Rigour** makes arrows, bolts and thrown weapons hit harder, and
+  **Augury** makes spells hit harder and their effects last longer.
 - **Adventurers**: three to start with, each with their own starting weapon, outfit and bonus.
   The rest join for beating a map or for a task done on one (in a single run, however it ends);
   the adventurer screen says what each one wants, and a task done mid-run rings the town
@@ -93,7 +116,10 @@ version and how to run it.
       new maps: **Osmumten's fang**, fast stabs that hit bosses and elites again; the
       **Tzhaar-ket-om**, a slow sweep with huge knockback whose every fourth swing is a Quake
       that stuns; the **Dragon warhammer**, whose every third blow is a Smash that makes what it
-      hits take 30% more damage; and the **Dual macuahuitl**, very fast slashes on both sides.
+      hits take 30% more damage; the **Dual macuahuitl**, very fast slashes on both sides; and
+      the **Thunder khopesh**, quick slashes whose every third is a Thunderclap that hits
+      everything around you; and **Dinh's bulwark**, a slow bash that hits everything around
+      you, further out than any other melee weapon.
       The Godsword knight's **Godsword** is a bare blade until level 2, when you pick its hilt
       (Armadyl, Bandos, Saradomin or Zamorak) and with it its special attack. **Dragon claws**
       slash four times at once, the last the hardest, and the **Ivandis flail** hits vampyres and
@@ -127,11 +153,11 @@ version and how to run it.
     | Desert     | Osmumten's fang                                  | Smoke Burst (Fareed), Blood Burst (Dessous), Shadow Burst (Damis)                                    |
     | Fremennik  | Dragon hunter crossbow                           | Vengeance and Astral runes (Dagannoth Prime)                                                         |
     | Karamja    | Tzhaar-ket-om                                    | Dragonfire shield (Elvarg), Obsidian armour and Toktz-xil-ul (Ket-Zek)                               |
-    | Kourend    | Kodai wand                                       | Dragon warhammer (Lizardman shaman), Book of the dead and Undead Grasp (Skotizo)                     |
-    | Varlamore  | Dizana's quiver and Colossal blade               | Dual macuahuitl (Manticore), Blue moon spear (Shockwave Colossus), Eclipse atlatl (Javelin Colossus) |
+    | Kourend    | Kodai wand, Dinh's bulwark                       | Dragon warhammer (Lizardman shaman), Book of the dead and Undead Grasp (Skotizo)                     |
+    | Varlamore  | Dizana's quiver, Colossal blade, Thunder khopesh | Dual macuahuitl (Manticore), Blue moon spear (Shockwave Colossus), Eclipse atlatl (Javelin Colossus) |
     | Morytania  | Ivandis flail                                    | Dragon claws (Pestilent Bloat)                                                                       |
     | God Wars   | Godsword, Torva, Virtus and the Zaryte vambraces | Armadyl crossbow (Kree'arra)                                                                         |
-    | Prifddinas | Crystal bow                                      | Crystal staff (surviving 10 minutes)                                                                 |
+    | Prifddinas | Crystal bow, Crystal armour                      | Crystal staff (surviving 10 minutes)                                                                 |
     | Inferno    |                                                  | Toktz-mej-tal (JalTok-Jad)                                                                           |
 
 - **Fun maps**: the Grand Exchange, East Varrock, Falador, Last Man Standing, Castle Wars and Pest
@@ -143,6 +169,10 @@ version and how to run it.
   teams, who fight each other too, and a Flag carrier who runs from you; Pest Control is the Void
   Knight's island and its pests, and its bosses are the four portals, which open together behind
   shields that drop one by one.
+- **Late endless caskets**: past fifteen minutes in any endless run, fun maps included, a casket that
+  would drop only has a 5% chance to, and only 10 can lie on the ground at once. A round's master
+  casket skips the chance but not the limit. Past the limit you get "You have a funny feeling there
+  would've been a chest".
 - **Elites** (golden, bigger, about one a minute) drop **reward caskets**, and any enemy can
   drop one now and then. They come in clue scroll tiers (easy, medium, hard, elite, and master
   from bosses) and get better as the run goes on; a loot beam marks them, and an arrow at the
@@ -151,7 +181,8 @@ version and how to run it.
 - **Power-ups** drop now and then from anything that isn't a boss: the longer it's been since the
   last one, the likelier a kill drops one, so they turn up every couple of minutes early on and
   late. A cyan beam marks them; walk over one to use it there and then, before it blinks out
-  after 30 seconds. Their damage keeps up with the enemies' hitpoints.
+  after 30 seconds. Their damage keeps up with the enemies' hitpoints, and the same one never
+  drops twice in a row.
     - **Dwarf multicannon**: sets up by you and shoots the nearest enemies for 20 seconds.
     - **Book of the Dead**: raises a Greater Ghost, Skeleton or Zombie thrall to fight beside you
       for 30 seconds. The ghost and skeleton shoot from your side; the zombie goes after things.
@@ -160,9 +191,25 @@ version and how to run it.
     - **Magnet**: every drop on the ground flies to you, caskets and power-ups included.
     - **Giant stopwatch**: everything but bosses stands still for 8 seconds, even what turns up
       meanwhile.
+    - **Sled**: you ride at 2.2 times your speed for 8 seconds and nothing can hurt you, poison and
+      bosses included. It shoves enemies aside without hurting them, your weapons keep firing, and
+      it frees you if you're frozen. Effect duration doesn't stretch it.
+    - **Giant rune essence**: a moment after you pick it up, a huge rock lands on the thickest
+      crowd within 12 tiles, marked in cyan. It hits everything within 5 tiles and throws
+      survivors back, and bosses lose 8% of their hitpoints. It can't hurt you.
+    - **Evil Bob**: a giant Evil Bob charges through the thickest crowd three times, over walls and
+      all. Everything in his way is hit once a pass and thrown aside.
+    - **Fairy ring**: a ring opens at your feet for 12 seconds. Anything that isn't a boss and comes
+      within 2.5 tiles is warped far away, behind you if you're on the move. It stays where it
+      opened, and shots still come through.
+    - **Drill Demon**: "Run laps, maggots!" For 9 seconds everything within 12 tiles runs round you
+      in a big circle, faster than usual, and can't attack, though shots already on their way still
+      land. Bosses, what can't move and flag carriers carry on.
 - **Maps**: every run is on one map, and beating a map (killing its final boss) opens the next.
   Enemies have more hitpoints and hit harder on each one. Pick where to go under the
-  adventurers. Each map's monsters are from its part of the world:
+  adventurers. Enemies only turn up where you could stand and walk to, never behind a wall or in
+  rock, ghosts included (East Varrock's come from both sides of the ditch, which they jump). Each
+  map's monsters are from its part of the world:
     - **Lumbridge**: chickens, rats, goblins, cows and imps, the swamp's giant rats and frogs,
       Draynor's dark wizards, and the zombies, skeletons, ghosts, spiders and bats of Draynor
       Manor.
@@ -190,7 +237,8 @@ version and how to run it.
     - **God Wars Dungeon**: the armies of Bandos, Armadyl, Saradomin and Zamorak, who march in
       from their own sides and fight each other as much as you: goblins, orks and cyclopes,
       aviansies, knights and priests, imps, hellhounds and bloodvelds, and the gods' spiritual
-      warriors.
+      warriors. Anything with a wall between it and the army it's after for 3 seconds gives up
+      and comes for you for good; a crowd in the way or a long walk doesn't count.
     - **Prifddinas**: the Gauntlet's crystalline rats, bats, spiders, scorpions, wolves, bears
       and dark beasts, the city's guards, the Iorwerth's warriors and archers and Zulrah's
       snakelings, and the corrupted ones late on.
@@ -262,7 +310,9 @@ version and how to run it.
   replaces (and alchs) the old.
 - **Gear sets**: the Void knight's equipment (3 of its 4 pieces), Inquisitor's, Crystal armour,
   Torva and Virtus (2 of their 3 each) give a bonus when enough pieces are worn, and once you
-  wear one piece, caskets often bring the set's missing ones.
+  wear one piece, caskets can bring the set's missing ones: 15% of the time, if the piece is no
+  more than one rarity above what the casket rolled. Alch or reroll a piece of a set you've started
+  and caskets stop bringing that set for the rest of the run.
 - **Utility** items go in a 4 slot inventory and are used with **1-4** (or a click): sharks and
   anglerfish, potions (Super attack, strength and defence, Stamina, Magic, Ranging, Super
   combat, Bastion, Battlemage, Overload, Divine super combat) with a timer, brews (a Saradomin
@@ -279,6 +329,9 @@ version and how to run it.
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
 - **Hitsplats** are the client's own sprites: red for damage (on you too), green for poison.
 - **Coins** are banked when a run ends. Spend them on **Skills** (permanent bonuses, refundable).
+  **Woodcutting** adds melee knockback, and every other level of a melee weapon raises it too.
+  **Smithing** and **Crafting** are the dear ones: up to 2 more weapon slots and 2 more passive
+  slots.
   (The Dwarf engineer is out of the game for now; its cannon is a power-up. Saves keep it
   unlocked.)
 - The **Armoury** (on the title screen) upgrades gear for good, with banked coins. Every piece

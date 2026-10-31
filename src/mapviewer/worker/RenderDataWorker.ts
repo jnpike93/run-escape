@@ -19,7 +19,7 @@ import { MinimapData, loadMinimapData } from "./MinimapData";
 import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader";
 import { WorkerState, clearWorkerStateCaches, createWorkerState } from "./WorkerState";
 
-export type { WorkerState } from "./WorkerState";
+export { clearWorkerStateCaches, createWorkerState, type WorkerState } from "./WorkerState";
 
 registerSerializer(renderDataLoaderSerializer);
 
@@ -290,4 +290,7 @@ async function exportDatSpritesToZip(cacheSystem: CacheSystem, zip: JSZip): Prom
 
 export type RenderDataWorker = typeof worker;
 
-expose(worker);
+declare const WorkerGlobalScope: any;
+if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope) {
+    expose(worker);
+}

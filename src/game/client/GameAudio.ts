@@ -3,8 +3,9 @@ import { SoundData, SoundLoader, SoundLoaderInput } from "../../mapviewer/worker
 
 export type AudioSettings = {
     muted: boolean;
-    // 0-1
+    // 0-1: the sound effects', and the music's (maps with music)
     volume: number;
+    music: number;
 };
 
 const SETTINGS_KEY = "rune-survivors-audio";
@@ -30,14 +31,20 @@ function loadSettings(): AudioSettings {
         const json = window.localStorage.getItem(SETTINGS_KEY);
         if (json) {
             const data = JSON.parse(json);
+            const volume = readVolume(data.volume, 0.6);
             return {
                 muted: !!data.muted,
-                volume:
-                    typeof data.volume === "number" ? Math.min(Math.max(data.volume, 0), 1) : 0.6,
+                volume,
+                // Saved before music had its own: as loud as it was
+                music: readVolume(data.music, volume),
             };
         }
     } catch (e) {}
-    return { muted: false, volume: 0.6 };
+    return { muted: false, volume: 0.6, music: 0.6 };
+}
+
+function readVolume(value: unknown, otherwise: number): number {
+    return typeof value === "number" ? Math.min(Math.max(value, 0), 1) : otherwise;
 }
 
 // Plays the client's synthesized sound effects with Web Audio. Browsers only
@@ -94,6 +101,9 @@ export class GameAudio {
         if (this.context.state === "suspended") {
             this.context.resume();
         }
+        if (this.music && this.music.element.paused && !this.settings.muted) {
+            this.music.element.play().catch(() => {});
+        }
     };
 
     private applyVolume(): void {
@@ -101,7 +111,7 @@ export class GameAudio {
             this.master.gain.value = this.settings.muted ? 0 : this.settings.volume;
         }
         if (this.music) {
-            this.music.element.volume = this.settings.volume * MUSIC_VOLUME;
+            this.music.element.volume = this.settings.music * MUSIC_VOLUME;
             this.music.element.muted = this.settings.muted;
         }
     }
@@ -132,6 +142,9 @@ export class GameAudio {
     setSettings(settings: Partial<AudioSettings>): void {
         this.settings = { ...this.settings, ...settings };
         this.applyVolume();
+        if (this.music && this.music.element.paused && !this.settings.muted) {
+            this.music.element.play().catch(() => {});
+        }
         try {
             window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
         } catch (e) {}

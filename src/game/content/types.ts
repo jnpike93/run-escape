@@ -33,7 +33,12 @@ export type StatKey =
     | "bossMight"
     // Damage multiplier bonus for each level gained in the run (so it grows
     // as the run goes on), on top of might
-    | "levelMight";
+    | "levelMight"
+    // Melee weapons' knockback multiplier bonus
+    | "meleeKnockback"
+    // Slots on top of the usual ones, bought in the shop
+    | "weaponSlots"
+    | "passiveSlots";
 
 export type Stats = Record<StatKey, number>;
 
@@ -63,6 +68,9 @@ export function emptyStats(): Stats {
         auraArea: 0,
         bossMight: 0,
         levelMight: 0,
+        meleeKnockback: 0,
+        weaponSlots: 0,
+        passiveSlots: 0,
     };
 }
 
@@ -95,7 +103,7 @@ export type EnemyDef = {
     knockbackResist?: number;
     // Render scale on top of the NPC's own
     scale?: number;
-    // Walks through walls and water
+    // Walks through walls and water (though it turns up where the rest do)
     ghost?: boolean;
     // Cache sound effect ids
     sounds: { attack: number; hit: number; death: number };
@@ -523,9 +531,10 @@ export type WeaponDef = {
     boltProcs?: { chance: number; procs: BoltProcDef[] };
     // Auras: each pulse leaves the ground around the player burning for the
     // level's duration, hurting what stands in it every half second for this
-    // fraction of the level's damage (Toktz-mej-tal's obsidian), with
-    // spotAnim looping on it. radius: a fraction of the aura's radius.
-    burns?: { damage: number; radius: number; spotAnim: number };
+    // fraction of the level's damage (Toktz-mej-tal's obsidian), with flames
+    // of locId (scenery, on its own animation) on it. radius: a fraction of
+    // the aura's radius.
+    burns?: { damage: number; radius: number; locId: number };
     // At this level the player picks one of these weapons to become, at the
     // same level (the godsword's blade takes a hilt): the level up's next
     // choice is the pick, each shown as its hilt
@@ -561,13 +570,19 @@ export type SpecialAttackDef = {
     spotAnim: number;
     // Cache sound effect, the weapon's when unset
     sound?: number;
+    // Hits everything within this many tiles all round the player (more with
+    // area), not just what the swing reaches, with impactSpotAnim on each
+    aoe?: { radius: number; impactSpotAnim?: number };
     effect?: // What it hits can't move for a while (bosses shrug it off)
         | { kind: "freeze"; seconds: number }
         // Heals the player by this fraction of the damage dealt, up to max
         | { kind: "heal"; fraction: number; max: number }
         // What it hits takes this much more damage from everything for a while
         // (0.25 = +25%)
-        | { kind: "drain"; amount: number; seconds: number };
+        | { kind: "drain"; amount: number; seconds: number }
+        // Sets what it hits burning: this fraction of the hit's damage every
+        // second for seconds
+        | { kind: "burn"; damage: number; seconds: number };
 };
 
 export type PassiveDef = {
@@ -862,7 +877,64 @@ export type PowerUpEffect =
     | { kind: "magnet" }
     // Everything that isn't a boss stands still, and so does whatever turns up
     // meanwhile
-    | { kind: "freeze"; seconds: number };
+    | { kind: "freeze"; seconds: number }
+    // Rides off at this many times the speed with nothing able to hurt them,
+    // for a set time: Effect duration doesn't stretch it
+    | { kind: "sled"; seconds: number; speed: number }
+    // A rock (locId) falls on the thickest crowd within range of the player,
+    // delay seconds later, hitting everything within radius and throwing what
+    // lives back this many tiles. Bosses lose bossDamage of their hitpoints.
+    | {
+          kind: "rock";
+          delay: number;
+          range: number;
+          radius: number;
+          damage: number;
+          knockback: number;
+          bossDamage: number;
+          locId: number;
+          spotAnim: number;
+      }
+    // A giant NPC charges through the crowd this many times, ignoring walls.
+    // Each pass it hits everything within radius once, for damage, and throws
+    // it this many tiles aside. Drawn at scale, playing walkSeq.
+    | {
+          kind: "rampage";
+          seconds: number;
+          passes: number;
+          speed: number;
+          radius: number;
+          damage: number;
+          knockback: number;
+          npcId: number;
+          walkSeq: number;
+          scale: number;
+      }
+    // A ring (locId, drawn at scale) opens at the player's feet and warps
+    // whatever walks within radius far away, showing spotAnim where it was
+    | {
+          kind: "ring";
+          seconds: number;
+          radius: number;
+          locId: number;
+          spotAnim: number;
+          scale: number;
+      }
+    // Everything within range runs laps around the player at this many times
+    // its speed, radius tiles out, and can't attack; a line for the player to
+    // shout
+    | {
+          kind: "laps";
+          seconds: number;
+          range: number;
+          radius: number;
+          speed: number;
+          shout: string;
+      };
+
+// What the player has in hand and how they stand while a power-up lasts. Baked
+// with the player (GameAssets.getPowerUpLookRequests), so it's on at once.
+export type PowerUpLook = { objId: number; idleSeq: number; moveSeq: number };
 
 // Dropped now and then by enemies, picked up by walking over it and used there
 // and then
@@ -880,6 +952,12 @@ export type PowerUpDef = {
     flash?: string;
     // Cache sound effect when it's picked up (-1 for none)
     sound: number;
+    // Cache sound effect when it wears off
+    endSound?: number;
+    // Cache sound effect each time it lands a blow
+    hitSound?: number;
+    // Worn while it lasts
+    look?: PowerUpLook;
     effect: PowerUpEffect;
 };
 

@@ -407,6 +407,18 @@ const WEAPON_OVERRIDES: Record<string, WeaponOverride> = {
                 description:
                     "Evolved from Blood Burst. Massive crimson barrage that drains up to 2 HP per hit.",
             },
+            1: {
+                damage: 44,
+                cooldown: 1.1,
+                knockback: 0.35,
+                description: "+15% damage.",
+            },
+            2: {
+                damage: 49,
+                cooldown: 1.1,
+                knockback: 0.35,
+                description: "+15% damage.",
+            },
         },
     },
     saradomin_strike: {

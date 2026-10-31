@@ -1,5 +1,5 @@
 // Run Escape - Multiplayer Co-Op Pickups & Shared Loot Methods
-import { sanitizeSlot } from './mp-constants.js?v=8.5';
+import { sanitizeSlot } from './mp-constants.js?v=8.6';
 
 export const mpPickupsMethods = {
     applyCoopPickup(msg) {
@@ -73,6 +73,34 @@ export const mpPickupsMethods = {
             client.updateHud(true);
             this.syncLocalPauseState(client, true);
         } else if (kind === 'powerUp') {
+            if (msg.powerUpId === 'sled' && sanitizeSlot(msg.targetSlot, 0) === this.localSlot) {
+                if (typeof sim.usePowerUp === 'function') {
+                    sim.usePowerUp({
+                        id: 'sled',
+                        name: 'Sled',
+                        objId: 4084,
+                        weight: 2,
+                        effect: { kind: 'sled', seconds: 8, speed: 2.2 },
+                        look: { objId: 4084, idleSeq: 1461, moveSeq: 1462 }
+                    });
+                } else {
+                    const endTick = sim.tick + 400;
+                    sim.sledEndTick = endTick;
+                    sim.sledSpeed = 2.2;
+                    if (sim.player) sim.player.frozen = 0;
+                    if (Array.isArray(sim.powerUps)) {
+                        sim.powerUps.push({ uid: (sim.nextUid = (sim.nextUid || 1) + 1), id: 'sled', startTick: sim.tick, endTick });
+                    }
+                    if (Array.isArray(sim.events)) {
+                        sim.events.push({ type: 'powerUp', id: 'sled', message: 'You jump on the sled!', x: sim.player?.x || 0, y: sim.player?.y || 0 });
+                    }
+                }
+                if (client.handleEvents && sim.takeEvents) {
+                    client.handleEvents(sim, sim.takeEvents());
+                }
+                client.updateHud?.(true);
+                return;
+            }
             if (typeof msg.message === 'string' && msg.message) {
                 client.store?.toast(msg.message.slice(0, 80));
             }
@@ -206,6 +234,24 @@ export const mpPickupsMethods = {
                         this.syncLocalPauseState(client, true);
                     }
                 } else if (pickup.kind === 'powerUp' || pickup.kind === 'powerup') {
+                    if (pickup.powerUp === 'sled') {
+                        const endTick = sim.tick + 400;
+                        p2.sled = true;
+                        p2.sledEndTick = endTick;
+                        p2.frozen = 0;
+                        p2.invulnerable = Math.max(p2.invulnerable || 0, 13);
+                        if (Array.isArray(sim.events)) {
+                            sim.events.push({ type: 'powerUp', id: 'sled', message: `${peer.name} jumped on a sled!`, x: p2.x, y: p2.y });
+                        }
+                        this.send({
+                            type: 'coop_pickup',
+                            kind: 'powerUp',
+                            powerUpId: 'sled',
+                            targetSlot: peer.slot,
+                            message: `${peer.name} jumped on a sled!`
+                        });
+                        continue;
+                    }
                     const savedPlayer = sim.player;
                     const savedSlot = this._activeAttackerSlot;
                     sim.player = p2;
@@ -233,6 +279,8 @@ export const mpPickupsMethods = {
                     this.send({
                         type: 'coop_pickup',
                         kind: 'powerUp',
+                        powerUpId: pickup.powerUp || '',
+                        targetSlot: peer.slot,
                         message: `${peer.name} activated a power-up!`
                     });
                 }

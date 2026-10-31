@@ -1,8 +1,9 @@
 import { Rarity } from "../content/rarity";
 import { GearSlot } from "../content/types";
+import { WeaponStatLine } from "../content/weaponStats";
 import { ChestAction } from "../core/Loot";
 import { RunResult } from "../core/Sim";
-import { SaveData } from "../core/save";
+import { ChallengeMode, SaveData } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 
@@ -14,6 +15,7 @@ export type Screen =
     | "armoury"
     | "quests"
     | "leaderboard"
+    | "collectionLog"
     | "run";
 
 export type RunOverlay = "none" | "levelUp" | "chest" | "paused" | "dead" | "victory";
@@ -28,6 +30,10 @@ export type SlotView = {
     // What it adds up to so far: "+18% damage", "+15% damage to this weapon"
     detail: string;
     desc?: string;
+    // Weapons: their stats at this level ("Damage 13", "Attacks 0.74/s")
+    stats?: string[];
+    // Weapons that evolve: the passive it takes, and what's done of it
+    evolution?: { passive: string; maxed: boolean; hasPassive: boolean; ready: boolean };
     // The item's own rarity, for the slot's border
     rarityColor: string;
 };
@@ -91,6 +97,7 @@ export type ChestView = {
 export type HudView = {
     // The run's map
     mapId: string;
+    challengeMode?: ChallengeMode;
     // An endless run's round
     round?: number;
     // Seconds until this round's final boss
@@ -105,19 +112,40 @@ export type HudView = {
     seconds: number;
     kills: number;
     coins: number;
+    maxWeapons: number;
+    maxPassives: number;
     weapons: SlotView[];
     passives: SlotView[];
+    // The player's stats from passives, gear, potions and their adventurer,
+    // the ones that aren't zero: "+18% damage", "+2 armour"
+    stats: string[];
     gear: GearSlotView[];
     inventory: InventorySlotView[];
     buffs: BuffView[];
     // Left this run, for a level up's rewards or a casket's item
     rerolls: number;
+    // What skipping the level up's rewards costs, while they can be skipped
+    skip?: { cost: number; affordable: boolean };
     // enraged: below half its hitpoints, faster and with its enraged attacks
     boss?: { name: string; fraction: number; enraged: boolean };
     // The quests this run can get on with: this map's, then the ones done all
     // over, leaving out the ones done before it
     quests: QuestTrackView[];
 };
+
+// One row of the run's damage: what dealt it (a weapon by its last tier),
+// with its kills, and damage a second for a weapon (over the time it was had)
+export type DamageView = {
+    name: string;
+    iconObjId?: number;
+    iconSpriteId?: number;
+    color?: string;
+    damage: number;
+    kills: number;
+    perSecond?: number;
+};
+
+export type BossKillView = { name: string; seconds: number };
 
 // done / of: how far it's got, this run's kills and caskets included;
 // finished: this run finished it (it pays once the run is over)
@@ -141,6 +169,10 @@ export type ChoiceView = {
     isHilt: boolean;
     // The rolled rarity of this offer, if it has one
     rarity?: { name: string; color: string };
+    // Weapons: what this level changes, or a new weapon's stats
+    stats?: WeaponStatLine[];
+    // What it evolves or evolves with; held when the other half's owned
+    evolves?: { text: string; held: boolean };
 };
 
 export type Toast = { id: number; text: string; until: number };
@@ -155,6 +187,7 @@ export type UiSnapshot = {
     // been beaten)
     mapId: string;
     endless: boolean;
+    challengeMode: ChallengeMode;
     hud?: HudView;
     overlay: RunOverlay;
     choices: ChoiceView[];
@@ -165,8 +198,11 @@ export type UiSnapshot = {
     // than any before it on the map; newGear: the names of the gear it found
     // for the first time, for the Armoury; quests: the quests it finished,
     // and what they paid
+    // damage / bossKills: the stats screen's rows
     result?: RunResult & {
         characterName: string;
+        damage: DamageView[];
+        bossKills: BossKillView[];
         endlessRecord: boolean;
         points: number;
         pointsRecord: boolean;
@@ -198,11 +234,12 @@ export class GameStore {
             characterId: save.unlockedCharacters[0] ?? "warrior",
             mapId: "lumbridge",
             endless: false,
+            challengeMode: "normal",
             overlay: "none",
             choices: [],
             toasts: [],
             debug: false,
-            audio: { muted: false, volume: 0.6 },
+            audio: { muted: false, volume: 0.6, music: 0.6 },
             display: {
                 menuSpin: true,
                 pauseOnBlur: true,

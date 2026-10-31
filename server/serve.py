@@ -679,6 +679,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return "text/markdown; charset=utf-8"
         if path.endswith(".ttf"):
             return "font/ttf"
+        if path.endswith(".ogg"):
+            return "audio/ogg"
         return super().guess_type(path)
 
     def copyfile(self, source, outputfile):

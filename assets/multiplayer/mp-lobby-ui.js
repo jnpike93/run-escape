@@ -11,8 +11,10 @@ import {
     sanitizeRoomId,
     sanitizeCharacter,
     sanitizeSlot,
-    escapeHtml
-} from './mp-constants.js?v=8.5';
+    escapeHtml,
+    buildPlayerBakeSeqIds,
+    getWeaponStance
+} from './mp-constants.js?v=8.6';
 
 const sanitizePlayerName = (name, fallback = '') => sanitizeName(name) || fallback;
 
@@ -245,12 +247,9 @@ export const mpLobbyUiMethods = {
             monk: { 4: 544, 7: 542, 2: 1718, 3: 1389 }
         };
 
-        const seqIds = [
-            808, 819, 824, 836,
-            386, 390, 393, 401, 426, 711, 806, 811, 1167, 1378, 1658, 1979,
-            2062, 2614, 2661, 4230, 5061, 7638, 7640, 7642, 7644, 7855, 8056, 9493
-        ];
+        const seqIds = buildPlayerBakeSeqIds(client);
         this.playerSeqIds = seqIds;
+        if (!this.charStances) this.charStances = new Map();
         const bakes = [];
 
         if (!client.assets.models.has('corgi')) {
@@ -301,11 +300,13 @@ export const mpLobbyUiMethods = {
                     equipment: equip
                 };
             }
+            const stance = getWeaponStance(appearance.equipment?.[3]);
+            this.charStances.set(pureId, stance);
             bakes.push({
                 kind: 'player',
                 key: cid,
                 appearance,
-                seqIds
+                seqIds: [...new Set([819, stance.idle, stance.run, ...seqIds])]
             });
         }
 
@@ -592,6 +593,12 @@ export const mpLobbyUiMethods = {
         const activeScaleParty = Math.max(2, Math.min(4, partyCount));
         const diffWeights = getCoopDifficultyWeights(activeScaleParty);
         const customDiff = Number(this.difficultyMult) || 1.0;
+        const customModeLabel =
+            customDiff === 2
+                ? 'Extreme One Chunk Man (2x Diff · 1.5x Pts)'
+                : customDiff === 3
+                  ? 'Nightmare Man (3x Diff · 2.5x Pts)'
+                  : `Diff: ${customDiff}x`;
         const hpScaleLabel = `${(diffWeights.hpMult * customDiff).toFixed(2)}x Mob / ${(diffWeights.bossHpMult * customDiff).toFixed(2)}x Boss HP`;
         const spawnScaleLabel = `${diffWeights.spawnMult}x Spawns (+${Math.round(diffWeights.heavyWeightBias * 100)}% Heavy Weight)`;
         const dmgScaleLabel = `${(diffWeights.dmgMult * customDiff).toFixed(2)}x Dmg`;
@@ -719,11 +726,11 @@ export const mpLobbyUiMethods = {
                             border: 2px solid ${customDiff > 1 ? '#ffd700' : '#5a4a35'};
                             color: ${customDiff > 1 ? '#ffd700' : '#b8a890'};
                             padding: 5px 10px; cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; white-space: nowrap;">
-                            Diff: ${customDiff}x
+                            ${customModeLabel}
                         </button>
                     ` : `
                         <div style="font-size: 15px; color: #ffff00;">
-                            ${escapeHtml(currentRegion.name)}${this.selectedEndless ? ' <span style="color: #ff6040;">[ENDLESS]</span>' : ''} · Diff: <strong style="color:#ffd700;">${customDiff}x</strong> <span style="font-size: 11px; color: #888;">(Selected by Host)</span>
+                            ${escapeHtml(currentRegion.name)}${this.selectedEndless ? ' <span style="color: #ff6040;">[ENDLESS]</span>' : ''} · <strong style="color:#ffd700;">${customModeLabel}</strong> <span style="font-size: 11px; color: #888;">(Selected by Host)</span>
                         </div>
                     `}
                 </div>

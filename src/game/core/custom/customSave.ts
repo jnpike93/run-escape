@@ -11,6 +11,64 @@ export function isCustomMap(mapId: string): boolean {
     return ALWAYS_UNLOCKED_CUSTOM_MAP_IDS.has(mapId);
 }
 
+export type ChallengeMode = "normal" | "extreme_one_chunk" | "nightmare";
+
+export type ChallengeModeDef = {
+    id: ChallengeMode;
+    name: string;
+    shortName: string;
+    difficultyMultiplier: number;
+    pointsMultiplier: number;
+    color: string;
+    description: string;
+};
+
+export const CHALLENGE_MODES: readonly ChallengeModeDef[] = [
+    {
+        id: "normal",
+        name: "Normal",
+        shortName: "Normal",
+        difficultyMultiplier: 1,
+        pointsMultiplier: 1,
+        color: "#ff981f",
+        description: "Standard map difficulty (1x difficulty, 1x points).",
+    },
+    {
+        id: "extreme_one_chunk",
+        name: "Extreme One Chunk Man",
+        shortName: "Extreme One Chunk",
+        difficultyMultiplier: 2,
+        pointsMultiplier: 1.5,
+        color: "#ff6040",
+        description: "2x map difficulty (2x monster & boss HP and damage) for 1.5x points.",
+    },
+    {
+        id: "nightmare",
+        name: "Nightmare Man",
+        shortName: "Nightmare Man",
+        difficultyMultiplier: 3,
+        pointsMultiplier: 2.5,
+        color: "#e040ff",
+        description: "3x map difficulty (3x monster & boss HP and damage) for 2.5x points.",
+    },
+];
+
+export function isChallengeMode(value: unknown): value is ChallengeMode {
+    return value === "normal" || value === "extreme_one_chunk" || value === "nightmare";
+}
+
+export function getChallengeMode(mode?: ChallengeMode): ChallengeModeDef {
+    return CHALLENGE_MODES.find((m) => m.id === mode) ?? CHALLENGE_MODES[0];
+}
+
+export function getChallengeDifficultyMultiplier(mode?: ChallengeMode): number {
+    return getChallengeMode(mode).difficultyMultiplier;
+}
+
+export function getChallengePointsMultiplier(mode?: ChallengeMode): number {
+    return getChallengeMode(mode).pointsMultiplier;
+}
+
 export type MapBestRecord = {
     seconds: number;
     winSeconds: number;
@@ -19,6 +77,7 @@ export type MapBestRecord = {
     characterId?: string;
     bossesKilled?: number;
     points?: number;
+    challengeMode?: ChallengeMode;
 };
 
 export type LevelPointsBreakdown = {
@@ -27,6 +86,8 @@ export type LevelPointsBreakdown = {
     clearPoints: number;
     endlessPoints: number;
     difficultyMultiplier: number;
+    modePointsMultiplier: number;
+    challengeMode: ChallengeMode;
     totalPoints: number;
 };
 
@@ -48,6 +109,10 @@ export function calculateRunPointsBreakdown(run: RunSummary): LevelPointsBreakdo
     const map = MAP_BY_ID.get(run.mapId);
     const bossAt = map?.events?.find((ev) => ev.kind === "finalBoss")?.at ?? 900;
     const difficultyMultiplier = getMapDifficultyMultiplier(run.mapId);
+    const challengeMode: ChallengeMode = isChallengeMode(run.challengeMode)
+        ? run.challengeMode
+        : "normal";
+    const modePointsMultiplier = getChallengePointsMultiplier(challengeMode);
     const kills = Math.max(0, Math.floor(num(run.kills, 0)));
     const seconds = Math.max(0, num(run.seconds, 0));
     const minutes = Math.max(1, seconds / 60);
@@ -69,7 +134,9 @@ export function calculateRunPointsBreakdown(run: RunSummary): LevelPointsBreakdo
     const endlessPoints =
         extraRounds > 0 ? extraRounds * 4000 + extraRounds * extraRounds * 1000 : 0;
     const totalPoints = Math.round(
-        (killPoints + progressionPoints + clearPoints + endlessPoints) * difficultyMultiplier,
+        (killPoints + progressionPoints + clearPoints + endlessPoints) *
+            difficultyMultiplier *
+            modePointsMultiplier,
     );
     return {
         killPoints,
@@ -77,6 +144,8 @@ export function calculateRunPointsBreakdown(run: RunSummary): LevelPointsBreakdo
         clearPoints,
         endlessPoints,
         difficultyMultiplier,
+        modePointsMultiplier,
+        challengeMode,
         totalPoints,
     };
 }
@@ -103,6 +172,9 @@ export function calculateLevelPointsBreakdown(
         pendingRun?.endless && pendingRun.mapId === mapId ? pendingRun.seconds : 0,
     );
     const difficultyMultiplier = getMapDifficultyMultiplier(mapId);
+    const savedMode: ChallengeMode = isChallengeMode(mb?.challengeMode)
+        ? mb.challengeMode
+        : "normal";
     if (!mb && endRound <= 0 && wins <= 0) {
         return {
             killPoints: 0,
@@ -110,6 +182,8 @@ export function calculateLevelPointsBreakdown(
             clearPoints: 0,
             endlessPoints: 0,
             difficultyMultiplier,
+            modePointsMultiplier: 1,
+            challengeMode: "normal",
             totalPoints: 0,
         };
     }
@@ -146,16 +220,22 @@ export function calculateLevelPointsBreakdown(
     const extraRounds = Math.max(0, Math.floor(endRound) - 1);
     const endlessPoints =
         extraRounds > 0 ? extraRounds * 4000 + extraRounds * extraRounds * 1000 : 0;
+    const savedPts = Math.floor(num(mb?.points, 0));
     const computedTotal = Math.round(
         (killPoints + progressionPoints + clearPoints + endlessPoints) * difficultyMultiplier,
     );
-    const totalPoints = Math.max(Math.floor(num(mb?.points, 0)), computedTotal);
+    const useSaved = savedPts >= computedTotal && savedPts > 0;
+    const challengeMode = useSaved ? savedMode : "normal";
+    const modePointsMultiplier = getChallengePointsMultiplier(challengeMode);
+    const totalPoints = Math.max(savedPts, computedTotal);
     return {
         killPoints,
         progressionPoints,
         clearPoints,
         endlessPoints,
         difficultyMultiplier,
+        modePointsMultiplier,
+        challengeMode,
         totalPoints,
     };
 }
@@ -209,6 +289,9 @@ export function migrateCustomSaveFields(save: SaveData, data: Partial<SaveData>)
                 if (typeof best.points === "number" && isFinite(best.points)) {
                     rec.points = Math.max(0, Math.floor(best.points));
                 }
+                if (isChallengeMode(best.challengeMode)) {
+                    rec.challengeMode = best.challengeMode;
+                }
                 save.mapBest[id] = rec;
             }
         }
@@ -232,7 +315,13 @@ export function recordCustomRunStats(save: SaveData, run: RunSummary): void {
     b.kills = Math.max(b.kills ?? 0, run.kills ?? 0);
     b.level = Math.max(b.level ?? 0, run.level ?? 0);
     const runPts = calculateRunPoints(run);
-    b.points = Math.max(b.points ?? 0, runPts);
+    const prevPts = b.points ?? 0;
+    if (runPts >= prevPts) {
+        b.points = runPts;
+        if (isChallengeMode(run.challengeMode)) {
+            b.challengeMode = run.challengeMode;
+        }
+    }
     save.mapBest[run.mapId] = b;
 }
 

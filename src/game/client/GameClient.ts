@@ -4,6 +4,7 @@ import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
 import { RegionData, RegionDataInput } from "../../mapviewer/worker/RegionData";
 import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
 import massacre from "../../media/music/massacre.ogg";
+import { CUSTOM_MUSIC, TITLE_MUSIC } from "./custom/customMusic";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { CHARACTERS, getCharacter } from "../content/characters";
 import { redeemSecretCode } from "../content/custom/secretCodes";
@@ -15,15 +16,19 @@ import { PASSIVES, formatPassiveValue, getPassive } from "../content/passives";
 import { THRALLS } from "../content/powerups";
 import { QUESTS, describeQuest } from "../content/quests";
 import { RARITIES, Rarity } from "../content/rarity";
-import { LOCKABLE_ITEMS, describeUnlockTask } from "../content/unlocks";
+import { formatStats } from "../content/stats";
+import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlocks";
 import { paced } from "../content/waves";
-import { WEAPONS } from "../content/weapons";
+import { formatWeaponStat, weaponStats } from "../content/weaponStats";
+import { WEAPONS, getWeapon } from "../content/weapons";
 import { iconCache } from "../ui/ItemIcon";
 import { ChestAction } from "../core/Loot";
 import { Sim, TICKS_PER_SECOND } from "../core/Sim";
-import { describeChoice } from "../core/Upgrades";
-import { SimEvent } from "../core/entities";
+import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
+import { SimEvent, WeaponState } from "../core/entities";
 import {
+    CHALLENGE_MODES,
+    ChallengeMode,
     SaveData,
     SaveStore,
     buyArmouryUpgrade,
@@ -35,6 +40,7 @@ import {
     getFinishedQuests,
     getMetaStats,
     getQuestProgress,
+    isChallengeMode,
     isEndlessRecord,
     isEndlessUnlocked,
     isMapUnlocked,
@@ -49,19 +55,24 @@ import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./Dis
 import {
     GameAssets,
     HITSPLAT_SPRITES,
-    PLAYER_SEQS,
     getCharacterAppearance,
     getRunAppearance,
 } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
-import { ChoiceView, GameStore, HudView, QuestTrackView, Screen } from "./GameStore";
+import { ChoiceView, GameStore, HudView, QuestTrackView, Screen, SlotView } from "./GameStore";
 import { GameView } from "./GameView";
 import { getBuffViews, getChestView, getGearViews, getInventoryViews } from "./ItemViews";
 import { Minimap } from "./Minimap";
-import { getPlayerOrDogModel, isDogCharacter } from "./custom/dogActors";
+import {
+    DOG_ACTOR_SCALE,
+    DOG_HEIGHT_OFFSET,
+    getPlayerOrDogModel,
+    isDogCharacter,
+} from "./custom/dogActors";
 import { Overlay, ScreenPoint } from "./Overlay";
+import { getBossKillViews, getDamageViews } from "./RunStatsViews";
 
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
 export const TICK_MS = 1000 / TICKS_PER_SECOND;
@@ -75,6 +86,7 @@ const TITLE_MAP = MAPS[0];
 // Wiki
 const MUSIC: Record<string, string> = {
     Massacre: massacre,
+    ...CUSTOM_MUSIC,
 };
 
 // Title screen camera: lower and slowly circling the character (RS angle units
@@ -121,9 +133,25 @@ function getQuestTrackViews(save: SaveData, sim: Sim): QuestTrackView[] {
     });
 }
 
+// How far a weapon has got towards its evolution, for the HUD and pause menu
+function getEvolutionView(sim: Sim, weapon: WeaponState): SlotView["evolution"] {
+    const evolution = weapon.def.evolution;
+    if (!evolution || !isAvailable(getWeapon(evolution.into), sim.unlockedItems)) {
+        return undefined;
+    }
+    const owned = new Set(sim.passives.map((p) => p.id));
+    return {
+        passive: getPassive(evolution.requiresPassive).name,
+        maxed: weapon.level >= weapon.def.levels.length,
+        hasPassive: owned.has(evolution.requiresPassive),
+        ready: canEvolve(weapon, owned, sim.unlockedItems),
+    };
+}
+
 function getChoiceViews(sim: Sim): ChoiceView[] {
+    const style = getCharacter(sim.characterId).style;
     return sim.choices.map((choice) => {
-        const { title, text, iconObjId, iconSpriteId, quality } = describeChoice(choice);
+        const { title, text, iconObjId, iconSpriteId, quality, stats } = describeChoice(choice);
         const rarity = quality ? RARITIES[quality] : undefined;
         return {
             title,
@@ -134,6 +162,8 @@ function getChoiceViews(sim: Sim): ChoiceView[] {
             isEvolution: choice.kind === "evolve",
             isHilt: choice.kind === "hilt",
             rarity: rarity && { name: rarity.name, color: rarity.color },
+            stats,
+            evolves: getEvolutionHint(choice, sim.weapons, sim.passives, style, sim.unlockedItems),
         };
     });
 }
@@ -245,6 +275,7 @@ export class GameClient implements GameFrameHandler {
         this.save = store.getSnapshot().save;
         this.grid = titleGrid;
         this.grids.set(TITLE_MAP.id, titleGrid);
+        this.syncPlayArea();
         this.sounds = new GameSounds(audio);
         store.set({ audio: audio.settings, display: this.display });
         this.view = new GameView(assets);
@@ -272,6 +303,7 @@ export class GameClient implements GameFrameHandler {
             this.store.set({ characterId: options.autostart });
             this.startRun();
         } else {
+            this.audio.playMusic(MUSIC[TITLE_MUSIC]);
             this.showScreen("title");
         }
     }
@@ -319,6 +351,19 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    selectChallengeMode(challengeMode: ChallengeMode): void {
+        if (isChallengeMode(challengeMode)) {
+            this.store.set({ challengeMode });
+        }
+    }
+
+    cycleChallengeMode(): void {
+        const current = this.store.getSnapshot().challengeMode ?? "normal";
+        const idx = CHALLENGE_MODES.findIndex((m) => m.id === current);
+        const next = CHALLENGE_MODES[(idx + 1) % CHALLENGE_MODES.length].id;
+        this.store.set({ challengeMode: next });
+    }
+
     buyUpgrade(upgradeId: string): void {
         if (buyUpgrade(this.save, upgradeId)) {
             this.sounds.buy();
@@ -344,6 +389,11 @@ export class GameClient implements GameFrameHandler {
 
     setVolume(volume: number): void {
         this.audio.setSettings({ volume, muted: false });
+        this.store.set({ audio: this.audio.settings });
+    }
+
+    setMusicVolume(music: number): void {
+        this.audio.setSettings({ music, muted: false });
         this.store.set({ audio: this.audio.settings });
     }
 
@@ -466,7 +516,16 @@ export class GameClient implements GameFrameHandler {
             (mp?.gameStarted
                 ? !!mp?.gameConfig?.endless
                 : this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
+        const challengeMode: ChallengeMode = mp?.gameStarted
+            ? "normal"
+            : (this.store.getSnapshot().challengeMode ?? "normal");
         const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
+        const music = map.music && MUSIC[map.music];
+        if (music) {
+            this.audio.playMusic(music);
+        } else {
+            this.audio.stopMusic();
+        }
         if (!this.grids.has(mapId)) {
             this.store.set({
                 screen: "loading",
@@ -478,6 +537,7 @@ export class GameClient implements GameFrameHandler {
             this.grid = await this.loadGrid(mapId);
         } catch (e) {
             console.error("Failed to load map", mapId, e);
+            this.audio.stopMusic();
             this.store.set({ screen: "characters" });
             this.store.toast(`Couldn't get to ${map.name}.`);
             return;
@@ -504,19 +564,18 @@ export class GameClient implements GameFrameHandler {
             spawnY: map.spawn.y,
             unlockedItems: new Set(hostUnlockedItems),
             endless,
+            challengeMode,
             armoury: { ...hostArmoury },
         });
         for (let i = 0; i < this.options.stress; i++) {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
         }
         this.sim = sim;
+        this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);
         this.minimap.setMap(map);
-        const music = map.music && MUSIC[map.music];
         if (music) {
             this.audio.playMusic(music);
-        } else {
-            this.audio.stopMusic();
         }
         this.paused = false;
         this.runRecorded = false;
@@ -586,6 +645,23 @@ export class GameClient implements GameFrameHandler {
         return true;
     }
 
+    // Takes none of the level up's rewards, for coins from the run. False when
+    // it can't be skipped or there aren't the coins.
+    skip(): boolean {
+        const sim = this.sim;
+        if (!sim || sim.state !== "levelUp") {
+            return false;
+        }
+        if (!sim.skip()) {
+            this.sounds.denied();
+            return false;
+        }
+        this.sounds.buy();
+        this.syncOverlay();
+        this.updateHud(true);
+        return true;
+    }
+
     // Uses the utility item in an inventory slot (0-3)
     useItem(index: number): void {
         const sim = this.sim;
@@ -631,8 +707,9 @@ export class GameClient implements GameFrameHandler {
         window._hideOsrsPrayerBar?.();
         this.sim = undefined;
         this.paused = false;
-        this.audio.stopMusic();
+        this.audio.playMusic(MUSIC[TITLE_MUSIC]);
         this.grid = this.grids.get(TITLE_MAP.id)!;
+        this.syncPlayArea();
         this.renderer.setPlane(this.grid.plane);
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
@@ -684,6 +761,8 @@ export class GameClient implements GameFrameHandler {
             result: {
                 ...result,
                 characterName: getCharacter(sim.characterId).name,
+                damage: getDamageViews(sim, result.stats),
+                bossKills: getBossKillViews(result.stats),
                 endlessRecord,
                 points,
                 pointsRecord,
@@ -775,6 +854,8 @@ export class GameClient implements GameFrameHandler {
             }
         } else if (overlay === "levelUp" && code === "KeyR") {
             this.reroll();
+        } else if (overlay === "levelUp" && code === "KeyX") {
+            this.skip();
         } else if (overlay === "none" && code.startsWith("Digit")) {
             // The casket screen has its own keys (it knows when its animation
             // is done)
@@ -793,12 +874,7 @@ export class GameClient implements GameFrameHandler {
         this.store.expireToasts();
 
         // The world fades out past the edge of the map
-        const { baseX, baseY, sizeX, sizeY } = this.grid;
-        const playArea = this.renderer.playArea;
-        playArea[0] = baseX;
-        playArea[1] = baseY;
-        playArea[2] = baseX + sizeX;
-        playArea[3] = baseY + sizeY;
+        this.syncPlayArea();
 
         const sim = this.sim;
         if (!sim) {
@@ -841,6 +917,15 @@ export class GameClient implements GameFrameHandler {
         const py = player.prevY + (player.y - player.prevY) * alpha;
         // Aim at the player's chest, not their feet
         this.cameraRig.apply(camera, px, this.grid.getHeight(px, py) / 128 - 0.6, py);
+    }
+
+    private syncPlayArea(): void {
+        const { baseX, baseY, sizeX, sizeY } = this.grid;
+        const playArea = this.renderer.playArea;
+        playArea[0] = baseX;
+        playArea[1] = baseY;
+        playArea[2] = baseX + sizeX;
+        playArea[3] = baseY + sizeY;
     }
 
     private getAlpha(): number {
@@ -955,6 +1040,7 @@ export class GameClient implements GameFrameHandler {
         }
         const hud: HudView = {
             mapId: sim.map.id,
+            challengeMode: sim.challengeMode,
             round: sim.endless ? sim.round : undefined,
             bossIn: sim.timeLeftForBoss,
             hp: Math.max(0, Math.round(sim.player.hp)),
@@ -968,6 +1054,8 @@ export class GameClient implements GameFrameHandler {
             seconds: sim.seconds,
             kills: sim.kills,
             coins: sim.coins,
+            maxWeapons: sim.maxWeapons,
+            maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
                 const last = w.def.levels.length;
                 const level = w.def.levels[Math.min(w.level, last) - 1];
@@ -980,10 +1068,9 @@ export class GameClient implements GameFrameHandler {
                     level: w.level,
                     maxLevel: w.def.levels.length,
                     iconObjId: level.objId ?? w.def.iconObjId,
-                    detail:
-                        w.bonus > 0
-                            ? `+${Math.round(w.bonus * 100)}% damage`
-                            : `${effDmg} dmg / ${level.cooldown}s`,
+                    detail: w.bonus > 0 ? `+${Math.round(w.bonus * 100)}% damage` : "",
+                    stats: weaponStats(w.def, level).map(formatWeaponStat),
+                    evolution: getEvolutionView(sim, w),
                     desc: `${w.def.description} Deals ~${effDmg} damage every ${level.cooldown}s${
                         level.amount > 1 ? ` (${level.amount} hits/projectiles)` : ""
                     }${w.bonus > 0 ? ` (+${Math.round(w.bonus * 100)}% weapon bonus)` : ""}.`,
@@ -1008,10 +1095,14 @@ export class GameClient implements GameFrameHandler {
                     rarityColor: RARITIES[def.rarity].color,
                 };
             }),
+            stats: formatStats(sim.stats),
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
             buffs: getBuffViews(sim),
             rerolls: sim.rerollsLeft,
+            skip: sim.canSkip
+                ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
+                : undefined,
             boss,
             quests: getQuestTrackViews(this.save, sim),
         };
@@ -1034,7 +1125,7 @@ export class GameClient implements GameFrameHandler {
         if (model) {
             const anim = isDog
                 ? model.getAnim(6561) || model.anims[0]
-                : model.getAnim(PLAYER_SEQS.idle);
+                : model.getAnim(this.assets.getPlayerStance().idle);
             const tick = Math.floor(this.attractTick);
             if (anim) {
                 actors.draw(
@@ -1043,10 +1134,10 @@ export class GameClient implements GameFrameHandler {
                     anim.getFrame(tick),
                     TITLE_MAP.spawn.x,
                     this.grid.getHeight(TITLE_MAP.spawn.x, TITLE_MAP.spawn.y) / 128 -
-                        (isDog ? 0.22 : 0),
+                        (isDog ? DOG_HEIGHT_OFFSET : 0),
                     TITLE_MAP.spawn.y,
                     0,
-                    { scale: isDog ? 3.0 : 1 },
+                    { scale: isDog ? DOG_ACTOR_SCALE : 1 },
                 );
             }
         }

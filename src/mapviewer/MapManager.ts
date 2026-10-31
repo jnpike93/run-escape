@@ -52,6 +52,7 @@ export class MapManager<T extends MapSquare> {
 
     init(mapFileIndex: MapFileIndex, fillEmptyTerrain: boolean): void {
         this.cleanUp();
+        this.invalidMapIds.clear();
         for (let x = 0; x < MapManager.MAX_MAP_X; x++) {
             for (let y = 0; y < MapManager.MAX_MAP_Y; y++) {
                 const exists = mapFileIndex.getTerrainArchiveId(x, y) !== -1;
@@ -95,7 +96,6 @@ export class MapManager<T extends MapSquare> {
     }
 
     clearMaps(): void {
-        this.invalidMapIds.clear();
         this.loadingMapIds.clear();
         for (const map of this.mapSquares.values()) {
             map.delete();
@@ -149,16 +149,49 @@ export class MapManager<T extends MapSquare> {
         frameCount: number,
         renderDistance: number,
         unloadDistance: number,
+        playArea?: vec4,
     ): void {
         const cameraX = camera.getPosX();
         const cameraZ = camera.getPosZ();
 
-        // Calculate which map square id to start and end on based on camera location and render distance (in tiles).
-        const mapStartX = Math.floor((cameraX - renderDistance) / Scene.MAP_SQUARE_SIZE);
-        const mapStartY = Math.floor((cameraZ - renderDistance) / Scene.MAP_SQUARE_SIZE);
+        const margin = 2;
+        const minMapX = playArea
+            ? Math.max(0, Math.floor(playArea[0] / Scene.MAP_SQUARE_SIZE) - margin)
+            : 0;
+        const minMapY = playArea
+            ? Math.max(0, Math.floor(playArea[1] / Scene.MAP_SQUARE_SIZE) - margin)
+            : 0;
+        const maxMapX = playArea
+            ? Math.min(
+                  MapManager.MAX_MAP_X,
+                  Math.floor((playArea[2] - 1) / Scene.MAP_SQUARE_SIZE) + 1 + margin,
+              )
+            : MapManager.MAX_MAP_X;
+        const maxMapY = playArea
+            ? Math.min(
+                  MapManager.MAX_MAP_Y,
+                  Math.floor((playArea[3] - 1) / Scene.MAP_SQUARE_SIZE) + 1 + margin,
+              )
+            : MapManager.MAX_MAP_Y;
 
-        const mapEndX = Math.ceil((cameraX + renderDistance) / Scene.MAP_SQUARE_SIZE);
-        const mapEndY = Math.ceil((cameraZ + renderDistance) / Scene.MAP_SQUARE_SIZE);
+        // Calculate which map square id to start and end on based on camera location and render distance (in tiles).
+        const mapStartX = Math.max(
+            minMapX,
+            Math.floor((cameraX - renderDistance) / Scene.MAP_SQUARE_SIZE),
+        );
+        const mapStartY = Math.max(
+            minMapY,
+            Math.floor((cameraZ - renderDistance) / Scene.MAP_SQUARE_SIZE),
+        );
+
+        const mapEndX = Math.min(
+            maxMapX,
+            Math.ceil((cameraX + renderDistance) / Scene.MAP_SQUARE_SIZE),
+        );
+        const mapEndY = Math.min(
+            maxMapY,
+            Math.ceil((cameraZ + renderDistance) / Scene.MAP_SQUARE_SIZE),
+        );
 
         const renderBoundsChanged =
             this.renderBounds[0] !== mapStartX ||

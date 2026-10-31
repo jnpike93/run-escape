@@ -8,6 +8,192 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Fix Co-Op Multiplayer Monster Spawning (`FlowField.update`), Async/Co-Op Music Autoplay Unlock & Full 20-Map OSRS Music Soundtrack
+
+**Model**: Gemini (Antigravity)
+**Commit**: `fd2c917` / `66dd60d` / `54b73a5` (and full 20-map OSRS soundtrack commit - see git log)
+**Bundle**: `index-Ha2ZVZWw.js` (`?v=8.6`, MapViewer `MapViewerApp-DiGiAIvF.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-D4rA2rWo.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+
+**Scope**: Fixed a Co-Op multiplayer bug across Barrows and all maps (Regular `1x`, Extreme `2x`, and Nightmare `3x` difficulties) where only the 5 initial starter enemies spawned and stood frozen without moving or attacking players, fixed `GameAudio` music playback failing when started after async `loadGrid` or Co-Op WebSocket `start_run`, and added authentic OSRS music tracks across the Title Screen and all 20 campaign and fun maps.
+
+**Changes implemented**:
+- **Root Cause & Fix (`src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
+  - `FlowField.prototype.update(grid, targetX, targetY)` (`src/game/core/world/FlowField.ts`) takes `grid` as its first argument. However, `setupInGameHooks` in `mp-sync-engine.js` called `anchor.flowField.update(Math.floor(anchor.entity.x), Math.floor(anchor.entity.y), sim.grid)` in `sim.findSpawnPoint` and `t.flowField.update(tx, ty, sim.grid)` in `sim.stepEnemies`.
+  - Passing `(tx, ty, sim.grid)` bound `grid` to the number `tx` and threw `TypeError: grid.isSolid is not a function` inside `canStep(grid, ...)` on every tick before `origStepEnemies()` or wave spawning could execute, leaving only the 5 manually spawned starter enemies frozen in place while `stepPlayer()` still let players walk through them.
+  - Added `updateEntityFlowField(flowField, entity, force)` in `setupInGameHooks` which resolves solid tiles within `d = 1..3` (matching `Sim.updateFlowField()`) and invokes `flowField.update(sim.grid, tileX, tileY)` with the correct `(grid, targetX, targetY)` argument order.
+  - Copied `peer.flowField.ditchY = sim.flowField.ditchY` when creating `peer.flowField`, initialized `poisonDamage: 0, poisonEnd: -1, lastHitTick: -999` on remote peer entities, and updated initial Host spawn `sim.flowField.update(sim.grid, ...)` after applying `SPAWN_OFFSETS`.
+- **Full OSRS Music Soundtrack (`src/game/client/custom/customMusic.ts`, `src/game/client/custom/customMusic.test.ts`, `src/game/content/custom/customMaps.ts`, `src/game/client/GameClient.ts`, `scripts/sync_dist.cjs`, `assets/music/*.ogg`)**:
+  - Added 20 compressed (`32 kHz` Vorbis `.ogg`) OSRS music tracks in `assets/music/*.ogg` (preserved in `scripts/sync_dist.cjs` `PRESERVED_ASSETS`) and assigned every campaign map, fun map, and the Title Screen its regional OSRS theme:
+    - Title Screen / Menus: `Scape Main`
+    - Campaign Maps: `Harmony` (Lumbridge), `Barbarianism` (Barbarian Village), `Dangerous Way` (Barrows), `Wilderness` (Wilderness), `Arabian` (Kharidian Desert), `Rellekka` (Fremennik Province), `Jungle Troubles` (Karamja), `March of the Shayzien` (Kourend), `Mistrock` (Varlamore), `The Curtain Closes` (Morytania), `Armageddon` (God Wars Dungeon), `Elven Seed` (Prifddinas), `Inferno` (The Inferno), `Fire and Brimstone` (Fight Caves)
+    - Fun Maps: `The Trade Parade` (Grand Exchange), `Adventure` (East Varrock), `Massacre` (Falador), `Last Man Standing` (Last Man Standing), `Melodrama` (Castle Wars), `Null and Void` (Pest Control)
+- **Music Playback & Settings Slider Fix (`src/game/client/GameAudio.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `server/serve.py`)**:
+  - Started `this.audio.playMusic(music)` synchronously at the beginning of `GameClient.startRun()` before `await this.loadGrid(mapId)` so the browser's user-gesture activation is preserved on first-time map loads.
+  - Updated `GameAudio.unlock` and `GameAudio.setSettings` to resume `this.music.element.play()` if `this.music.element.paused && !this.settings.muted` (e.g., on the Title Screen or when a Co-Op run starts asynchronously via WebSocket `start_run`).
+  - Enabled the `Music` volume slider on the main `Settings` screen (`<SoundSettings ui={ui} client={client} music />`) and added explicit `audio/ogg` MIME mapping in `server/serve.py`.
+- **Integration Tests (`src/custom/multiplayer/multiplayer.test.ts`, `src/game/client/custom/customMusic.test.ts`)**:
+  - Added real-`Sim` Co-Op integration tests on Barrows across Regular (`1x`) and Nightmare (`3x`) difficulty verifying that wave monsters spawn continuously beyond the initial 5 rats, chase players via `FlowField`, deal contact damage, and broadcast via `sync_world`, plus music coverage tests across all 20 maps.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (411/411 passed across all 21 test suites), `npm run verify-slim-cache` (verified 3,529 groups), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Merge Upstream `0.18.0` (`3e5885c`), Rebuild Slim Cache (`64ff6328`), Fix Out-of-Bounds Map Square Worker Flood & Add Co-Op `0.18.0` Sync
+
+**Model**: Gemini (Antigravity)
+**Commit**: `2033144`
+**Bundle**: `index-CHTowyrV.js` (`?v=8.6`, MapViewer `MapViewerApp-B6q-pfZW.js`, Worker `RenderDataWorker-DuhWd-BF.js`, WASM loader `module-VGKAynAb.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-64ff6328`)
+
+**Scope**: Merged upstream `main` (`59b6eff..3e5885c`, release `0.18.0` and `sim-collision-snapshots`) into `main`, regenerated and verified the slim cache (`osrs-241_2026-09-30-slim-64ff6328`, 14,394 groups in full mode) for all new `0.18.0` weapon stances, power-ups (`sled`, `giant_essence`, `evil_bob`, `fairy_ring`, `drill_demon`), and Toktz-mej-tal fire loc animations, fixed `MapManager` / `WebGLMapViewerRenderer` out-of-bounds map square worker flooding and `invalidMapIds` clearing on plane changes, and integrated all `0.18.0` features into Co-Op Multiplayer.
+
+**Changes implemented**:
+- **Upstream `0.18.0` Merge (`src/game/core/Sim.ts`, `src/game/core/entities.ts`, `src/game/client/GameAssets.ts`, `src/game/client/GameClient.ts`, `src/game/client/GameView.ts`, `src/game/content/powerups.ts`, `src/game/content/stances.ts`, `src/mapviewer/webgl/loc/UpperLevels.ts`, `src/mapviewer/webgl/loc/SceneLocs.ts`, `src/mapviewer/webgl/buffer/SceneBuffer.ts`, `scripts/cache/slim-cache.ts`, `scripts/game/collision-snapshot.ts`)**:
+  - Merged per-weapon stances (`stances.ts`, walk-first `819` baking), 5 new power-ups (`Sled`, `Giant rune essence`, `Evil Bob`, `Fairy ring`, `Drill Demon`), Toktz-mej-tal real fire patches (`loc 5499`, `seq 475`, `sim.fires`), Prifddinas walkways & roof hiding (`UpperLevels.ts`), blocked-terrain faction war timeout (`canWalkStraight` / `foeWait`), and endless casket scarcity past 15 minutes.
+  - Added custom weapon item IDs (`20756` Hill giant club, `9013`/`21276` Skull sceptre, `22370` Bryophyta's staff) to `src/game/content/stances.ts`.
+  - Rebuilt and verified `caches/osrs-241_2026-09-30-slim-64ff6328` (`26.0 MB`) from the local full OSRS 241 cache and removed `caches/osrs-241_2026-09-30-slim-fa564245`.
+- **Map Rendering & Worker Pool Fixes (`src/mapviewer/MapManager.ts`, `src/mapviewer/MapManager.test.ts`, `src/mapviewer/webgl/WebGLMapViewerRenderer.ts`, `src/game/client/GameClient.ts`)**:
+  - Clamped `MapManager.update()` map square bounds (`mapStartX..mapEndX`, `mapStartY..mapEndY`) to `playArea` (`[baseX, baseY, baseX + sizeX, baseY + sizeY]`) and called `this.syncPlayArea()` in `GameClient` constructor, `startRun()`, and `leaveRun()`, preventing `camera ± 128` (`renderDistance`) from queuing unbaked border map squares outside the arena into `RenderDataWorkerPool`.
+  - Preserved `invalidMapIds` across `MapManager.clearMaps()` / `setPlane()` transitions (e.g. entering or leaving God Wars Dungeon `plane: 2`).
+  - Updated `WebGLMapViewerRenderer.queueLoadMap()` and `render()` to mark failed map square loads invalid (`addInvalidMap`) and clean up `loadingMapIds` when `!isValidMapData(mapData)`.
+- **Co-Op Multiplayer `0.18.0` Integration & Bug Fixes (`src/custom/multiplayer/mp-constants.js`, `mp-lobby-ui.js`, `mp-actor-renderer.js`, `mp-pickups.js`, `mp-sync-engine.js`, `multiplayer.test.ts`, `assets/multiplayer/`)**:
+  - Added missing `penance_fighter` (`weapon: 'battleaxe'`) to `ALL_CHARACTERS` in `mp-constants.js`.
+  - Fixed `sim.relocate(enemy, behind)` hook in `mp-sync-engine.js` to pass `behind = true` through to `origRelocate` so the Fairy Ring power-up teleports nearby enemies behind the player in Co-Op.
+  - Fixed Guest `sled` pickup in `mp-pickups.js`, `mp-actor-renderer.js`, and `mp-sync-engine.js` so a Guest picking up a Sled activates sledding on that Guest (rather than hijacking the Host's `sim.sledEndTick`) and renders `${dynKey}_sled` (`seqIds: [819, 1461, 1462]`) for sledding peers.
+  - Added per-weapon stance baking (`819` walk-first) and Host -> Guest `sync_world` synchronization for `sim.rocks`, `sim.rampages`, `sim.rings`, `sim.fires`, `playerShout`, `powerUpHit`, and `powerUpEnded`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (407/407 passed across all 20 test suites), `npm run verify-slim-cache` (verified 3,529 groups in 5.30s; `--verify-full` verified 14,394 groups across all 20 maps in 29.35s), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Merge Upstream `0.17.1` - `0.17.2` (`59b6eff`), Sentinel `usedItemId` Spoofing Fix (`acb15a3`) & Debug Panel Game Speed Slider (`c56f7fa`)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `8dea2e4`
+**Bundle**: `index-DDOLshWh.js` (`?v=8.6`, MapViewer `MapViewerApp-Pk2JB77M.js`, Worker `RenderDataWorker-D4-1qx-e.js`, WASM loader `module-qsFJRNBT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Merged upstream `main` (`efc49f6..59b6eff`, releases `0.17.1` and `0.17.2`) into `main`, integrated the Jules Sentinel security fix (`acb15a3` on `origin/sentinel/fix-coop-loadout-useditemid-spoofing-12907676329992050147`) preventing Guest `usedItemId` spoofing in Co-Op loadout sync, and integrated the Debug Panel `gameSpeed` slider and top-pinned layout (`c56f7fa` on `origin/debug-panel`).
+
+**Changes implemented**:
+- **Upstream `0.17.1` & `0.17.2` Merge (`CHANGELOG.md`, `docs/GAMEPLAY.md`, `package.json`, `package-lock.json`, `src/game/content/items.ts`, `src/game/content/sets.ts`, `src/game/core/Loot.ts`, `src/game/core/Sim.ts`, `src/game/core/world/Collision.ts`, `src/mapviewer/webgl/loc/SceneLocs.ts`, and test files)**:
+  - Merged `0.17.1` casket set-piece rework (`SET_PIECE_CHANCE` lowered from `30%` to `15%`, capped at 1 rarity tier above casket roll, and tracking `declinedSets` when alching/rerolling a started set's piece), Crystal armour unlock requirement (`beatMap: "prifddinas"`), and Grand Exchange / building wall visibility fix (`isTileDrawn` in `SceneLocs.ts`).
+  - Merged `0.17.2` flow-field reachability check in `findFreeSpot` (`Collision.ts`) and `walkableSpot` (`Sim.ts`), integrating it with custom `findReachablePickupSpot` and `stepPickupSlide` in `Sim.dropPickup` so caskets/power-ups inside multi-tile solid blocks (e.g. 3x3 Pest Control portals) snap directly to the nearest reachable tile while 1-tile/edge obstacle drops smoothly slide toward the player.
+- **Sentinel Security Fix for `usedItemId` Spoofing (`.jules/sentinel.md`, `src/custom/multiplayer/mp-actor-renderer.js`, `src/custom/multiplayer/multiplayer.test.ts`, `assets/multiplayer/mp-actor-renderer.js`)**:
+  - Added allowlist validation (`ALLOWED_USED_ITEMS = new Set(['bonecrusher', 'red_chinchompa', 'black_chinchompa'])`) and inventory/loadout ownership verification (`hasItemInMsgOrPeer`) before executing `usedItemId` simulation effects on the Host, plus unit tests in `multiplayer.test.ts`.
+- **Debug Panel Game Speed Slider & Top Pinning (`src/custom/debug-mode.js`, `assets/debug-mode.js`)**:
+  - Added the `Game` slider group (`gameSpeed`, `0.25x` - `10x`, Host-authoritative in Co-Op via `hookGameSpeed`) and pinned `#debug-panel` to `top: 8px` with `box-sizing: border-box` and `max-height: calc((100vh - 16px) / var(--ui-scale, 1))`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (340/340 passed across all 17 test suites), `npm run verify-slim-cache` (verified 3,472 groups in 5.99s), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK), `node --check src/custom/debug-mode.js` (OK).
+
+---
+
+### [2026-10-30] Halve Dipper & Elias 3D Model Scale (`3.0` -> `1.5`)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `4157404`
+**Bundle**: `index-T4QWDNBf.js` (`?v=8.6`, MapViewer `MapViewerApp-BqlDYSTn.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-BtUvp74D.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Reduced the 3D actor model scale for **Dipper** (`dipper`, Corgi) and **Elias** (`elias`, Chihuahua) by half (`3.0` -> `1.5`, and height offset `0.22` -> `0.11`) across singleplayer gameplay, the title/character select attract screen, and Co-Op multiplayer peer rendering.
+
+**Changes implemented**:
+- **Dog Actor Constants (`src/game/client/custom/dogActors.ts`)**:
+  - Exported `DOG_ACTOR_SCALE = 1.5` (previously `3.0`) and `DOG_HEIGHT_OFFSET = 0.11` (previously `0.22`).
+- **Singleplayer, Title Screen & Co-Op Rendering (`src/game/client/GameView.ts`, `src/game/client/GameClient.ts`, `src/custom/multiplayer/mp-sync-engine.js`, `assets/multiplayer/mp-sync-engine.js`)**:
+  - Updated `GameView.drawPlayer` and `GameClient.submitActors` to use `DOG_ACTOR_SCALE` and `DOG_HEIGHT_OFFSET`.
+  - Updated `mp-sync-engine.js` remote peer dog actor rendering to use `scale: 1.5` and `getCenterHeight() - 0.11`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm run build` (`index-T4QWDNBf.js`), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Add Extreme One Chunk Man (2x Diff, 1.5x Pts) & Nightmare Man (3x Diff, 2.5x Pts) Challenge Modes
+
+**Model**: Gemini (Antigravity)
+**Commit**: `84e04d6`
+**Bundle**: `index-D6Ox1VYG.js` (`?v=8.5`, MapViewer `MapViewerApp-DXw8zrc2.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-DMrSu1Mm.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Added selectable **Extreme One Chunk Man** (`2x` map difficulty for `1.5x` points) and **Nightmare Man** (`3x` map difficulty for `2.5x` points) challenge modes alongside **Normal** mode (`1x` difficulty, `1x` points) across simulation enemy/boss scaling, run & leaderboard point calculations, singleplayer Map Selection / HUD / Result screens, and Co-Op lobbies.
+
+**Changes implemented**:
+- **Challenge Mode Definitions & Points Calculation (`src/game/core/custom/customSave.ts`, `src/game/core/save.ts`)**:
+  - Defined `ChallengeMode` (`"normal" | "extreme_one_chunk" | "nightmare"`), `CHALLENGE_MODES`, `getChallengeMode`, `getChallengeDifficultyMultiplier`, and `getChallengePointsMultiplier`.
+  - Updated `calculateRunPointsBreakdown` and `calculateLevelPointsBreakdown` to scale run points by `1.5x` in **Extreme One Chunk Man** and `2.5x` in **Nightmare Man**, and persisted `challengeMode` on `MapBestRecord` when a new high score is set.
+- **Simulation Enemy & Boss Scaling (`src/game/core/Sim.ts`)**:
+  - Added `challengeMode` to `SimOptions`, `Sim`, and `RunResult`, and scaled monster and boss HP and damage (`this.challengeDifficulty`: `2x` for `"extreme_one_chunk"`, `3x` for `"nightmare"`) in `Sim.spawnEnemy`.
+- **Client, Map Selection UI, HUD, Results & Co-Op (`src/game/client/GameStore.ts`, `src/game/client/GameClient.ts`, `src/game/ui/GameUi.tsx`, `src/game/ui/LeaderboardScreen.tsx`, `src/custom/multiplayer/mp-lobby-ui.js`, `src/custom/multiplayer/mp-hud-leaderboard.js`, `assets/multiplayer/`)**:
+  - Added `selectChallengeMode` and `cycleChallengeMode` to `GameClient`, a **Challenge Mode** selector card list in `MapDetailsPanel` plus a quick-cycle `Mode` button in `.ui-select-bar`, an active mode badge in the HUD, a `Mode` row in `ResultModal`, and mode bonus lines in `LeaderboardScreen` tooltips.
+  - Updated Co-Op lobby and leaderboard scoring so `2x` (`Extreme One Chunk Man`) awards `1.5x` points and `3x` (`Nightmare Man`) awards `2.5x` points.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (325/325 passed across all 16 test suites), `npm run verify-slim-cache` (verified 3,472 groups in 5.73s), `npm run build` (`index-D6Ox1VYG.js`), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Prevent Slim-Cache Verification Timeouts (`npm run verify-slim-cache` in 5s, 8x Faster `slim-cache`, Worker Guard)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `6b78204`
+**Bundle**: `index-JOj9ctmV.js` (`?v=8.5`, MapViewer `MapViewerApp-BqlUigRJ.js`, Worker `RenderDataWorker-BqUjTjOH.js`, WASM loader `module-o5mm7YQ2.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Eliminated slim-cache verification and generation timeouts by guarding `expose(worker)` in `RenderDataWorker.ts` when imported in Node, adding a 5-second `npm run verify-slim-cache` (`--verify` / `--verify-full`) mode to `scripts/cache/slim-cache.ts`, optimizing `loadWhatTheGameLoads` in `scripts/cache/slim-cache.ts` (cutting full slim-cache generation from 389s to ~50s while reading the exact same 14,343 cache groups), and invoking `tsx` directly via `node ./node_modules/tsx/dist/cli.mjs` in `package.json`.
+
+**Changes implemented**:
+- **Worker IPC Guard (`src/mapviewer/worker/RenderDataWorker.ts`)**:
+  - Guarded `expose(worker)` with `if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope)` and re-exported `createWorkerState` and `clearWorkerStateCaches` from `./WorkerState` so importing `RenderDataWorker.ts` in Node CLI scripts never attaches a permanent `process` listener that hangs the event loop.
+- **Fast Slim-Cache Verification & Generation (`scripts/cache/slim-cache.ts`, `scripts/cache/load-util.ts`, `package.json`, `AGENTS.md`)**:
+  - Added `--verify` (`npm run verify-slim-cache`, ~5s) and `--verify-full` (~25s) modes to `scripts/cache/slim-cache.ts` with explicit `process.exit(0)` and missing-archive detection.
+  - Stubbed CPU-only WebGL vertex packing (`SceneBuffer`), software minimap rasterization (`MapImageRenderer`), per-frame vertex matrix transforms (`SeqModelAnimator.prototype.animate`, `LocModelLoader.prototype.transformModel`), and scene lighting (`Scene.prototype.light`) in `scripts/cache/slim-cache.ts`, deduplicated NPC/player animation bakes, and built one merged `Scene` per map (`loadSceneLocEntities`), producing the identical 14,343 group reads (`osrs-241_2026-09-30-slim-fa564245`) in ~25s per pass instead of ~195s.
+  - Updated `package.json` cache scripts to invoke `node ./node_modules/tsx/dist/cli.mjs` directly rather than `npx tsx` on Windows.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (verified 3,472 groups in 5.63s), `npm test` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Download Full `osrs-241_2026-09-30` Local Cache, Rebuild Authentic Slim Cache (`fa564245`) & Restore Genuine Models (`10555` Penance Skirt)
+
+**Model**: Gemini (Antigravity)
+**Commit**: `7cb4ce6`
+**Bundle**: `index-aozrqZGM.js` (`?v=8.5`, MapViewer `MapViewerApp-B3h7dzLA.js`, Worker `RenderDataWorker-CmraDDTI.js`, WASM loader `module-BBylQNgT.js`, styles `index-C3aiJD4m.css`, slim cache `osrs-241_2026-09-30-slim-fa564245`)
+
+**Scope**: Downloaded the full 182 MiB OSRS 241 cache (`caches/osrs-241_2026-09-30/`) locally and added `/caches/osrs-241_2026-09-30/` to `.gitignore` for local cache searching (`scripts/cache/find-objs.ts`, `scripts/cache/find-npcs.ts`) and slim-cache regeneration. Removed all temporary slim-cache model/sprite/sequence substitute overrides (`ObjType.post`, `NpcType.post`, `SpotAnimType.post`, `SeqType.post`, and `chivalry.iconSpriteId: undefined`) and regenerated `caches/osrs-241_2026-09-30-slim-fa564245` (26.0 MB) from the full cache so **Penance fighter** wears genuine OSRS item `10555` (`Penance skirt`, `maleModel: 19252`, `model: 19194`) on his legs (`EquipSlot.LEGS`) and all custom + upstream `0.17.0` items, NPCs, bosses, sequences, and sprites use their authentic cache archives.
+
+**Changes implemented**:
+- **Local Full Cache & Gitignore (`.gitignore`, `scripts/cache/load-util.ts`)**:
+  - Downloaded `caches/osrs-241_2026-09-30/` locally via `scripts/download-caches.cjs` and added `/caches/osrs-241_2026-09-30/` to `.gitignore`.
+  - Updated `loadCacheInfos()` in `scripts/cache/load-util.ts` so CLI search and slim-cache scripts automatically discover `./caches/osrs-241_2026-09-30/info.json` on disk while `caches/caches.json` serves only the slim cache entry to browser clients.
+- **Slim Cache Generation (`scripts/cache/slim-cache.ts`, `caches/osrs-241_2026-09-30-slim-fa564245/`, `caches/caches.json`)**:
+  - Updated `scripts/cache/slim-cache.ts` to chunk `ActorBakeLoader` requests into batches of 40 (preventing `SceneBuffer` array-length overflow in Node), include Cook's Assistant 3D world assets (`npcId: 4626` with `seqIds: [808, 860]`, and `objId: 1927, 1944, 1933`), and preserve negative `iconObjId` NPC icons (`-12676` Corgi, `-12516` Chihuahua).
+  - Generated and verified `caches/osrs-241_2026-09-30-slim-fa564245` (`26.0 MB`) and replaced `caches/osrs-241_2026-09-30-slim-74e0d2b3`.
+- **Authentic Model Restoration (`src/rs/config/objtype/ObjType.ts`, `src/rs/config/npctype/NpcType.ts`, `src/rs/config/spotanimtype/SpotAnimType.ts`, `src/rs/config/seqtype/SeqType.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Removed temporary `post()` model/sequence/sprite overrides so item `10555` (`Penance skirt`), all Barbarian Village weapons/helmets/bosses (`Obor` `7416`, `Bryophyta` `8195`), and all upstream `0.16.0` - `0.17.0` weapons/evolutions/animations use their genuine OSRS 241 models.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
+### [2026-10-30] Merge Upstream `0.15.0` - `0.17.0` (`efc49f6`) & Add Slim-Cache Overrides for New Weapons, Evolutions & Sequences
+
+**Model**: Gemini (Antigravity)
+**Commit**: `9235cfe`
+**Bundle**: `index-DSKGIPvH.js` (`?v=8.5`, MapViewer `MapViewerApp-8YMVHdhe.js`, Worker `RenderDataWorker-CfhowBko.js`, WASM loader `module-Dy8rI3c4.js`, styles `index-C3aiJD4m.css`)
+
+**Scope**: Merged upstream `main` (`b29f532..efc49f6`, releases `0.15.0`, `0.16.0`, and `0.17.0`) into `main`, integrating the new Collection Log screen, 9 new weapon evolutions (3-level evolved weapons), Thunder khopesh, Dinh's bulwark, Chivalry passive, Smithing/Crafting/Woodcutting skills, level-up Skip button (`X`), post-run weapon Damage/Kills/DPS breakdown, and weapon stat lines, while preserving all custom maps (`barbarian_village`, `fight_caves`), adventurers (`penance_fighter`, `dipper`, `elias`), 2-step Adventurer/Map selection UI, Co-Op Multiplayer, Leaderboard/Top Score system, and slim-cache compatibility.
+
+**Changes implemented**:
+- **Upstream Conflict Resolution (`CLAUDE.md`, `package.json`, `src/game/client/GameClient.ts`, `src/game/client/GameStore.ts`, `src/game/core/Sim.ts`, `src/game/core/save.ts`, `src/game/ui/GameUi.tsx`)**:
+  - Updated `package.json` version to `0.17.0` while retaining custom `build` (`vite build && node scripts/sync_dist.cjs`) and `sync-upstream` scripts.
+  - Merged `Screen` (`"leaderboard" | "collectionLog"`), `SlotView` (`desc`, `stats`, `evolution`), and `GameStore` audio/display defaults in `GameStore.ts` and `GameClient.ts`.
+  - Merged `this.damageTaken += amount;` with `slot: player.slot` in `Sim.stepPoison()`, and retained `MAX_CASKETS` clamping alongside `evolutionsMade` migration in `save.ts` (`SAVE_VERSION = 7`).
+  - Merged `CollectionLogScreen`, `SkipButton`, `.ui-slot-tip` rich weapon/evolution tooltips, and the 2-column `ResultModal` (with Bosses and Damage/Kills/DPS tables alongside `Run points`, `CoopDamageLeaderboardTable`, and `CoopGameOverButtons`) in `GameUi.tsx`, and added `<ChoiceStats stats={weaponStats(weapon, weapon.levels[0])} />` to `AdventurerDetailsPanel`.
+- **3-Level Evolved Weapons & Knockback Alignment (`src/game/content/custom/customWeapons.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Updated `leaf_bladed_battleaxe` (`knockback: 1.3`, 3 levels via `evolvedLevels`: `35 -> 40 -> 46` damage) and `blood_barrage` (`38 -> 44 -> 49` damage) to match upstream `0.17.0`'s 3-level evolved weapon standard and knockback progression invariant.
+- **Slim-Cache Compatibility for Upstream `0.16.0` - `0.17.0` Assets (`src/rs/config/objtype/ObjType.ts`, `src/rs/config/spotanimtype/SpotAnimType.ts`, `src/rs/config/seqtype/SeqType.ts`, `src/game/content/custom/customOverrides.ts`)**:
+  - Added `ObjType.post()` slim-cache model & recolor mappings for all 11 new `0.16.0` - `0.17.0` weapons/evolutions (`25739` Sanguine Scythe of Vitur, `26233` Ancient godsword, `29577` Burning claws, `21003` Elder maul, `21015` Dinh's bulwark, `28682` Dinh's blazing bulwark, `30388` Thunder khopesh, `28540` Corrupted twisted bow, `28547` Corrupted tumeken's shadow, `24425` Eldritch Nightmare staff, `25731` Holy sanguinesti staff).
+  - Added `SpotAnimType.post()` slim-cache model & sequence mappings for `1171` (Burning claws special), `559` (Thunder khopesh special), and `1197` (Kree'arra ranged projectile).
+  - Added `SeqType.post()` slim-cache frame mappings for new player attack sequences `9171`, `7514`, `7511`, `7516`, and `3157`, and set `chivalry.iconSpriteId = undefined` in `PASSIVE_OVERRIDES` (falling back to Holy symbol `iconObjId: 1718`) so `RenderDataWorker` loads with zero missing-archive errors on `osrs-241_2026-09-30-slim-74e0d2b3`.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npx vitest run` (323/323 passed across all 16 test suites), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-10-30] Add Barbarian Village Campaign Map, 5 Bosses, Penance Fighter Adventurer, Boss Weapons, Slim-Cache Model Overrides & 2-Step Adventurer/Map Select
 
 **Model**: Gemini (Antigravity)

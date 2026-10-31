@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml } from './mp-constants.js?v=8.5';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.5';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml, getWeaponStance, DEFAULT_PLAYER_STANCE } from './mp-constants.js?v=8.6';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.6';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {
@@ -164,8 +164,15 @@ export const mpSyncEngineMethods = {
         const localOffset = SPAWN_OFFSETS[this.localSlot] || { dx: 0, dy: 0 };
         p1.x = spawnX + localOffset.dx;
         p1.y = spawnY + localOffset.dy;
+        if (sim.grid && typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(Math.floor(p1.x), Math.floor(p1.y))) {
+            p1.x = spawnX;
+            p1.y = spawnY;
+        }
         p1.prevX = p1.x;
         p1.prevY = p1.y;
+        if (sim.flowField && typeof sim.flowField.update === 'function' && sim.grid) {
+            sim.flowField.update(sim.grid, Math.floor(p1.x), Math.floor(p1.y));
+        }
 
         sim.remotePlayers = [];
         for (const pInfo of partyPlayers) {
@@ -173,8 +180,12 @@ export const mpSyncEngineMethods = {
             const slot = sanitizeSlot(pInfo.slot, 2);
             if (slot === this.localSlot || this.remotePeers.has(slot)) continue;
             const offset = SPAWN_OFFSETS[slot] || { dx: 1.0, dy: 0 };
-            const sx = spawnX + offset.dx;
-            const sy = spawnY + offset.dy;
+            let sx = spawnX + offset.dx;
+            let sy = spawnY + offset.dy;
+            if (sim.grid && typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(Math.floor(sx), Math.floor(sy))) {
+                sx = spawnX;
+                sy = spawnY;
+            }
             const charId = sim.map?.fun?.character || sanitizeCharacter(pInfo.character, 'warrior');
 
             const entity = {
@@ -206,6 +217,9 @@ export const mpSyncEngineMethods = {
                 flash: 0,
                 frozen: 0,
                 invulnerable: 0,
+                poisonDamage: 0,
+                poisonEnd: -1,
+                lastHitTick: -999,
                 characterId: charId,
                 hasDynamicModel: false
             };
@@ -228,6 +242,12 @@ export const mpSyncEngineMethods = {
                 sim.appearanceVersion = savedAppVer;
             }
 
+            const initialObjId = peerWeapons[0]?.def?.levels?.[0]?.objId ?? peerWeapons[0]?.def?.iconObjId;
+            const initialStance = this.charStances?.get(charId) || getWeaponStance(initialObjId);
+            entity.stance = initialStance;
+            entity.sled = false;
+            entity.sledEndTick = 0;
+
             const peerObj = {
                 slot,
                 level: 1,
@@ -236,6 +256,7 @@ export const mpSyncEngineMethods = {
                 isHost: Boolean(pInfo.isHost),
                 entity,
                 weapons: peerWeapons,
+                stance: initialStance,
                 loadout: { weapons: [], passives: [], gear: [], inventory: [null, null, null, null] },
                 pauseState: null,
                 lastEquipKey: ''
@@ -524,6 +545,95 @@ export const mpSyncEngineMethods = {
                     }
                 };
             }
+            if (sim.dropRock) {
+                const origDropRock = sim.dropRock.bind(sim);
+                sim.dropRock = (def, effect) => {
+                    const prevLen = Array.isArray(sim.rocks) ? sim.rocks.length : 0;
+                    const res = origDropRock(def, effect);
+                    if (Array.isArray(sim.rocks) && sim.rocks.length > prevLen) {
+                        const r = sim.rocks[sim.rocks.length - 1];
+                        r.ownerSlot = this._activeAttackerSlot || sim.player?.slot || this.localSlot;
+                    }
+                    return res;
+                };
+            }
+            if (sim.landRock) {
+                const origLandRock = sim.landRock.bind(sim);
+                sim.landRock = (rock) => {
+                    const prevSlot = this._activeAttackerSlot;
+                    this._activeAttackerSlot = rock?.ownerSlot || this.localSlot;
+                    try {
+                        return origLandRock(rock);
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
+            if (sim.startRampage) {
+                const origStartRampage = sim.startRampage.bind(sim);
+                sim.startRampage = (def, effect) => {
+                    const r = origStartRampage(def, effect);
+                    if (r) {
+                        r.ownerSlot = this._activeAttackerSlot || sim.player?.slot || this.localSlot;
+                    }
+                    return r;
+                };
+            }
+            if (sim.rampageHits) {
+                const origRampageHits = sim.rampageHits.bind(sim);
+                sim.rampageHits = (rampage) => {
+                    const prevSlot = this._activeAttackerSlot;
+                    this._activeAttackerSlot = rampage?.ownerSlot || this.localSlot;
+                    try {
+                        return origRampageHits(rampage);
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
+            if (sim.burnGround) {
+                const origBurnGround = sim.burnGround.bind(sim);
+                sim.burnGround = (burns, level) => {
+                    const ownerSlot = this._activeAttackerSlot || sim.player?.slot || this.localSlot;
+                    const px = sim.player?.x ?? 0;
+                    const py = sim.player?.y ?? 0;
+                    const res = origBurnGround(burns, level);
+                    if (Array.isArray(sim.fires)) {
+                        for (let i = sim.fires.length - 1; i >= 0; i--) {
+                            const f = sim.fires[i];
+                            if (Math.hypot(f.x - px, f.y - py) <= (f.radius || 1.5)) {
+                                f.ownerSlot = ownerSlot;
+                                break;
+                            }
+                        }
+                    }
+                    return res;
+                };
+            }
+            if (sim.stepFires) {
+                sim.stepFires = () => {
+                    if (!Array.isArray(sim.fires) || sim.fires.length === 0) return;
+                    sim.fires = sim.fires.filter(f => f.endTick > sim.tick);
+                    const prevSlot = this._activeAttackerSlot;
+                    try {
+                        for (const fire of sim.fires) {
+                            if (sim.tick < fire.nextTick) continue;
+                            fire.nextTick += 10;
+                            sim.damageSource = fire.source;
+                            this._activeAttackerSlot = fire.ownerSlot || this.localSlot;
+                            if (sim.enemyHash?.query) {
+                                sim.enemyHash.query(fire.x, fire.y, fire.radius + 0.5, (enemy) => {
+                                    if (Math.hypot(enemy.x - fire.x, enemy.y - fire.y) <= fire.radius + enemy.radius) {
+                                        sim.damageEnemy(enemy, fire.damage, 0, fire.x, fire.y);
+                                    }
+                                });
+                            }
+                        }
+                    } finally {
+                        this._activeAttackerSlot = prevSlot;
+                    }
+                };
+            }
             if (sim.damageEnemy) {
                 const origDamageEnemy = sim.damageEnemy.bind(sim);
                 sim.damageEnemy = (enemy, amount, knockback, srcX, srcY, mightScale, isDot) => {
@@ -585,6 +695,36 @@ export const mpSyncEngineMethods = {
                 };
             }
 
+            // Helper: update a player's BFS FlowField with the correct (grid, tileX, tileY) argument order
+            const updateEntityFlowField = (flowField, entity, force = false) => {
+                if (!flowField || typeof flowField.update !== 'function' || !sim.grid || !entity) return;
+                let tileX = Math.floor(entity.x);
+                let tileY = Math.floor(entity.y);
+                if (typeof sim.grid.isSolid === 'function' && sim.grid.isSolid(tileX, tileY)) {
+                    let best = Infinity;
+                    const fromX = tileX;
+                    const fromY = tileY;
+                    for (let d = 1; d <= 3 && best === Infinity; d++) {
+                        for (let y = fromY - d; y <= fromY + d; y++) {
+                            for (let x = fromX - d; x <= fromX + d; x++) {
+                                if (Math.max(Math.abs(x - fromX), Math.abs(y - fromY)) !== d || sim.grid.isSolid(x, y)) {
+                                    continue;
+                                }
+                                const distance = Math.hypot(x + 0.5 - entity.x, y + 0.5 - entity.y);
+                                if (distance < best) {
+                                    best = distance;
+                                    tileX = x;
+                                    tileY = y;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (force || flowField.targetX < 0 || tileX !== flowField.targetX || tileY !== flowField.targetY) {
+                    flowField.update(sim.grid, tileX, tileY);
+                }
+            };
+
             // Helper: collect all living players with their dedicated BFS FlowFields
             const getLivingPlayerTargets = () => {
                 const targets = [];
@@ -600,6 +740,7 @@ export const mpSyncEngineMethods = {
                     if (peer.entity && peer.entity.hp > 0 && peer.entity.deathTick === -1 && !peer.entity.spectating) {
                         if (!peer.flowField && sim.flowField && sim.flowField.constructor) {
                             peer.flowField = new sim.flowField.constructor(sim.flowField.size);
+                            peer.flowField.ditchY = sim.flowField.ditchY;
                         }
                         targets.push({
                             slot: peer.slot,
@@ -633,8 +774,8 @@ export const mpSyncEngineMethods = {
                     try {
                         for (let attempt = 0; attempt < 28; attempt++) {
                             const anchor = living[sim.rng.int(living.length)];
-                            if (anchor.flowField && anchor.flowField.targetX < 0 && typeof anchor.flowField.update === 'function' && sim.grid) {
-                                anchor.flowField.update(Math.floor(anchor.entity.x), Math.floor(anchor.entity.y), sim.grid);
+                            if (anchor.flowField) {
+                                updateEntityFlowField(anchor.flowField, anchor.entity, false);
                             }
                             sim.player = anchor.entity;
                             sim.flowField = anchor.flowField;
@@ -662,21 +803,24 @@ export const mpSyncEngineMethods = {
                 };
             }
 
-            // Multi-player safe relocation: only relocate an enemy if it is far (> 34 tiles) from EVERY living player
+            // Multi-player safe relocation: only relocate a distant enemy if it is far (> 34 tiles) from EVERY living player,
+            // while always permitting Fairy Ring teleports (behind === true).
             if (sim.relocate) {
                 const origRelocate = sim.relocate.bind(sim);
-                sim.relocate = (enemy) => {
+                sim.relocate = (enemy, behind = false) => {
                     if (!enemy) return;
-                    const living = getLivingPlayerTargets();
-                    for (let i = 0; i < living.length; i++) {
-                        const pl = living[i].entity;
-                        if (Math.hypot(pl.x - enemy.x, pl.y - enemy.y) <= 34) {
-                            // Another living player is still within range; drop stale attacker lock instead of teleporting in midair
-                            enemy.lastAttackerSlot = null;
-                            return;
+                    if (!behind) {
+                        const living = getLivingPlayerTargets();
+                        for (let i = 0; i < living.length; i++) {
+                            const pl = living[i].entity;
+                            if (Math.hypot(pl.x - enemy.x, pl.y - enemy.y) <= 34) {
+                                // Another living player is still within range; drop stale attacker lock instead of teleporting in midair
+                                enemy.lastAttackerSlot = null;
+                                return;
+                            }
                         }
                     }
-                    origRelocate(enemy);
+                    origRelocate(enemy, behind);
                 };
             }
 
@@ -741,12 +885,8 @@ export const mpSyncEngineMethods = {
                         sim.enemies = t.bucket;
                         sim.player = t.entity;
                         sim.flowField = t.flowField || savedFlowField;
-                        if (t.flowField && typeof t.flowField.update === 'function' && sim.grid) {
-                            const tx = Math.floor(t.entity.x);
-                            const ty = Math.floor(t.entity.y);
-                            if (sim.tick % 8 === 0 || t.flowField.targetX !== tx || t.flowField.targetY !== ty) {
-                                t.flowField.update(tx, ty, sim.grid);
-                            }
+                        if (t.flowField) {
+                            updateEntityFlowField(t.flowField, t.entity, sim.tick % 8 === 0);
                         }
                         origStepEnemies();
                         if (t.bucket.length > initialLen) {
@@ -876,6 +1016,41 @@ export const mpSyncEngineMethods = {
                     ep.x += ep.vx || 0;
                     ep.y += ep.vy || 0;
                     ep.life--;
+                }
+            };
+            // Guest renders 0.18.0 world entities (fires, rocks, rampages, fairy rings) from Host sync_world without duplicate local damage
+            sim.burnGround = () => {};
+            sim.stepFires = () => {
+                if (Array.isArray(sim.fires)) {
+                    sim.fires = sim.fires.filter(f => f.endTick > sim.tick);
+                }
+            };
+            sim.stepRocks = () => {
+                if (Array.isArray(sim.rocks)) {
+                    sim.rocks = sim.rocks.filter(r => r.endTick > sim.tick);
+                }
+            };
+            sim.stepRampages = () => {
+                if (!Array.isArray(sim.rampages)) return;
+                for (let i = 0; i < sim.rampages.length; i++) {
+                    const r = sim.rampages[i];
+                    r.prevX = r.x;
+                    r.prevY = r.y;
+                    if (r.doneTick !== -1) continue;
+                    const dx = r.goalX - r.x;
+                    const dy = r.goalY - r.y;
+                    const dist = Math.hypot(dx, dy);
+                    const move = Math.min(r.speed || 0.36, dist);
+                    if (dist > 0) {
+                        r.x += (dx / dist) * move;
+                        r.y += (dy / dist) * move;
+                    }
+                }
+                sim.rampages = sim.rampages.filter(r => r.doneTick === -1 || (sim.tick - r.doneTick) < 15);
+            };
+            sim.stepRings = () => {
+                if (Array.isArray(sim.rings)) {
+                    sim.rings = sim.rings.filter(r => r.endTick > sim.tick);
                 }
             };
             sim.enemies = [];
@@ -1128,6 +1303,9 @@ export const mpSyncEngineMethods = {
                                     ev.type === 'cannonSetup' ||
                                     ev.type === 'cannonFire' ||
                                     ev.type === 'powerUp' ||
+                                    ev.type === 'powerUpHit' ||
+                                    ev.type === 'powerUpEnded' ||
+                                    ev.type === 'playerShout' ||
                                     ev.type === 'bossSpawned' ||
                                     ev.type === 'bossRose' ||
                                     ev.type === 'bossEnraged' ||
@@ -1287,6 +1465,88 @@ export const mpSyncEngineMethods = {
                                 }
                             }
 
+                            const rockData = [];
+                            if (Array.isArray(sim.rocks)) {
+                                for (let i = 0; i < sim.rocks.length; i++) {
+                                    const rk = sim.rocks[i];
+                                    if (sim.tick < rk.endTick) {
+                                        rockData.push([
+                                            rk.uid,
+                                            rk.powerUpId || 'giant_rune_essence',
+                                            Math.round(rk.x * 100) / 100,
+                                            Math.round(rk.y * 100) / 100,
+                                            rk.startTick,
+                                            rk.landTick,
+                                            rk.endTick,
+                                            rk.locId || 4369,
+                                            rk.spotAnim || 60,
+                                            Math.round((rk.radius || 3.5) * 100) / 100
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const rampageData = [];
+                            if (Array.isArray(sim.rampages)) {
+                                for (let i = 0; i < sim.rampages.length; i++) {
+                                    const rm = sim.rampages[i];
+                                    if (rm.doneTick === -1 || (sim.tick - rm.doneTick) < 15) {
+                                        rampageData.push([
+                                            rm.uid,
+                                            rm.powerUpId || 'evil_bob',
+                                            Math.round(rm.x * 100) / 100,
+                                            Math.round(rm.y * 100) / 100,
+                                            rm.yaw & 2047,
+                                            Math.round(rm.goalX * 100) / 100,
+                                            Math.round(rm.goalY * 100) / 100,
+                                            Math.round((rm.speed || 0.36) * 1000) / 1000,
+                                            rm.startTick,
+                                            rm.endTick,
+                                            rm.doneTick ?? -1,
+                                            rm.walkSeq || 6560,
+                                            rm.scale || 2.8
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const ringData = [];
+                            if (Array.isArray(sim.rings)) {
+                                for (let i = 0; i < sim.rings.length; i++) {
+                                    const rg = sim.rings[i];
+                                    if (sim.tick < rg.endTick) {
+                                        ringData.push([
+                                            rg.uid,
+                                            Math.round(rg.x * 100) / 100,
+                                            Math.round(rg.y * 100) / 100,
+                                            rg.startTick,
+                                            rg.endTick,
+                                            Math.round((rg.radius || 2.5) * 100) / 100,
+                                            rg.locId || 29228,
+                                            rg.spotAnim || 569,
+                                            rg.scale || 1.5
+                                        ]);
+                                    }
+                                }
+                            }
+
+                            const fireData = [];
+                            if (Array.isArray(sim.fires)) {
+                                for (let i = 0; i < sim.fires.length; i++) {
+                                    const f = sim.fires[i];
+                                    if (sim.tick < f.endTick) {
+                                        fireData.push([
+                                            f.uid,
+                                            Math.round(f.x * 100) / 100,
+                                            Math.round(f.y * 100) / 100,
+                                            Math.round((f.radius || 1.5) * 100) / 100,
+                                            f.endTick,
+                                            f.locId || 20000
+                                        ]);
+                                    }
+                                }
+                            }
+
                             const visEvents = this._pendingVisEvents;
                             this._pendingVisEvents = [];
 
@@ -1309,6 +1569,7 @@ export const mpSyncEngineMethods = {
                                 attackStart: sim.player.attackStart || 0,
                                 hp: sim.player.hp,
                                 maxHp: sim.player.maxHp,
+                                sled: Boolean(sim.tick < (sim.sledEndTick || 0)),
                                 activePrayer: sim.player.activePrayer || window._osrsPrayer || null,
                                 pauseState: this.getLocalPauseState(client),
                                 dmg: Math.round(localStat?.damage || 0),
@@ -1337,6 +1598,7 @@ export const mpSyncEngineMethods = {
                                     attackStart: re.attackStart || 0,
                                     hp: re.hp,
                                     maxHp: re.maxHp,
+                                    sled: Boolean(re.sled || (re.sledEndTick && sim.tick < re.sledEndTick)),
                                     activePrayer: re.activePrayer || null,
                                     pauseState: peer.pauseState,
                                     dmg: Math.round(pStat?.damage || 0),
@@ -1359,6 +1621,10 @@ export const mpSyncEngineMethods = {
                                 thralls: thrallData.length > 0 ? thrallData : undefined,
                                 enemyProjs: enemyProjData.length > 0 ? enemyProjData : undefined,
                                 effects: effectData.length > 0 ? effectData : undefined,
+                                rocks: rockData.length > 0 ? rockData : undefined,
+                                rampages: rampageData.length > 0 ? rampageData : undefined,
+                                rings: ringData.length > 0 ? ringData : undefined,
+                                fires: fireData.length > 0 ? fireData : undefined,
                                 visEvents: visEvents.length > 0 ? visEvents : undefined
                             });
                         }
@@ -1409,6 +1675,7 @@ export const mpSyncEngineMethods = {
                             moveStart: sim.player.moveStart || 0,
                             attackSeq: isSpectating ? -1 : (sim.player.attackSeq ?? -1),
                             attackStart: sim.player.attackStart || 0,
+                            sled: isSpectating ? false : Boolean(sim.tick < (sim.sledEndTick || 0)),
                             activePrayer: isSpectating ? null : (sim.player.activePrayer || window._osrsPrayer || null)
                         });
                     }
@@ -1542,12 +1809,15 @@ export const mpSyncEngineMethods = {
                     const isCorgi = p2.characterId === 'dipper';
                     const isChih = p2.characterId === 'elias';
                     const isDog = isCorgi || isChih;
+                    const isSledding = !isDog && !isDeadPeer && Boolean(p2.sled || (p2.sledEndTick && s.tick < p2.sledEndTick));
                     const dynKey = `player_dynamic_${peer.slot}`;
                     let model;
                     if (isCorgi) {
                         model = client.assets.get('corgi');
                     } else if (isChih) {
                         model = client.assets.get('chihuahua');
+                    } else if (isSledding) {
+                        model = client.assets.get(`${dynKey}_sled`) || client.assets.get('player:sled') || (p2.hasDynamicModel && client.assets.get(dynKey)) || client.assets.get('player_' + p2.characterId) || client.assets.getPlayer();
                     } else if (p2.hasDynamicModel && client.assets.get(dynKey)) {
                         model = client.assets.get(dynKey);
                     } else {
@@ -1565,9 +1835,15 @@ export const mpSyncEngineMethods = {
                                 (model.getAnim(6560) || model.anims[0]) :
                                 (model.getAnim(6561) || model.anims[0]);
                             frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
+                        } else if (isSledding) {
+                            anim = p2.moving ?
+                                (model.getAnim(1462) || model.anims[0]) :
+                                (model.getAnim(1461) || model.anims[0]);
+                            frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                         } else {
+                            const stance = p2.stance || peer.stance || this.charStances?.get(p2.characterId) || getWeaponStance(peer.loadout?.weapons?.[0]?.iconObjId) || DEFAULT_PLAYER_STANCE;
                             if (p2.moving) {
-                                anim = model.getAnim(824) || model.getAnim(819) || model.anims[0];
+                                anim = model.getAnim(stance.run) || model.getAnim(824) || model.getAnim(819) || model.anims[0];
                                 frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                             } else {
                                 const attackAnim = p2.attackSeq !== -1 ? model.getAnim(p2.attackSeq) : null;
@@ -1581,7 +1857,7 @@ export const mpSyncEngineMethods = {
                                     anim = attackAnim;
                                     frame = anim.getFrame(Math.max(0, s.tick - p2.attackStart), false);
                                 } else {
-                                    anim = model.getAnim(808) || model.anims[0];
+                                    anim = model.getAnim(stance.idle) || model.getAnim(808) || model.anims[0];
                                     frame = anim ? anim.getFrame(Math.max(0, s.tick - p2.moveStart)) : 0;
                                 }
                             }
@@ -1589,10 +1865,10 @@ export const mpSyncEngineMethods = {
 
                         const px = p2.prevX + (p2.x - p2.prevX) * alpha;
                         const py = p2.prevY + (p2.y - p2.prevY) * alpha;
-                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isDog ? 0.22 : 0);
+                        const height = (s.grid ? s.grid.getHeight(px, py) / 128 : 0) - (isDog ? 0.11 : 0);
 
                         actors.draw(model, anim, frame, px, height, py, p2.yaw & 2047, {
-                            scale: isDog ? 3.0 : 1.0,
+                            scale: isDog ? 1.5 : 1.0,
                             flash: (p2.flash > 0) ? 0.4 : 0,
                             tint: isDog ? 16777215 : (p2.tint || 16777215)
                         });
@@ -1987,6 +2263,10 @@ export const mpSyncEngineMethods = {
                     if (Number.isFinite(pState.attackStart)) {
                         re.attackStart = pState.attackStart;
                     }
+                }
+                if (typeof pState.sled === 'boolean') {
+                    re.sled = pState.sled;
+                    if (!pState.sled) re.sledEndTick = 0;
                 }
                 re.activePrayer = (pState.activePrayer === 'magic' || pState.activePrayer === 'ranged' || pState.activePrayer === 'melee') ? pState.activePrayer : null;
             }
@@ -2388,7 +2668,170 @@ export const mpSyncEngineMethods = {
             }
         }
 
-        // 8. Replay Authoritative Combat/Hitsplat/Boss Events on Guest
+        // 8. Synchronize 0.18.0 Falling Rocks (Giant Rune Essence - sim.rocks)
+        if (Array.isArray(msg.rocks)) {
+            if (!Array.isArray(sim.rocks)) sim.rocks = [];
+            const rockMap = new Map(sim.rocks.map(r => [r.uid, r]));
+            const hostRockUids = new Set();
+            for (let i = 0; i < msg.rocks.length; i++) {
+                const [uid, powerUpId, rx, ry, startTick, landTick, endTick, locId, spotAnim, radius] = msg.rocks[i];
+                hostRockUids.add(uid);
+                let rk = rockMap.get(uid);
+                if (rk) {
+                    rk.x = rx;
+                    rk.y = ry;
+                    rk.landTick = landTick;
+                    rk.endTick = endTick;
+                } else {
+                    sim.rocks.push({
+                        uid,
+                        powerUpId: powerUpId || 'giant_rune_essence',
+                        x: rx,
+                        y: ry,
+                        startTick: startTick || sim.tick,
+                        landTick: landTick || (sim.tick + 45),
+                        endTick: endTick || (sim.tick + 70),
+                        locId: locId || 4369,
+                        spotAnim: spotAnim || 60,
+                        radius: radius || 3.5,
+                        damage: 0,
+                        knockback: 0,
+                        bossDamage: 0
+                    });
+                }
+            }
+            sim.rocks = sim.rocks.filter(r => hostRockUids.has(r.uid) && sim.tick < r.endTick);
+        } else if (Array.isArray(sim.rocks) && sim.rocks.length > 0) {
+            sim.rocks = [];
+        }
+
+        // 9. Synchronize 0.18.0 Evil Bob Rampages (sim.rampages)
+        if (Array.isArray(msg.rampages)) {
+            if (!Array.isArray(sim.rampages)) sim.rampages = [];
+            const rampageMap = new Map(sim.rampages.map(r => [r.uid, r]));
+            const hostRampageUids = new Set();
+            for (let i = 0; i < msg.rampages.length; i++) {
+                const [uid, powerUpId, rx, ry, yaw, goalX, goalY, speed, startTick, endTick, doneTick, walkSeq, scale] = msg.rampages[i];
+                hostRampageUids.add(uid);
+                let rm = rampageMap.get(uid);
+                if (rm) {
+                    if (Math.hypot(rx - rm.x, ry - rm.y) > 3.0) {
+                        rm.x = rm.prevX = rx;
+                        rm.y = rm.prevY = ry;
+                    } else {
+                        rm.x = rm.x + (rx - rm.x) * 0.55;
+                        rm.y = rm.y + (ry - rm.y) * 0.55;
+                    }
+                    rm.yaw = yaw & 2047;
+                    rm.goalX = goalX;
+                    rm.goalY = goalY;
+                    rm.speed = speed || 0.36;
+                    rm.endTick = endTick;
+                    rm.doneTick = doneTick ?? -1;
+                } else {
+                    sim.rampages.push({
+                        uid,
+                        powerUpId: powerUpId || 'evil_bob',
+                        x: rx,
+                        y: ry,
+                        prevX: rx,
+                        prevY: ry,
+                        yaw: yaw & 2047,
+                        goalX: goalX ?? rx,
+                        goalY: goalY ?? ry,
+                        passesLeft: 0,
+                        hit: new Set(),
+                        damage: 0,
+                        speed: speed || 0.36,
+                        radius: 2.2,
+                        knockback: 0,
+                        startTick: startTick || sim.tick,
+                        endTick: endTick || (sim.tick + 400),
+                        doneTick: doneTick ?? -1,
+                        walkSeq: walkSeq || 6560,
+                        scale: scale || 2.8
+                    });
+                }
+            }
+            sim.rampages = sim.rampages.filter(r => hostRampageUids.has(r.uid) && (r.doneTick === -1 || (sim.tick - r.doneTick) < 15));
+        } else if (Array.isArray(sim.rampages) && sim.rampages.length > 0) {
+            sim.rampages = [];
+        }
+
+        // 10. Synchronize 0.18.0 Fairy Rings (sim.rings)
+        if (Array.isArray(msg.rings)) {
+            if (!Array.isArray(sim.rings)) sim.rings = [];
+            const ringMap = new Map(sim.rings.map(r => [r.uid, r]));
+            const hostRingUids = new Set();
+            for (let i = 0; i < msg.rings.length; i++) {
+                const [uid, rx, ry, startTick, endTick, radius, locId, spotAnim, scale] = msg.rings[i];
+                hostRingUids.add(uid);
+                let rg = ringMap.get(uid);
+                if (rg) {
+                    rg.x = rx;
+                    rg.y = ry;
+                    rg.endTick = endTick;
+                    rg.radius = radius || 2.5;
+                } else {
+                    sim.rings.push({
+                        uid,
+                        x: rx,
+                        y: ry,
+                        startTick: startTick || sim.tick,
+                        endTick: endTick || (sim.tick + 750),
+                        nextPulse: endTick || (sim.tick + 750),
+                        radius: radius || 2.5,
+                        locId: locId || 29228,
+                        spotAnim: spotAnim || 569,
+                        scale: scale || 1.5
+                    });
+                }
+            }
+            sim.rings = sim.rings.filter(r => hostRingUids.has(r.uid) && sim.tick < r.endTick);
+        } else if (Array.isArray(sim.rings) && sim.rings.length > 0) {
+            sim.rings = [];
+        }
+
+        // 11. Synchronize 0.18.0 Toktz-mej-tal Ground Fires (sim.fires)
+        if (Array.isArray(msg.fires)) {
+            if (!Array.isArray(sim.fires)) sim.fires = [];
+            const fireMap = new Map(sim.fires.map(f => [f.uid, f]));
+            const hostFireUids = new Set();
+            for (let i = 0; i < msg.fires.length; i++) {
+                const [uid, fx, fy, radius, endTick, locId] = msg.fires[i];
+                hostFireUids.add(uid);
+                let f = fireMap.get(uid);
+                if (f) {
+                    f.endTick = endTick;
+                    f.radius = radius || 1.5;
+                } else {
+                    const rad = radius || 1.5;
+                    const flames = [];
+                    for (let k = 0; k < 7; k++) {
+                        const angle = (k / 6) * Math.PI * 2;
+                        const r = k === 0 ? 0 : rad * 0.6;
+                        flames.push({ x: fx + Math.cos(angle) * r, y: fy + Math.sin(angle) * r });
+                    }
+                    sim.fires.push({
+                        uid,
+                        source: 'weapon:toktz_mej_tal',
+                        x: fx,
+                        y: fy,
+                        radius: rad,
+                        damage: 0,
+                        nextTick: endTick || (sim.tick + 300),
+                        endTick: endTick || (sim.tick + 300),
+                        locId: locId || 20000,
+                        flames
+                    });
+                }
+            }
+            sim.fires = sim.fires.filter(f => hostFireUids.has(f.uid) && sim.tick < f.endTick);
+        } else if (Array.isArray(sim.fires) && sim.fires.length > 0) {
+            sim.fires = [];
+        }
+
+        // 12. Replay Authoritative Combat/Hitsplat/Boss Events on Guest
         if (Array.isArray(msg.visEvents) && msg.visEvents.length > 0 && client.handleEvents) {
             client.handleEvents(sim, msg.visEvents);
         }
@@ -2417,6 +2860,8 @@ export const mpSyncEngineMethods = {
             p2.vx = 0;
             p2.vy = 0;
             p2.moving = false;
+            p2.sled = false;
+            p2.sledEndTick = 0;
             p2.activePrayer = null;
             return;
         }
@@ -2467,6 +2912,13 @@ export const mpSyncEngineMethods = {
                 p2.attackStart = msg.attackStart;
             }
         }
+        if (typeof msg.sled === 'boolean') {
+            const curTick = window.gameClient?.sim?.tick || 0;
+            p2.sled = msg.sled || Boolean(p2.sledEndTick && curTick < p2.sledEndTick);
+            if (!msg.sled && (!p2.sledEndTick || curTick >= p2.sledEndTick)) {
+                p2.sledEndTick = 0;
+            }
+        }
         p2.activePrayer = (msg.activePrayer === 'magic' || msg.activePrayer === 'ranged' || msg.activePrayer === 'melee') ? msg.activePrayer : null;
     },
 
@@ -2477,6 +2929,14 @@ export const mpSyncEngineMethods = {
         if (!p2) return;
         if (p2.flash > 0) p2.flash--;
         if (p2.invulnerable > 0) p2.invulnerable--;
+        if (p2.sledEndTick && sim.tick >= p2.sledEndTick) {
+            p2.sledEndTick = 0;
+            p2.sled = false;
+        }
+        if (p2.sled || (p2.sledEndTick && sim.tick < p2.sledEndTick)) {
+            p2.invulnerable = Math.max(p2.invulnerable || 0, 13);
+            p2.frozen = 0;
+        }
 
         p2.prevX = p2.x;
         p2.prevY = p2.y;
