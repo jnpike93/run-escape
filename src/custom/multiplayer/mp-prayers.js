@@ -61,6 +61,10 @@ export function ensureOsrsPrayerBarUI() {
         left: 50%;
         transform: translateX(-50%);
         zoom: var(--ui-scale, 1);
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        max-width: calc(100vw - 12px);
+        box-sizing: border-box;
         display: none;
         align-items: center;
         gap: 8px;
@@ -70,6 +74,7 @@ export function ensureOsrsPrayerBarUI() {
         padding: 6px 12px;
         z-index: 950;
         user-select: none;
+        -webkit-user-select: none;
         font-family: 'OSRS Bold', monospace;
         box-shadow: 0 4px 16px rgba(0,0,0,0.85);
     `;
@@ -83,21 +88,40 @@ export function ensureOsrsPrayerBarUI() {
             PRAYERS:
         </div>
         ${prayers.map(p => `
-            <button data-prayer="${p.id}" style="
+            <button class="osrs-prayer-btn" data-prayer="${p.id}" style="
                 display: flex; align-items: center; gap: 6px;
                 background: #1a140e; border: 2px solid #4a3c2c;
                 color: #d4c4a8; padding: 3px 10px 3px 6px; cursor: pointer;
                 font-family: 'OSRS Bold', monospace; font-size: 12px;
-                border-radius: 3px; text-shadow: 1px 1px #000;">
+                border-radius: 3px; text-shadow: 1px 1px #000;
+                touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+                user-select: none; -webkit-user-select: none;">
                 <img src="${OSRS_PRAYER_ICONS[p.id].book}" width="30" height="30" alt="" draggable="false"
                     style="image-rendering: pixelated; display: block; pointer-events: none;">
                 <span>[${p.key}] ${p.label}</span>
             </button>
         `).join('')}
     `;
+    bar.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    bar.addEventListener('touchstart', (ev) => ev.stopPropagation(), { passive: true });
     bar.querySelectorAll('button[data-prayer]').forEach(btn => {
+        let lastTouchToggle = 0;
+        btn.addEventListener('pointerdown', (ev) => {
+            ev.stopPropagation();
+        });
+        btn.addEventListener('touchstart', (ev) => {
+            ev.stopPropagation();
+        }, { passive: true });
+        btn.addEventListener('touchend', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            lastTouchToggle = performance.now();
+            setOsrsPrayer(btn.getAttribute('data-prayer'));
+            btn.blur();
+        }, { passive: false });
         btn.addEventListener('click', (ev) => {
             ev.stopPropagation();
+            if (performance.now() - lastTouchToggle < 400) return;
             setOsrsPrayer(btn.getAttribute('data-prayer'));
             btn.blur();
         });

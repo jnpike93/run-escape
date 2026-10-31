@@ -8,6 +8,7 @@ import { WEBGL } from "../mapviewer/MapViewerRenderers";
 import { RenderDataWorkerPool } from "../mapviewer/worker/RenderDataWorkerPool";
 import { DownloadProgress } from "../rs/cache/CacheFiles";
 import { formatBytes } from "../util/BytesUtil";
+import { isTouchDevice } from "../util/DeviceUtil";
 import "./GameApp.css";
 import { GAME_CACHE_NAME, deleteOtherGameCaches, findGameCache } from "./cache";
 import { GameClient } from "./client/GameClient";
@@ -24,7 +25,7 @@ WebFont.load({
     },
 });
 
-const workerPool = RenderDataWorkerPool.create(4);
+const workerPool = RenderDataWorkerPool.create(isTouchDevice ? 2 : 4);
 
 if (import.meta.hot) {
     // The renderer, workers and a run in progress can't be swapped out live, so

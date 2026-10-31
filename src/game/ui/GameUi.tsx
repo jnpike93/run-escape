@@ -50,7 +50,14 @@ import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
 import { CollectionLogScreen } from "./CollectionLogScreen";
 import { CoopDamageLeaderboardTable, CoopGameOverButtons } from "./CoopGameOverSection";
-import { PauseHoverInfoBox, SecretCodeSection, UiScaleButtons } from "./CustomSettingsControls";
+import {
+    HudPauseButton,
+    MobileOrientationBanner,
+    PauseHoverInfoBox,
+    SecretCodeSection,
+    UiScaleButtons,
+    computeAutoUiScale,
+} from "./CustomSettingsControls";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
 import { LeaderboardScreen } from "./LeaderboardScreen";
@@ -73,9 +80,13 @@ const UI_BASE_WIDTH = 1150;
 const UI_MAX_SCALE = 2;
 
 function getUiScale(): number {
-    const fit = Math.min(window.innerHeight / UI_BASE_HEIGHT, window.innerWidth / UI_BASE_WIDTH);
-    // In twentieths, so a small resize doesn't relayout everything
-    return Math.round(Math.min(UI_MAX_SCALE, Math.max(1, fit)) * 20) / 20;
+    return computeAutoUiScale(
+        window.innerWidth,
+        window.innerHeight,
+        UI_BASE_WIDTH,
+        UI_BASE_HEIGHT,
+        UI_MAX_SCALE,
+    );
 }
 
 function useUiScale(): number {
@@ -147,6 +158,7 @@ export function GameUi({ store, client }: Props): JSX.Element {
             onClickCapture={onClickCapture}
         >
             {screen}
+            <MobileOrientationBanner />
         </div>
     );
 }
@@ -1206,6 +1218,7 @@ function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element 
                         key={i}
                         className={"ui-slot" + (slot?.evolution?.ready ? " ui-slot-evolve" : "")}
                         style={slot ? { borderColor: slot.rarityColor } : undefined}
+                        tabIndex={slot ? 0 : undefined}
                     >
                         {slot && (
                             <>
@@ -1269,6 +1282,7 @@ function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
                     key={slot.slot}
                     className="ui-slot ui-gear-slot"
                     style={slot.item ? { borderColor: slot.item.rarity.color } : undefined}
+                    tabIndex={slot.item ? 0 : undefined}
                     title={
                         slot.item
                             ? `${slot.item.name}: ${slot.item.lines.join(", ")}` +
@@ -1361,6 +1375,7 @@ function Hud({
                 <div className="ui-timer">{formatTime(hud.seconds)}</div>
                 <div className="ui-hud-right">
                     <Minimap client={client} />
+                    <HudPauseButton client={client} />
                     <div>
                         <span className="ui-skull">☠</span> {hud.kills.toLocaleString()}
                     </div>
@@ -1630,6 +1645,13 @@ function PauseModal({
                                             text: (slot as any).desc || slot.detail,
                                         })
                                     }
+                                    onClick={() =>
+                                        setHoverInfo({
+                                            name: slot.name,
+                                            color: slot.rarityColor,
+                                            text: (slot as any).desc || slot.detail,
+                                        })
+                                    }
                                     onMouseLeave={() => setHoverInfo(null)}
                                 >
                                     <ItemIcon
@@ -1677,6 +1699,13 @@ function PauseModal({
                                                     className="ui-pause-item"
                                                     style={{ cursor: "help" }}
                                                     onMouseEnter={() =>
+                                                        setHoverInfo({
+                                                            name: `${item.name} (${item.kindLabel})`,
+                                                            color: item.rarity.color,
+                                                            text: item.lines.join(" · "),
+                                                        })
+                                                    }
+                                                    onClick={() =>
                                                         setHoverInfo({
                                                             name: `${item.name} (${item.kindLabel})`,
                                                             color: item.rarity.color,

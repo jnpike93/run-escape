@@ -8,6 +8,34 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-30] Add Android & iOS Mobile Browser Support (Floating Virtual Thumbstick, Pinch-to-Zoom, HUD Pause Button, Responsive Sub-1.0 UI Scaling & iOS Safari Audio/VRAM Budgeting)
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-BrDD3xsq.js` (`?v=8.6`, MapViewer `MapViewerApp-Cw3ppyqV.js`, Worker `RenderDataWorker-DKr4ZjBm.js`, WASM loader `module-VUwdCnfv.js`, styles `index-Cg9IkcQm.css`, slim cache `osrs-241_2026-09-30-slim-71087aea`)
+
+**Scope**: Implemented upstream-friendly Android and iOS mobile browser support across touch controls, camera pinch-to-zoom, HUD Pause button, responsive sub-`1.0` UI scaling (`0.45x - 2x`), viewport safe-area insets, iOS Safari `GainNode` audio volume/unlock handling, mobile GPU/worker budgeting, and custom runtime script layouts.
+
+**Changes implemented**:
+- **Modular Floating Touch Thumbstick & Two-Finger Pinch-to-Zoom (`src/game/client/custom/mobileInput.ts`, `src/game/client/custom/mobileInput.test.ts`, `src/game/client/GameInput.ts`)**:
+  - Created `MobileTouchInput` in `src/game/client/custom/mobileInput.ts` and hooked it into `GameInput.ts` via minimal 1-line delegations (`constructor`, `dispose`, `getMoveVector`, `onWindowBlur`, `onVisibilityChange`).
+  - Single-finger touch drag on the WebGL canvas spawns an OSRS-styled floating visual thumbstick (`104px` ring + `42px` knob, `DEADZONE_PX = 8`, `MAX_RADIUS_PX = 52`) providing smooth analog `0..1` movement vectors (`x` east, `y` north).
+  - Two-finger pinch gestures on the canvas zero single-finger movement and emit zoom steps every `40px` (`-1` when spreading apart to zoom in, `+1` when pinching together to zoom out).
+- **Responsive Mobile UI Scaling, Safe-Area Insets & Touch Ergonomics (`src/game/ui/CustomSettingsControls.tsx`, `src/game/ui/GameUi.tsx`, `src/game/ui/GameUi.css`, `src/game/GameApp.css`, `src/game/client/DisplaySettings.ts`, `src/game/client/GameClient.ts`, `index.html`)**:
+  - Added `computeAutoUiScale()` in `CustomSettingsControls.tsx` allowing `Auto` UI scale to scale down proportionally to `0.45x` on viewports smaller than `1150x720` (while scaling up to `2x` on larger screens), and added manual `0.5x` and `0.75x` options to `UI_SCALE_OPTIONS` and `DisplaySettings.ts`.
+  - Added `<HudPauseButton client={client} />` in `.ui-hud-right` so touch players can pause runs without a physical `Escape` or `P` key, and `<MobileOrientationBanner />` offering a dismissible landscape recommendation on narrow portrait screens.
+  - Enabled tap-to-inspect tooltips on `.ui-slot` and `.ui-gear-slot` (`tabIndex={0}` + `:focus` / `:focus-within` CSS) and added `onClick` handlers alongside `onMouseEnter` on `.ui-pause-item` in `PauseModal`.
+  - Updated `index.html` with `viewport-fit=cover, maximum-scale=1, user-scalable=no` and web-app meta tags, added `env(safe-area-inset-*)` offsets to `.ui-xp`, `.ui-hud-top`, and `.ui-hud-bottom` in `GameUi.css`, and added `touch-action: none; user-select: none;` to `.game-root` in `GameApp.css`.
+- **iOS Safari Audio & Mobile GPU/Worker Budgeting (`src/game/client/GameAudio.ts`, `src/util/DeviceUtil.ts`, `src/game/GameApp.tsx`)**:
+  - Routed `this.music.element` through `AudioContext.createMediaElementSource` -> `this.musicGain` (`GainNode`) in `GameAudio.ts` so the Music volume slider and mute toggle work on iOS Safari (where `HTMLAudioElement.volume` is read-only), and added `touchend`, `click`, and `visibilitychange` unlock listeners plus `"interrupted"` `AudioContext` recovery.
+  - Capped `pixelRatio` to `1.75` on touch devices (`DeviceUtil.ts`) and scaled `RenderDataWorkerPool` to `2` workers on touch devices (`GameApp.tsx`) to prevent mobile GPU framebuffer exhaustion and iOS WebKit Jetsam tab termination.
+- **Custom Runtime Scripts Mobile Polish (`src/custom/cooks-assistant.js`, `src/custom/multiplayer/mp-prayers.js`, `src/custom/multiplayer/mp-lobby-ui.js`, `assets/`)**:
+  - Added responsive viewport bounds (`max-width`, `zoom: var(--ui-scale, 1)`, `touch-action: manipulation`) to `#ca-chatbox`, `#quest-complete-scroll`, `#osrs-prayer-bar`, and `#coop-modal-box`, and added multi-touch `pointerdown`/`touchstart`/`touchend` isolation on `.osrs-prayer-btn` so players can switch Protection Prayers with one thumb while moving with the other.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (416/416 passed across all 22 test suites including `mobileInput.test.ts`), `npm run verify-slim-cache` (14,541 groups verified), `python -m unittest server/test_serve.py` (55 tests OK), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-10-30] Fix Black Map Square Rendering Across All 20 Maps, Rebuild Slim Cache (`71087aea`) & Harden Fast Slim-Cache Verification
 
 **Model**: Gemini (Antigravity)

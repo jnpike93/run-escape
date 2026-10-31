@@ -429,7 +429,7 @@ export class GameClient implements GameFrameHandler {
     }
 
     cycleUiScale(): void {
-        const scales: DisplaySettings["uiScale"][] = ["auto", 1, 1.25, 1.5, 1.75, 2];
+        const scales: DisplaySettings["uiScale"][] = ["auto", 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
         const next = scales[(scales.indexOf(this.display.uiScale ?? "auto") + 1) % scales.length];
         this.setUiScale(next);
     }

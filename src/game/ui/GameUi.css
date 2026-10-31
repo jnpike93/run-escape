@@ -126,6 +126,14 @@
 
 /* Buttons and cards */
 
+.ui-button,
+.ui-card,
+.ui-inv-slot,
+.ui-slot {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
 .ui-button {
     font-family: "OSRS Bold", sans-serif;
     font-size: 16px;
@@ -799,7 +807,7 @@
     position: absolute;
     left: 0;
     right: 0;
-    top: 0;
+    top: env(safe-area-inset-top, 0px);
     height: 18px;
     background: rgba(0, 0, 0, 0.75);
     border-bottom: 1px solid #000;
@@ -813,7 +821,7 @@
 
 .ui-xp-level {
     position: absolute;
-    right: 8px;
+    right: calc(8px + env(safe-area-inset-right, 0px));
     top: 0;
     line-height: 18px;
     color: var(--ui-white);
@@ -821,9 +829,9 @@
 
 .ui-hud-top {
     position: absolute;
-    top: 24px;
-    left: 8px;
-    right: 8px;
+    top: calc(24px + env(safe-area-inset-top, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -1032,7 +1040,9 @@
     pointer-events: none;
 }
 
-.ui-slot:hover .ui-slot-tip {
+.ui-slot:hover .ui-slot-tip,
+.ui-slot:focus .ui-slot-tip,
+.ui-slot:focus-within .ui-slot-tip {
     display: block;
 }
 
@@ -1055,7 +1065,7 @@
 .ui-hud-bottom {
     position: absolute;
     left: 50%;
-    bottom: 18px;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;

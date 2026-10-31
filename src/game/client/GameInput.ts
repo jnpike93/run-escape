@@ -1,7 +1,10 @@
+import { MobileTouchInput } from "./custom/mobileInput";
+
 // Keyboard and wheel input for the game. Listens on the window, so the canvas
 // doesn't need focus; keys are dropped when the window loses focus.
 export class GameInput {
     private readonly down = new Set<string>();
+    private readonly mobile: MobileTouchInput;
     private wheel = 0;
 
     // Called once per press (not repeated while held)
@@ -15,6 +18,9 @@ export class GameInput {
         window.addEventListener("blur", this.onWindowBlur);
         document.addEventListener("visibilitychange", this.onVisibilityChange);
         wheelTarget.addEventListener("wheel", this.onWheel, { passive: false });
+        this.mobile = new MobileTouchInput(wheelTarget, (steps) => {
+            this.wheel += steps;
+        });
     }
 
     dispose(): void {
@@ -23,6 +29,7 @@ export class GameInput {
         window.removeEventListener("blur", this.onWindowBlur);
         document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.wheelTarget.removeEventListener("wheel", this.onWheel);
+        this.mobile.dispose();
     }
 
     isDown(code: string): boolean {
@@ -41,6 +48,9 @@ export class GameInput {
         const len = Math.hypot(x, y);
         out.x = len > 0 ? x / len : 0;
         out.y = len > 0 ? y / len : 0;
+        if (out.x === 0 && out.y === 0) {
+            this.mobile.getMoveVector(out);
+        }
         return out;
     }
 
@@ -75,12 +85,14 @@ export class GameInput {
 
     private onWindowBlur = () => {
         this.down.clear();
+        this.mobile.reset();
         this.onBlur?.();
     };
 
     private onVisibilityChange = () => {
         if (document.hidden) {
             this.down.clear();
+            this.mobile.reset();
             this.onBlur?.();
         }
     };

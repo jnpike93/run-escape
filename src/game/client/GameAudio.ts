@@ -55,6 +55,8 @@ export class GameAudio {
 
     private context?: AudioContext;
     private master?: GainNode;
+    private musicGain?: GainNode;
+    private connectedElement?: HTMLAudioElement;
     private readonly sounds = new Map<number, SoundData>();
     private readonly buffers = new Map<number, AudioBuffer>();
     private readonly lastPlayed = new Map<number, number>();
@@ -64,15 +66,27 @@ export class GameAudio {
 
     constructor() {
         window.addEventListener("pointerdown", this.unlock);
+        window.addEventListener("touchend", this.unlock);
+        window.addEventListener("click", this.unlock);
         window.addEventListener("keydown", this.unlock);
+        document.addEventListener("visibilitychange", this.onVisibilityChange);
     }
 
     dispose(): void {
         window.removeEventListener("pointerdown", this.unlock);
+        window.removeEventListener("touchend", this.unlock);
+        window.removeEventListener("click", this.unlock);
         window.removeEventListener("keydown", this.unlock);
+        document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.stopMusic();
         this.context?.close();
     }
+
+    private onVisibilityChange = (): void => {
+        if (!document.hidden) {
+            this.unlock();
+        }
+    };
 
     // Synthesizes the sounds in the render workers
     async load(workerPool: RenderDataWorkerPool, ids: number[]): Promise<void> {
@@ -92,27 +106,57 @@ export class GameAudio {
                 this.context = new AudioContext();
                 this.master = this.context.createGain();
                 this.master.connect(this.context.destination);
+                this.musicGain = this.context.createGain();
+                this.musicGain.connect(this.context.destination);
+                this.connectMusicElement();
                 this.applyVolume();
             } catch (e) {
                 console.error("No audio", e);
                 return;
             }
         }
-        if (this.context.state === "suspended") {
-            this.context.resume();
+        if (
+            this.context.state === "suspended" ||
+            (this.context.state as string) === "interrupted"
+        ) {
+            this.context.resume().catch(() => {});
         }
+        this.connectMusicElement();
+        this.applyVolume();
         if (this.music && this.music.element.paused && !this.settings.muted) {
             this.music.element.play().catch(() => {});
         }
     };
 
+    private connectMusicElement(): void {
+        if (
+            this.context &&
+            this.musicGain &&
+            this.music &&
+            this.connectedElement !== this.music.element
+        ) {
+            try {
+                const source = this.context.createMediaElementSource(this.music.element);
+                source.connect(this.musicGain);
+                this.connectedElement = this.music.element;
+            } catch {}
+        }
+    }
+
     private applyVolume(): void {
         if (this.master) {
             this.master.gain.value = this.settings.muted ? 0 : this.settings.volume;
         }
+        if (this.musicGain && this.connectedElement === this.music?.element) {
+            this.musicGain.gain.value = this.settings.muted
+                ? 0
+                : this.settings.music * MUSIC_VOLUME;
+        }
         if (this.music) {
-            this.music.element.volume = this.settings.music * MUSIC_VOLUME;
-            this.music.element.muted = this.settings.muted;
+            try {
+                this.music.element.volume = this.settings.music * MUSIC_VOLUME;
+                this.music.element.muted = this.settings.muted;
+            } catch {}
         }
     }
 
@@ -124,6 +168,7 @@ export class GameAudio {
             const element = new Audio(url);
             element.loop = true;
             this.music = { url, element };
+            this.connectMusicElement();
             this.applyVolume();
         }
         this.music.element.play().catch((e) => console.warn("No music", e));
@@ -135,6 +180,9 @@ export class GameAudio {
             // Lets go of the stream
             this.music.element.removeAttribute("src");
             this.music.element.load();
+            if (this.connectedElement === this.music.element) {
+                this.connectedElement = undefined;
+            }
             this.music = undefined;
         }
     }

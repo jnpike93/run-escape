@@ -520,7 +520,6 @@ export const mpLobbyUiMethods = {
         modal.style.cssText = `
             position: fixed;
             inset: 0;
-            zoom: var(--ui-scale, 1);
             background: rgba(0, 0, 0, 0.75);
             display: flex;
             align-items: center;
@@ -530,15 +529,20 @@ export const mpLobbyUiMethods = {
         `;
 
         const box = document.createElement('div');
+        box.id = 'coop-modal-box';
         box.style.cssText = `
             background: #2b231a;
             border: 3px solid #5a4a35;
             outline: 2px solid #111;
             padding: 20px 28px;
             width: min(680px, calc(94vw / var(--ui-scale, 1)));
-            max-height: calc(92vh / var(--ui-scale, 1));
+            max-width: 94vw;
+            max-height: 90dvh;
             overflow-y: auto;
             box-sizing: border-box;
+            zoom: var(--ui-scale, 1);
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
             box-shadow: 0 8px 32px rgba(0,0,0,0.9);
             color: #ff981f;
             font-family: 'OSRS Bold', monospace;
@@ -692,9 +696,9 @@ export const mpLobbyUiMethods = {
                     <span style="font-size: 13px; color: #888;">ROOM CODE:</span>
                     <span style="font-size: 18px; color: #ffff00; letter-spacing: 2px;">${safeRoomId}</span>
                 </div>
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                     <input id="coop-link-input" type="text" readonly value="${safeInviteLink}" 
-                        style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #fff; padding: 5px 10px; font-family: monospace; font-size: 12px;" />
+                        style="flex: 1; min-width: 140px; background: #0c0906; border: 1px solid #5a4a35; color: #fff; padding: 5px 10px; font-family: monospace; font-size: 12px;" />
                     <button id="coop-copy-btn" style="
                         background: #4a3c2c; border: 2px solid #6b5842; color: #ff981f; padding: 5px 14px; 
                         cursor: pointer; font-family: 'OSRS Bold', monospace; font-size: 12px; font-weight: bold;">
@@ -705,13 +709,13 @@ export const mpLobbyUiMethods = {
 
             <!-- Region / Map Selection Box -->
             <div style="background: #1e1812; border: 2px solid #5a4a35; padding: 10px 12px; margin-bottom: 12px; text-align: left;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px; margin-bottom: 4px;">
                     <span style="font-size: 12px; color: #ff981f; letter-spacing: 0.5px;">DESTINATION REGION:</span>
                     <span style="font-size: 11px; color: #ffff00;">${escapeHtml(currentRegion.difficulty)} (${hpScaleLabel} Co-Op HP)</span>
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px;">
                     ${isHost ? `
-                        <select id="coop-map-select" style="flex: 1; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px;">
+                        <select id="coop-map-select" style="flex: 1; min-width: 160px; background: #0c0906; border: 1px solid #5a4a35; color: #ffff00; padding: 5px 8px; font-family: 'OSRS Bold', monospace; font-size: 13px;">
                             ${regionOptionsHtml}
                         </select>
                         <button id="coop-endless-btn" style="
@@ -740,7 +744,7 @@ export const mpLobbyUiMethods = {
             </div>
 
             <!-- 4-Player 2x2 Grid -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; text-align: left;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px; text-align: left;">
                 ${slotsHtml}
             </div>
 

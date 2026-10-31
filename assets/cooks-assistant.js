@@ -299,26 +299,33 @@
         style.id = SCROLL_ID + '-style';
         style.textContent = `
             #${SCROLL_ID} { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
-                background: rgba(0,0,0,0.35); pointer-events: auto; }
-            #${SCROLL_ID} .qc-scroll { position: relative; width: min(500px, calc(100vw - 32px)); padding: 26px 34px 22px;
+                background: rgba(0,0,0,0.35); pointer-events: auto; touch-action: manipulation; }
+            #${SCROLL_ID} .qc-scroll, #ca-chatbox { position: relative; width: min(500px, calc(100vw - 16px)); max-width: calc(100vw - 16px);
+                box-sizing: border-box; zoom: var(--ui-scale, 1); touch-action: manipulation; padding: 26px 34px 22px;
                 background: linear-gradient(180deg, #d8c59a 0%, #cbb383 55%, #bea472 100%);
                 border: 3px solid #5c4320; border-radius: 4px;
                 box-shadow: inset 0 0 0 2px #e9dcb8, inset 0 0 24px rgba(92,67,32,0.45), 0 6px 18px rgba(0,0,0,0.6);
                 font-family: "OSRS Bold", "RuneScape Bold", sans-serif; color: #000; text-align: center; }
+            #${SCROLL_ID} .qc-scroll *, #ca-chatbox * { box-sizing: border-box; max-width: 100%; overflow-wrap: break-word; }
             #${SCROLL_ID} .qc-scroll::before, #${SCROLL_ID} .qc-scroll::after { content: ''; position: absolute; left: -10px; right: -10px; height: 14px;
                 background: linear-gradient(180deg, #8a6a3a, #b8955c 45%, #6d5028); border: 2px solid #3f2d14; border-radius: 7px; }
             #${SCROLL_ID} .qc-scroll::before { top: -10px; }
             #${SCROLL_ID} .qc-scroll::after { bottom: -10px; }
             #${SCROLL_ID} h2 { margin: 0 0 4px; font-size: 22px; font-weight: normal; color: #7a1a00; }
             #${SCROLL_ID} .qc-title { margin: 0 0 14px; font-size: 18px; color: #000; }
-            #${SCROLL_ID} .qc-body { display: flex; gap: 20px; align-items: center; justify-content: center; text-align: left; }
+            #${SCROLL_ID} .qc-body { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: center; text-align: left; }
             #${SCROLL_ID} .qc-left { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 120px; font-size: 15px; }
             #${SCROLL_ID} .qc-icon { width: 72px; height: 64px; image-rendering: pixelated; }
             #${SCROLL_ID} .qc-right h3 { margin: 0 0 6px; font-size: 16px; font-weight: normal; color: #7a1a00; }
             #${SCROLL_ID} .qc-right ul { margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 20px; }
             #${SCROLL_ID} .qc-close { position: absolute; top: 6px; right: 8px; width: 22px; height: 22px; padding: 0; cursor: pointer;
-                background: #5c4320; color: #ff981f; border: 1px solid #2e2010; font-family: inherit; font-size: 14px; line-height: 18px; }
+                background: #5c4320; color: #ff981f; border: 1px solid #2e2010; font-family: inherit; font-size: 14px; line-height: 18px;
+                touch-action: manipulation; }
             #${SCROLL_ID} .qc-hint { margin-top: 14px; font-size: 13px; color: #4a3518; }
+            @media (max-width: 480px) {
+                #${SCROLL_ID} .qc-scroll, #ca-chatbox { padding: 20px 16px 18px; }
+                #${SCROLL_ID} .qc-body { gap: 12px; }
+            }
         `;
         document.head.appendChild(style);
     }
