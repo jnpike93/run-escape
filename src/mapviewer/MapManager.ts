@@ -154,18 +154,23 @@ export class MapManager<T extends MapSquare> {
         const cameraX = camera.getPosX();
         const cameraZ = camera.getPosZ();
 
-        const minMapX = playArea ? Math.max(0, Math.floor(playArea[0] / Scene.MAP_SQUARE_SIZE)) : 0;
-        const minMapY = playArea ? Math.max(0, Math.floor(playArea[1] / Scene.MAP_SQUARE_SIZE)) : 0;
+        const margin = 2;
+        const minMapX = playArea
+            ? Math.max(0, Math.floor(playArea[0] / Scene.MAP_SQUARE_SIZE) - margin)
+            : 0;
+        const minMapY = playArea
+            ? Math.max(0, Math.floor(playArea[1] / Scene.MAP_SQUARE_SIZE) - margin)
+            : 0;
         const maxMapX = playArea
             ? Math.min(
                   MapManager.MAX_MAP_X,
-                  Math.floor((playArea[2] - 1) / Scene.MAP_SQUARE_SIZE) + 1,
+                  Math.floor((playArea[2] - 1) / Scene.MAP_SQUARE_SIZE) + 1 + margin,
               )
             : MapManager.MAX_MAP_X;
         const maxMapY = playArea
             ? Math.min(
                   MapManager.MAX_MAP_Y,
-                  Math.floor((playArea[3] - 1) / Scene.MAP_SQUARE_SIZE) + 1,
+                  Math.floor((playArea[3] - 1) / Scene.MAP_SQUARE_SIZE) + 1 + margin,
               )
             : MapManager.MAX_MAP_Y;
 

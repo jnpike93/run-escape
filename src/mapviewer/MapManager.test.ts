@@ -17,9 +17,9 @@ class DummyMapSquare implements MapSquare {
 }
 
 describe("MapManager", () => {
-    test("clamps queued map squares to playArea so out-of-arena border squares are not loaded", () => {
+    test("clamps queued map squares to playArea + 2-square margin so out-of-cache squares are not loaded", () => {
         const loaded: Array<[number, number]> = [];
-        const manager = new MapManager<DummyMapSquare>(16, (mx, my) => {
+        const manager = new MapManager<DummyMapSquare>(64, (mx, my) => {
             loaded.push([mx, my]);
         });
         manager.init(
@@ -30,19 +30,19 @@ describe("MapManager", () => {
             true,
         );
 
-        // Lumbridge 3x3 arena: map squares 49..51, 49..51 (tiles 3136..3328)
+        // Lumbridge 3x3 arena: map squares 49..51, 49..51 (tiles 3136..3328), margin = 2 -> 47..53
         const playArea = vec4.fromValues(49 * 64, 49 * 64, 52 * 64, 52 * 64);
         const camera = new Camera(3140, -26, 3140, -400, 0);
         camera.update(800, 600);
 
-        manager.update(camera, 1, 128, 2, playArea);
+        manager.update(camera, 1, 256, 2, playArea);
 
         expect(loaded.length).toBeGreaterThan(0);
         for (const [mx, my] of loaded) {
-            expect(mx).toBeGreaterThanOrEqual(49);
-            expect(mx).toBeLessThanOrEqual(51);
-            expect(my).toBeGreaterThanOrEqual(49);
-            expect(my).toBeLessThanOrEqual(51);
+            expect(mx).toBeGreaterThanOrEqual(47);
+            expect(mx).toBeLessThanOrEqual(53);
+            expect(my).toBeGreaterThanOrEqual(47);
+            expect(my).toBeLessThanOrEqual(53);
         }
     });
 

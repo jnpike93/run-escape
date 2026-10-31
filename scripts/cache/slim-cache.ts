@@ -256,14 +256,8 @@ function playerRequest(key: string, appearance: PlayerAppearance, seqIds: number
     return { kind: "player", key, appearance, seqIds };
 }
 
-function loadSceneLocEntities(
-    state: WorkerState,
-    scene: Scene,
-    borderSize: number,
-    minLevel: number,
-): void {
+function loadSceneLocEntities(state: WorkerState, scene: Scene): void {
     const { locTypeLoader, locModelLoader, varManager } = state;
-    const maxLevel = minLevel;
     const seenAnimKeys = new Set<number>();
     const checkEntity = (entity: unknown, tag: bigint) => {
         if (!entity) return;
@@ -297,19 +291,11 @@ function loadSceneLocEntities(
         }
     };
 
-    const endX = scene.sizeX - borderSize;
-    const endY = scene.sizeY - borderSize;
-    for (let level = minLevel; level < scene.levels; level++) {
-        for (let x = borderSize; x < endX; x++) {
-            for (let y = borderSize; y < endY; y++) {
+    for (let level = 0; level < scene.levels; level++) {
+        for (let x = 0; x < scene.sizeX; x++) {
+            for (let y = 0; y < scene.sizeY; y++) {
                 const tile = scene.tiles[level][x][y];
-                if (
-                    !tile ||
-                    (tile.minLevel > maxLevel && !scene.isPlayerLevel(level, x, y, maxLevel))
-                ) {
-                    continue;
-                }
-                if (level > maxLevel && scene.isInside(maxLevel, x, y)) {
+                if (!tile) {
                     continue;
                 }
                 if (tile.floorDecoration) {
@@ -422,7 +408,7 @@ async function loadWhatTheGameLoads(
             const region = getArenaRegion(map);
             await regionLoader.load(state, region);
 
-            const { baseX, baseY, sizeX, sizeY, plane } = region;
+            const { baseX, baseY, sizeX, sizeY } = region;
             const firstX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
             const firstY = Math.floor(baseY / Scene.MAP_SQUARE_SIZE) - MAP_MARGIN;
             const lastX = Math.ceil((baseX + sizeX) / Scene.MAP_SQUARE_SIZE) - 1 + MAP_MARGIN;
@@ -440,7 +426,7 @@ async function loadWhatTheGameLoads(
                 fullSizeY,
                 false,
             );
-            loadSceneLocEntities(state, scene, borderSize, plane);
+            loadSceneLocEntities(state, scene);
         }
         clearWorkerStateCaches(state);
     } else {

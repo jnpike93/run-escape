@@ -675,7 +675,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             }
         } catch (e) {
             console.error("Failed queueLoadMap", mapX, mapY, e);
-            this.mapManager.addInvalidMap(mapX, mapY);
+            this.mapManager.loadingMapIds.delete(getMapSquareId(mapX, mapY));
         }
     }
 
