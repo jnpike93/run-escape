@@ -8,6 +8,17 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-01] Sentinel: Remove 'unsafe-eval' from Server Content-Security-Policy (serve.py & nginx.conf)
+- **Commit / PR**: (see git log)
+- **Files Modified**: `server/serve.py`, `server/nginx.conf`, `server/test_serve.py`, `docs/AGENT_NOTES.md`
+- **Bundle / Version Impact**: None (server configuration and testing only)
+- **What Changed**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` in `server/serve.py` and `add_header Content-Security-Policy` in `server/nginx.conf`, retaining only `'self' 'wasm-unsafe-eval'`.
+  - Aligned server HTTP responses with the strict policy already set in `index.html`.
+  - Added unit tests in `server/test_serve.py` (`test_csp_policy_does_not_contain_unsafe_eval`, `test_nginx_csp_does_not_contain_unsafe_eval`, `test_custom_handler_sends_hardened_csp`) to prevent regressions.
+- **Notes / Invariants for Future Agents**:
+  - The application relies on WebAssembly (`wasm-unsafe-eval`) but never requires dynamic JS evaluation (`unsafe-eval`). Keep `script-src` constrained to `'self' 'wasm-unsafe-eval'` across all configs.
+
 ### [2026-10-31] Fix Browser Out of Memory Crash — Worker Deduplication, Zero-Copy Cache Archives, Int32Array SceneBuffer & Streaming Actor Bakes
 
 **Model**: Gemini (Antigravity)
