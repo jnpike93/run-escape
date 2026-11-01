@@ -8,6 +8,22 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-01] Disable Upstream Auto-Sync GitHub Action
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-rryAHHjt.js` (`?v=8.7`, MapViewer `MapViewerApp-DuKwd5k7.js`, Worker `RenderDataWorker-DXeIAucb.js`, WASM loader `module-FL2a4sHH.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Disabled the scheduled `Upstream Auto-Sync` GitHub Action workflow by removing `.github/workflows/sync-upstream.yaml`.
+
+**Changes implemented**:
+- **Disabled Scheduled Upstream Auto-Sync Action (`.github/workflows/sync-upstream.yaml`)**:
+  - Removed `.github/workflows/sync-upstream.yaml` so scheduled hourly auto-sync runs in GitHub Actions are completely disabled. Upstream syncs can now be triggered intentionally via manual or local scripted workflows without automatic background runs.
+
+**Tests**: Vitest suite run (`npm --prefix run-escape test` - 38 passed, 785 tests).
+
+---
+
 ### [2026-10-31] Fix Browser Out of Memory Crash — Worker Deduplication, Zero-Copy Cache Archives, Int32Array SceneBuffer & Streaming Actor Bakes
 
 **Model**: Gemini (Antigravity)
