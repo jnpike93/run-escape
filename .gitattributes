@@ -12,13 +12,13 @@
 *.jpg binary
 *.gif binary
 *.ico binary
-*.ogg binary
-*.mp3 binary
-*.wav binary
+*.ogg binary -delta
+*.mp3 binary -delta
+*.wav binary -delta
 *.ttf binary
 *.woff binary
 *.woff2 binary
-*.wasm binary
-*.dat2 binary
-*.idx* binary
+*.wasm binary -delta
+*.dat2 binary -delta
+*.idx* binary -delta
 

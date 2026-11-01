@@ -49,23 +49,33 @@ jobs:
           script: |
             set -euo pipefail
 
-            echo "=== 1. Syncing Run Escape Repository ==="
+            echo "=== 1. Configuring Low-Memory Git & Removing Server-Side Cron Sync ==="
+            rm -f /etc/cron.d/run-escape-upstream-sync
+            git config --global pack.threads 1
+            git config --global pack.windowMemory 16m
+            git config --global pack.deltaCacheSize 16m
+            git config --global core.packedGitLimit 32m
+            git config --global core.packedGitWindowSize 16m
+
+            echo "=== 2. Syncing Run Escape Repository (Shallow HEAD) ==="
+            rm -rf /opt/run-escape/node_modules /opt/run-escape/dist
             if [ -d "/opt/run-escape/.git" ]; then
               cd /opt/run-escape
-              git fetch origin main
-              git reset --hard origin/main
-              git clean -fd
+              git remote remove upstream > /dev/null 2>&1 || true
+              if ! (git fetch --depth 1 origin main && git reset --hard origin/main && git clean -fd); then
+                echo "Shallow fetch failed; re-cloning clean shallow repository..."
+                cd /
+                rm -rf /opt/run-escape
+                git clone --depth 1 --single-branch --branch main https://github.com/jnpike93/run-escape.git /opt/run-escape
+                cd /opt/run-escape
+              fi
+              git reflog expire --expire=now --all > /dev/null 2>&1 || true
+              git gc --prune=now --quiet > /dev/null 2>&1 || true
             else
-              git clone https://github.com/jnpike93/run-escape.git /opt/run-escape
+              rm -rf /opt/run-escape
+              git clone --depth 1 --single-branch --branch main https://github.com/jnpike93/run-escape.git /opt/run-escape
               cd /opt/run-escape
             fi
-            git remote get-url upstream > /dev/null 2>&1 && git remote set-url upstream https://github.com/Dynrothe/Run-Escape.git || git remote add upstream https://github.com/Dynrothe/Run-Escape.git
-            npm install --no-audit --no-fund --ignore-scripts
-            node /opt/run-escape/scripts/auto_sync_upstream.cjs
-
-            echo "=== 2. Configuring Hourly Upstream Auto-Sync Cron Job ==="
-            printf 'SHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n0 * * * * root cd /opt/run-escape && node /opt/run-escape/scripts/auto_sync_upstream.cjs >> /var/log/run-escape-sync.log 2>&1\n' > /etc/cron.d/run-escape-upstream-sync
-            chmod 644 /etc/cron.d/run-escape-upstream-sync
 
             echo "=== 3. Starting / Restarting Run Escape with PM2 (Loopback Bind) ==="
             pm2 delete run-escape > /dev/null 2>&1 || true
