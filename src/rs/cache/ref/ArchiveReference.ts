@@ -1,6 +1,8 @@
 import { ArchiveFileReference } from "./ArchiveFileReference";
 
 export class ArchiveReference {
+    private _fileIdIndexMap?: Map<number, number>;
+
     constructor(
         readonly id: number,
         readonly nameHash: number,
@@ -9,12 +11,20 @@ export class ArchiveReference {
         readonly revision: number,
         readonly fileCount: number,
         readonly lastFileId: number,
-        private readonly _fileIdIndexMap: Map<number, number>,
+        fileIdIndexMap: Map<number, number> | undefined,
         readonly fileIds: Int32Array,
         readonly fileNameHashes: Int32Array,
-    ) {}
+    ) {
+        this._fileIdIndexMap = fileIdIndexMap;
+    }
 
     getFileReference(id: number): ArchiveFileReference | undefined {
+        if (!this._fileIdIndexMap) {
+            this._fileIdIndexMap = new Map();
+            for (let i = 0; i < this.fileCount; i++) {
+                this._fileIdIndexMap.set(this.fileIds[i], i);
+            }
+        }
         const i = this._fileIdIndexMap.get(id);
         if (i === undefined) {
             return undefined;

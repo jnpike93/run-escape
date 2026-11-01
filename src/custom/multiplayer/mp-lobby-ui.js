@@ -14,7 +14,7 @@ import {
     escapeHtml,
     buildPlayerBakeSeqIds,
     getWeaponStance
-} from './mp-constants.js?v=8.6';
+} from './mp-constants.js?v=8.7';
 
 const sanitizePlayerName = (name, fallback = '') => sanitizeName(name) || fallback;
 

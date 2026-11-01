@@ -96,6 +96,10 @@ export class Archive {
         );
     }
 
+    private _combined?: Int8Array;
+    private _offsets?: Int32Array;
+    private _sizes?: Int32Array;
+
     static decode(
         id: number,
         lastFileId: number,
@@ -107,58 +111,89 @@ export class Archive {
         const files = new Map<number, ArchiveFile>();
         if (fileCount === 1) {
             files.set(lastFileId, new ArchiveFile(lastFileId, id, buffer.data));
-        } else {
-            buffer.offset = buffer.length - 1;
-            const chunks = buffer.readUnsignedByte();
+            return new Archive(
+                StringUtil.hashDjb2,
+                id,
+                lastFileId,
+                fileCount,
+                fileIds,
+                fileNameHashes,
+                files,
+            );
+        }
 
-            const MAX_CHUNKS = 1024;
-            const MAX_FILES = 65536;
-            if (chunks > MAX_CHUNKS || fileCount > MAX_FILES) {
-                throw new Error(
-                    `Archive: implausible dimensions chunks=${chunks} fileCount=${fileCount}`,
-                );
-            }
+        buffer.offset = buffer.length - 1;
+        const chunks = buffer.readUnsignedByte();
 
-            buffer.offset = buffer.length - 1 - chunks * (fileCount * 4);
-            if (buffer.offset < 0) {
-                throw new Error(
-                    `Archive: corrupt chunk table (chunks=${chunks}, fileCount=${fileCount})`,
-                );
-            }
+        const MAX_CHUNKS = 1024;
+        const MAX_FILES = 65536;
+        if (chunks > MAX_CHUNKS || fileCount > MAX_FILES) {
+            throw new Error(
+                `Archive: implausible dimensions chunks=${chunks} fileCount=${fileCount}`,
+            );
+        }
 
-            const chunkSizes = new Int32Array(chunks * fileCount);
-            const fileSizes = new Int32Array(fileCount);
-            for (let chunk = 0; chunk < chunks; chunk++) {
-                let lastFileSize = 0;
-                for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                    lastFileSize += buffer.readInt();
-                    chunkSizes[chunk * fileCount + fileIdx] = lastFileSize;
-                    fileSizes[fileIdx] += lastFileSize;
-                }
-            }
+        buffer.offset = buffer.length - 1 - chunks * (fileCount * 4);
+        if (buffer.offset < 0) {
+            throw new Error(
+                `Archive: corrupt chunk table (chunks=${chunks}, fileCount=${fileCount})`,
+            );
+        }
 
-            const fileData = new Array<ByteBuffer>(fileCount);
+        const chunkSizes = new Int32Array(chunks * fileCount);
+        const fileSizes = new Int32Array(fileCount);
+        let totalSize = 0;
+        for (let chunk = 0; chunk < chunks; chunk++) {
+            let lastFileSize = 0;
             for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                fileData[fileIdx] = new ByteBuffer(fileSizes[fileIdx]);
+                lastFileSize += buffer.readInt();
+                chunkSizes[chunk * fileCount + fileIdx] = lastFileSize;
+                fileSizes[fileIdx] += lastFileSize;
+                totalSize += lastFileSize;
             }
+        }
 
-            buffer.offset = 0;
+        buffer.offset = 0;
 
+        let combined: Int8Array;
+        const offsets = new Int32Array(lastFileId + 1).fill(-1);
+        const sizes = new Int32Array(lastFileId + 1);
+
+        if (chunks === 1) {
+            combined = buffer.data;
+            let pos = 0;
+            for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
+                const size = fileSizes[fileIdx];
+                const fileId = fileIds[fileIdx];
+                offsets[fileId] = pos;
+                sizes[fileId] = size;
+                pos += size;
+            }
+        } else {
+            combined = new Int8Array(totalSize);
+            const writeOffsets = new Int32Array(fileCount);
+            let pos = 0;
+            for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
+                const size = fileSizes[fileIdx];
+                const fileId = fileIds[fileIdx];
+                offsets[fileId] = pos;
+                sizes[fileId] = size;
+                writeOffsets[fileIdx] = pos;
+                pos += size;
+            }
             for (let chunk = 0; chunk < chunks; chunk++) {
                 for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
                     const chunkSize = chunkSizes[chunk * fileCount + fileIdx];
-                    const bytes = buffer.readBytes(chunkSize);
-                    fileData[fileIdx].writeBytes(bytes);
+                    if (chunkSize > 0) {
+                        const bytes = buffer.readBytes(chunkSize);
+                        combined.set(bytes, writeOffsets[fileIdx]);
+                        writeOffsets[fileIdx] += chunkSize;
+                    }
                 }
             }
-
-            for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                const fileId = fileIds[fileIdx];
-                const data = fileData[fileIdx].data;
-                files.set(fileId, new ArchiveFile(fileId, id, data));
-            }
         }
-        return new Archive(
+
+        const archive = new Archive(
             StringUtil.hashDjb2,
             id,
             lastFileId,
@@ -167,6 +202,10 @@ export class Archive {
             fileNameHashes,
             files,
         );
+        archive._combined = combined;
+        archive._offsets = offsets;
+        archive._sizes = sizes;
+        return archive;
     }
 
     constructor(
@@ -187,7 +226,19 @@ export class Archive {
     }
 
     getFile(id: number): ArchiveFile | undefined {
-        return this._files.get(id);
+        const cached = this._files.get(id);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const offsets = this._offsets;
+        if (offsets && id >= 0 && id < offsets.length) {
+            const offset = offsets[id];
+            if (offset !== -1 && this._combined && this._sizes) {
+                const size = this._sizes[id];
+                return new ArchiveFile(id, this.id, this._combined.subarray(offset, offset + size));
+            }
+        }
+        return undefined;
     }
 
     getFileId(name: string): number {
@@ -205,6 +256,13 @@ export class Archive {
     }
 
     get files(): ArchiveFile[] {
+        if (this._offsets) {
+            const list = new Array<ArchiveFile>(this.fileIds.length);
+            for (let i = 0; i < this.fileIds.length; i++) {
+                list[i] = this.getFile(this.fileIds[i])!;
+            }
+            return list;
+        }
         return Array.from(this._files.values());
     }
 }

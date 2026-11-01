@@ -9,7 +9,7 @@ const CACHE_PATH = "caches/";
 const CACHE_NAME_PATTERN = /^[a-zA-Z0-9._-]{1,128}$/;
 
 export async function fetchCacheInfos(): Promise<CacheInfo[]> {
-    const resp = await fetch(CACHE_PATH + "caches.json?v=8.3", { cache: "no-cache" });
+    const resp = await fetch(CACHE_PATH + "caches.json?v=8.7", { cache: "no-cache" });
     if (!resp.ok) {
         throw new Error(`Failed to fetch caches.json: ${resp.status} ${resp.statusText}`);
     }

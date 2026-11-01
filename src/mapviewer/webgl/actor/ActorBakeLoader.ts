@@ -67,9 +67,12 @@ function bakeAnim(
 
     let frameCount = 1;
     let skeletal = false;
+    let skeletalDuration = 1;
+    const skeletalStep = 2;
     if (seqType) {
         if (seqType.isSkeletalSeq()) {
-            frameCount = seqType.getSkeletalDuration();
+            skeletalDuration = Math.max(seqType.getSkeletalDuration(), 1);
+            frameCount = Math.ceil(skeletalDuration / skeletalStep);
             skeletal = true;
         } else if (seqType.frameIds) {
             frameCount = seqType.frameIds.length;
@@ -83,7 +86,8 @@ function bakeAnim(
     let reach = 0;
 
     for (let i = 0; i < frameCount; i++) {
-        const model = seqType ? getModel(seqId, i) : getModel(-1, -1);
+        const frameIdx = skeletal ? i * skeletalStep : i;
+        const model = seqType ? getModel(seqId, frameIdx) : getModel(-1, -1);
         if (model) {
             if (i === 0) {
                 firstFrame = model;
@@ -100,7 +104,9 @@ function bakeAnim(
             ranges[i * 4 + 3] = alpha[1];
         }
         let length = 1;
-        if (seqType && !skeletal && seqType.frameLengths) {
+        if (skeletal) {
+            length = Math.min(skeletalStep, skeletalDuration - frameIdx);
+        } else if (seqType && seqType.frameLengths) {
             length = seqType.frameLengths[i] || 1;
         }
         frameLengths[i] = length;
@@ -271,12 +277,17 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
                     break;
                 }
             }
+            state.locModelLoader.clearCache();
+            state.objModelLoader.clearCache();
+            state.npcModelLoader.clearCache();
+            state.seqFrameLoader.clearCache();
+            state.skeletalSeqLoader?.clearCache();
+            extra.playerModelLoader.clearCache();
+            extra.spotAnimModelLoader.clearCache();
         }
-        extra.playerModelLoader.clearCache();
-        extra.spotAnimModelLoader.clearCache();
 
-        const vertices = sceneBuf.vertexBuf.byteArray();
-        const indices = new Int32Array(sceneBuf.indices);
+        const vertices = sceneBuf.vertexBuf.byteArray().slice();
+        const indices = sceneBuf.indices.slice();
 
         const loadedTextures = new Map<number, Int32Array>();
         for (const textureId of sceneBuf.usedTextureIds) {

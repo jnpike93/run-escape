@@ -795,8 +795,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const drawRangeBoxes = grid ? getBoxes(sceneBuf.drawCommands) : undefined;
         const drawRangeAlphaBoxes = grid ? getBoxes(sceneBuf.drawCommandsAlpha) : undefined;
 
-        const vertices = sceneBuf.vertexBuf.byteArray();
-        const indices = new Int32Array(sceneBuf.indices);
+        const vertices = sceneBuf.vertexBuf.byteArray().slice();
+        const indices = sceneBuf.indices.slice();
 
         const minimapBlob = skipMinimap
             ? undefined

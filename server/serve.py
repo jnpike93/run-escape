@@ -732,7 +732,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Accept-Ranges", "bytes")
         req_path = getattr(self, "path", "") or ""
         clean_path = req_path.split("?", 1)[0]
-        if clean_path.startswith("/caches/") or (
+        if (clean_path.startswith("/caches/") and clean_path != "/caches/caches.json") or (
             clean_path.startswith("/assets/")
             and ("?v=" in req_path or _HASHED_ASSET_RE.search(clean_path))
         ):

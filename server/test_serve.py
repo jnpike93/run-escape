@@ -1024,7 +1024,6 @@ class TestPerformanceOptimizations(unittest.TestCase):
             "/assets/module-yzz5kVyQ.wasm",
             "/assets/multiplayer.js?v=8.5",
             "/caches/osrs-241/main_file_cache.dat2",
-            "/caches/caches.json",
         ):
             with self.subTest(path=immutable_path):
                 hdrs = get_headers_for_path(immutable_path)
@@ -1032,7 +1031,13 @@ class TestPerformanceOptimizations(unittest.TestCase):
                 self.assertNotIn("Pragma", hdrs)
                 self.assertNotIn("Expires", hdrs)
 
-        for uncached_path in ("/", "/index.html", "/assets/multiplayer.js", "/docs/CHANGELOG.md"):
+        for uncached_path in (
+            "/",
+            "/index.html",
+            "/assets/multiplayer.js",
+            "/caches/caches.json",
+            "/docs/CHANGELOG.md",
+        ):
             with self.subTest(path=uncached_path):
                 hdrs = get_headers_for_path(uncached_path)
                 self.assertEqual(hdrs.get("Cache-Control"), "no-cache, no-store, must-revalidate")

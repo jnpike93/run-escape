@@ -2,6 +2,8 @@ import { ByteBuffer } from "../../io/ByteBuffer";
 import { StringUtil } from "../../util/StringUtil";
 import { ArchiveReference } from "./ArchiveReference";
 
+const SINGLE_ZERO_FILE_IDS = new Int32Array([0]);
+
 export class ReferenceTable {
     static INVALID_TABLE = new ReferenceTable(
         -1,
@@ -91,59 +93,79 @@ export class ReferenceTable {
             }
         }
 
-        const archiveNameHashes = new Int32Array(archiveCount);
+        const archiveNameHashes = hasNames ? new Int32Array(archiveCount) : new Int32Array(0);
         if (hasNames) {
             for (let i = 0; i < archiveCount; i++) {
                 archiveNameHashes[i] = buffer.readInt();
             }
         }
 
-        const archiveWhirlpools = new Array<Int8Array>(archiveCount);
+        const archiveWhirlpools = hasWhirlpool ? new Array<Int8Array>(archiveCount) : [];
         if (hasWhirlpool) {
             for (let i = 0; i < archiveCount; i++) {
                 archiveWhirlpools[i] = buffer.readBytes(64);
             }
         }
 
-        const archiveCrcs = new DataView(buffer.data.buffer, buffer.offset, archiveCount * 4);
+        const archiveCrcs = new DataView(
+            buffer.data.buffer,
+            buffer.data.byteOffset + buffer.offset,
+            archiveCount * 4,
+        );
         buffer.offset += archiveCrcs.byteLength;
 
         if (hasSizes) {
             buffer.offset += archiveCount * 8;
         }
 
-        const archiveRevisions = new DataView(buffer.data.buffer, buffer.offset, archiveCount * 4);
+        const archiveRevisions = new DataView(
+            buffer.data.buffer,
+            buffer.data.byteOffset + buffer.offset,
+            archiveCount * 4,
+        );
         buffer.offset += archiveRevisions.byteLength;
 
         const archiveFileCounts = new Int32Array(archiveCount);
+        let totalFiles = 0;
         for (let i = 0; i < archiveCount; i++) {
-            archiveFileCounts[i] =
-                protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
+            const count = protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
+            archiveFileCounts[i] = count;
+            totalFiles += count;
         }
 
         const archiveFileIds = new Array<Int32Array>(archiveCount);
         const archiveLastFileIds = new Int32Array(archiveCount);
-        for (let i = 0; i < archiveCount; i++) {
-            archiveFileIds[i] = new Int32Array(archiveFileCounts[i]);
-        }
+        const flatFileIds = new Int32Array(totalFiles);
+        let fileOffset = 0;
         for (let archiveIdx = 0; archiveIdx < archiveCount; archiveIdx++) {
+            const count = archiveFileCounts[archiveIdx];
             let lastFileId = 0;
-            for (let fileIdx = 0; fileIdx < archiveFileCounts[archiveIdx]; fileIdx++) {
+            for (let fileIdx = 0; fileIdx < count; fileIdx++) {
                 lastFileId += protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
-                archiveFileIds[archiveIdx][fileIdx] = lastFileId;
+                flatFileIds[fileOffset + fileIdx] = lastFileId;
             }
+            archiveFileIds[archiveIdx] =
+                count === 1 && lastFileId === 0
+                    ? SINGLE_ZERO_FILE_IDS
+                    : flatFileIds.subarray(fileOffset, fileOffset + count);
             archiveLastFileIds[archiveIdx] = lastFileId;
+            fileOffset += count;
         }
 
-        const archiveFileNameHashes = new Array<Int32Array>(archiveCount);
+        const archiveFileNameHashes = hasNames ? new Array<Int32Array>(archiveCount) : [];
         if (hasNames) {
-            for (let i = 0; i < archiveCount; i++) {
-                archiveFileNameHashes[i] = new Int32Array(archiveFileCounts[i]);
-            }
+            const flatHashes = new Int32Array(totalFiles);
+            let hashOffset = 0;
             for (let archiveIdx = 0; archiveIdx < archiveCount; archiveIdx++) {
-                for (let fileIdx = 0; fileIdx < archiveFileCounts[archiveIdx]; fileIdx++) {
-                    archiveFileNameHashes[archiveIdx][fileIdx] = buffer.readInt();
+                const count = archiveFileCounts[archiveIdx];
+                for (let fileIdx = 0; fileIdx < count; fileIdx++) {
+                    flatHashes[hashOffset + fileIdx] = buffer.readInt();
                 }
+                archiveFileNameHashes[archiveIdx] = flatHashes.subarray(
+                    hashOffset,
+                    hashOffset + count,
+                );
+                hashOffset += count;
             }
         }
 
@@ -207,7 +229,7 @@ export class ReferenceTable {
             return undefined;
         }
 
-        const nameHash = this._archiveNameHashes[i];
+        const nameHash = this._archiveNameHashes[i] ?? 0;
         const whirlpool = this._archiveWhirlpools[i];
         const crc = this._archiveCrcs.getInt32(i * 4, false);
         const revision = this._archiveRevisions.getInt32(i * 4, false);
@@ -216,10 +238,6 @@ export class ReferenceTable {
         const fileIds = this._archiveFileIds[i];
         const fileNameHashes = this._archiveFileNameHashes[i];
 
-        const fileIdIndexMap: Map<number, number> = new Map();
-        for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-            fileIdIndexMap.set(fileIds[fileIdx], fileIdx);
-        }
         return new ArchiveReference(
             id,
             nameHash,
@@ -228,7 +246,7 @@ export class ReferenceTable {
             revision,
             fileCount,
             lastFileId,
-            fileIdIndexMap,
+            undefined,
             fileIds,
             fileNameHashes,
         );

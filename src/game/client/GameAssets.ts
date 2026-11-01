@@ -505,38 +505,57 @@ export class GameAssets {
         this.requestedEnemies.clear();
     }
 
-    // Splits a bake over the workers, one page each
+    // Splits a bake into bounded batches over the workers and uploads each page
+    // to WebGL as soon as it finishes so large bakes don't pile up in RAM
     private async bakeOverWorkers(
         requests: BakeRequest[],
         onProgress?: (done: number, total: number) => void,
     ): Promise<ActorPage[]> {
-        const chunks: BakeRequest[][] = [];
-        const chunkCount = this.workerPool.size;
-        for (let i = 0; i < chunkCount; i++) {
-            chunks.push([]);
+        if (requests.length === 0) {
+            return [];
         }
-        requests.forEach((request, i) => chunks[i % chunkCount].push(request));
-        const filled = chunks.filter((chunk) => chunk.length > 0);
+        const filled: BakeRequest[][] = [];
+        let current: BakeRequest[] = [];
+        let currentWeight = 0;
+        const maxBatchWeight = 10;
+        for (const request of requests) {
+            const weight =
+                request.kind === "npc" || request.kind === "player"
+                    ? Math.max(request.seqIds.length, 1)
+                    : 1;
+            if (current.length > 0 && currentWeight + weight > maxBatchWeight) {
+                filled.push(current);
+                current = [];
+                currentWeight = 0;
+            }
+            current.push(request);
+            currentWeight += weight;
+        }
+        if (current.length > 0) {
+            filled.push(current);
+        }
         let done = 0;
-        const started = performance.now();
-        const bakes = await Promise.all(
-            filled.map(async (chunk) => {
-                const bake = await this.bake(chunk);
-                onProgress?.(++done, filled.length);
-                return bake;
-            }),
-        );
         let bytes = 0;
         const pages: ActorPage[] = [];
-        for (const bake of bakes) {
-            bytes += bake.vertices.byteLength + bake.indices.byteLength;
-            const models = this.addBake(bake);
-            for (const model of models.values()) {
-                if (!pages.includes(model.page)) {
-                    pages.push(model.page);
+        const started = performance.now();
+        let nextIdx = 0;
+        const workerCount = Math.min(this.workerPool.size, filled.length);
+        await Promise.all(
+            Array.from({ length: workerCount }, async () => {
+                while (nextIdx < filled.length) {
+                    const chunk = filled[nextIdx++];
+                    const bake = await this.bake(chunk);
+                    bytes += bake.vertices.byteLength + bake.indices.byteLength;
+                    const models = this.addBake(bake);
+                    for (const model of models.values()) {
+                        if (!pages.includes(model.page)) {
+                            pages.push(model.page);
+                        }
+                    }
+                    onProgress?.(++done, filled.length);
                 }
-            }
-        }
+            }),
+        );
         console.log(
             `baked ${requests.length} actor models in ${(performance.now() - started).toFixed(0)}ms, ` +
                 `${(bytes / 1024 / 1024).toFixed(1)}MB`,

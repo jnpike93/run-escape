@@ -139,9 +139,10 @@ function main() {
                 `$1${versionQuery}$2`,
             )
             .replace(
-                /(new URL\(["']\.\/RenderDataWorker-[A-Za-z0-9_-]+\.js)(["'])/g,
+                /(new URL\(["'](?:\.\/)?RenderDataWorker-[A-Za-z0-9_-]+\.js)(["'])/g,
                 `$1${versionQuery}$2`,
-            );
+            )
+            .replace(/caches\.json(\?v=[0-9.]+)?/g, `caches.json${versionQuery}`);
         fs.writeFileSync(jsPath, code, "utf8");
     }
 

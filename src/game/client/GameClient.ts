@@ -572,6 +572,7 @@ export class GameClient implements GameFrameHandler {
                 loadingProgress: 25,
             });
         }
+        this.sim = undefined;
         try {
             this.grid = await this.loadGrid(mapId);
             await this.assets.loadEnemies(enemies, (done, total) => {

@@ -8,6 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-10-31] Fix Browser Out of Memory Crash — Worker Deduplication, Zero-Copy Cache Archives, Int32Array SceneBuffer & Streaming Actor Bakes
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-rryAHHjt.js` (`?v=8.7`, MapViewer `MapViewerApp-DuKwd5k7.js`, Worker `RenderDataWorker-DXeIAucb.js`, WASM loader `module-FL2a4sHH.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Resolved browser `Out of Memory` tab crashes by reducing the Chrome renderer process memory footprint by 54% - 67% across all maps (e.g., Lumbridge `2,339.1 MB -> 1,073.7 MB`, Varlamore `3,115.4 MB -> 1,307.6 MB`, God Wars `3,409.2 MB -> 1,277.3 MB`, Halloween `3,355.0 MB -> 1,121.4 MB`).
+
+**Changes implemented**:
+- **Fix Duplicate `RenderDataWorker` Instantiation (`scripts/sync_dist.cjs`, `src/mapviewer/Caches.ts`, `server/serve.py`, `server/nginx.conf`, `server/test_serve.py`)**:
+  - Updated the `RenderDataWorker` URL regex in `scripts/sync_dist.cjs` from `/(new URL\(["']\.\/RenderDataWorker-[A-Za-z0-9_-]+\.js)(["'])/g` to `/(new URL\(["'](?:\.\/)?RenderDataWorker-[A-Za-z0-9_-]+\.js)(["'])/g` so `new URL("RenderDataWorker-...", import.meta.url)` receives the `?v=` query parameter matching `module-*.js`'s import specifier. Previously, the URL mismatch caused every Web Worker to evaluate `RenderDataWorker` twice in the same `WorkerGlobalScope`, creating 8 `WorkerState` instances instead of 4 and executing every map build and actor bake twice.
+  - Updated `caches/caches.json` cache-control handling in `server/serve.py`, `server/nginx.conf`, `src/mapviewer/Caches.ts`, and `scripts/sync_dist.cjs` so the cache manifest is never served with `immutable` caching across slim-cache updates.
+- **Zero-Copy Contiguous `Archive` & `ReferenceTable` Storage (`src/rs/io/ByteBuffer.ts`, `src/rs/cache/Archive.ts`, `src/rs/cache/ref/ArchiveReference.ts`, `src/rs/cache/ref/ReferenceTable.ts`)**:
+  - Fixed `ByteBuffer.readUnsignedBytes` to include `this._data.byteOffset`.
+  - Refactored `Archive.decode` to store multi-file archive payloads in a single contiguous `Int8Array` (`_combined`) with `Int32Array` offset/size tables (`_offsets`, `_sizes`) and lazy on-demand `ArchiveFile` instantiation in `getFile(id)`, eliminating ~140,000 per-file `ArrayBuffer` and `ArchiveFile` allocations per worker.
+  - Refactored `ReferenceTable.decode` and `ArchiveReference` to share a single flat `Int32Array` file-ID buffer, a shared `SINGLE_ZERO_FILE_IDS` constant for 101,579 single-file archives, and lazy `_fileIdIndexMap` creation, cutting 4-worker `WorkerState` V8 heap usage from `385.4 MB` (`901.0 MB` RSS) to `100.2 MB` (`580.0 MB` RSS).
+- **Typed `Int32Array` `SceneBuffer`, 25 Hz Skeletal Sampling, Per-Request Worker Cache Clearing & Streaming Bakes (`src/mapviewer/webgl/buffer/SceneBuffer.ts`, `src/mapviewer/webgl/actor/ActorBakeLoader.ts`, `src/mapviewer/webgl/loader/SdMapDataLoader.ts`, `src/game/client/GameAssets.ts`, `src/game/client/GameClient.ts`)**:
+  - Replaced `SceneBuffer.indices: number[]` with a growable `Int32Array` (`indexBuf`), eliminating 13-20M element V8 JS arrays (~160-256 MB heap spikes) during large boss bakes.
+  - Sampled skeletal animations in `ActorBakeLoader.bakeAnim` at `skeletalStep = 2` client ticks (25 Hz) while preserving exact `totalTicks` duration, halving vertex/index buffer sizes for skeletal bosses (`sol_heredit`, `the_nightmare`, `javelin_colossus`, `shockwave_colossus`, etc.).
+  - Cleared worker model/frame caches after every individual request in `ActorBakeLoader.load`, sliced `vertices` and `indices` to exact length before worker transfer in `ActorBakeLoader.ts` and `SdMapDataLoader.ts`, partitioned `GameAssets.bakeOverWorkers` into bounded batches (`maxBatchWeight = 10`) that stream directly into `this.addBake(bake)`, and cleared `this.sim = undefined` before awaiting `loadEnemies` in `GameClient.startRun` to prevent stale `requestEnemy` leaks during map transitions.
+
+**Tests**: `npx tsc --noEmit` (0 errors), `npm test` (all 38 test suites passed, 785 tests), `npm run verify-slim-cache` (`osrs-241_2026-09-30-slim-6a314ed2` verified, 14,760 groups), `python -m unittest server/test_serve.py` (61 tests OK), `node --check assets/multiplayer.js` (OK), and headless Chrome CDP memory verification across 10 maps (`1,073.7 MB - 1,307.6 MB` peak renderer WorkingSetSize).
+
+---
+
 ### [2026-10-31] Merge Upstream v0.20.0 (`6f2c6bf`) — Hallowed Night, The Nightmare, Random Events, Ancient Spell Choice, ScapeRune & Slim Cache Rebuild
 
 **Model**: Gemini (Antigravity)

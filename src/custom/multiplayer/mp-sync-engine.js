@@ -1,6 +1,6 @@
 // Run Escape - Multiplayer Authoritative Simulation Hooks & World Sync Engine
-import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml, getWeaponStance, DEFAULT_PLAYER_STANCE } from './mp-constants.js?v=8.6';
-import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.6';
+import { ALL_CHARACTERS, CHAR_WEAPONS, SPAWN_OFFSETS, getCoopDifficultyWeights, sanitizeName, sanitizeSlot, sanitizeCharacter, escapeHtml, getWeaponStance, DEFAULT_PLAYER_STANCE } from './mp-constants.js?v=8.7';
+import { drawOverheadPrayerEmblem } from './mp-prayers.js?v=8.7';
 
 export const mpSyncEngineMethods = {
     setupInGameHooks(localChar, partyPlayers) {

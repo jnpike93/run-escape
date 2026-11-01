@@ -66,7 +66,8 @@ const corners = new Array<number>(9).fill(0);
 
 export class SceneBuffer {
     vertexBuf: VertexBuffer;
-    indices: number[] = [];
+    private indexBuf: Int32Array;
+    private indexCount = 0;
 
     drawCommands: DrawCommand[] = [];
     drawCommandsAlpha: DrawCommand[] = [];
@@ -91,6 +92,34 @@ export class SceneBuffer {
         readonly grid?: CullGrid,
     ) {
         this.vertexBuf = new VertexBuffer(initVertexCount);
+        this.indexBuf = new Int32Array(Math.max(initVertexCount * 2, 1024));
+    }
+
+    get indices(): Int32Array {
+        return this.indexBuf.subarray(0, this.indexCount);
+    }
+
+    private ensureIndices(extra: number): void {
+        const needed = this.indexCount + extra;
+        if (needed > this.indexBuf.length) {
+            const next = new Int32Array(Math.max(this.indexBuf.length * 2, needed));
+            next.set(this.indexBuf.subarray(0, this.indexCount));
+            this.indexBuf = next;
+        }
+    }
+
+    pushIndex(index: number): void {
+        this.ensureIndices(1);
+        this.indexBuf[this.indexCount++] = index;
+    }
+
+    pushTriangle(i0: number, i1: number, i2: number): void {
+        this.ensureIndices(3);
+        const o = this.indexCount;
+        this.indexBuf[o] = i0;
+        this.indexBuf[o + 1] = i1;
+        this.indexBuf[o + 2] = i2;
+        this.indexCount = o + 3;
     }
 
     vertexCount(): number {
@@ -98,7 +127,7 @@ export class SceneBuffer {
     }
 
     indexByteOffset(): number {
-        return this.indices.length * 4;
+        return this.indexCount * 4;
     }
 
     addTerrainTile(tile: SceneTile, offsetX: number, offsetY: number): void {
@@ -126,7 +155,7 @@ export class SceneBuffer {
                     0,
                 );
 
-                this.indices.push(index);
+                this.pushIndex(index);
             }
         }
     }
@@ -442,7 +471,7 @@ export class SceneBuffer {
         for (const [box, indices] of cells) {
             const offset = this.indexByteOffset();
             for (const index of indices) {
-                this.indices.push(index);
+                this.pushIndex(index);
             }
             commands.push({
                 offset,
@@ -700,7 +729,7 @@ export class SceneBuffer {
                 corners[8] = vzc;
                 onFace(index0, index1, index2, corners);
             } else {
-                this.indices.push(index0, index1, index2);
+                this.pushTriangle(index0, index1, index2);
             }
         }
     }
