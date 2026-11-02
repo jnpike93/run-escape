@@ -8,6 +8,25 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-02] Hardened Content-Security-Policy by Removing 'unsafe-eval' from Server Configs
+
+**Model**: Sentinel (Jules)
+**Commit**: (see git log)
+**Bundle**: Unchanged (`?v=8.7`)
+
+**Scope**: Removed `'unsafe-eval'` from Content-Security-Policy (CSP) headers in `server/serve.py` and `server/nginx.conf`, aligning the server-side policies with `index.html` while retaining `'wasm-unsafe-eval'` for WebAssembly support.
+
+**Changes implemented**:
+- **CSP Hardening (`server/serve.py`, `server/nginx.conf`)**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` in `server/serve.py` and the `Content-Security-Policy` header in `server/nginx.conf`.
+  - Retained `'wasm-unsafe-eval'` which allows WebAssembly module compilation while disallowing JavaScript string evaluation (`eval()`, `new Function()`).
+- **Unit Tests (`server/test_serve.py`)**:
+  - Added `test_csp_policy_does_not_contain_unsafe_eval`, `test_nginx_csp_does_not_contain_unsafe_eval`, and `test_custom_handler_sends_hardened_csp` enforcing that neither `serve.CSP_POLICY`, `server/nginx.conf`, nor runtime `CustomHandler` responses contain `'unsafe-eval'`.
+
+**Tests**: `python -m unittest server/test_serve.py` (64 tests OK).
+
+---
+
 ### [2026-11-01] Disable Upstream Auto-Sync GitHub Action
 
 **Model**: Gemini (Antigravity)
