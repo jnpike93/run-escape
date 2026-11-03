@@ -68,7 +68,7 @@ GUEST_ALLOWED_MSG_TYPES = {
 
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
+    "script-src 'self' 'wasm-unsafe-eval'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; "
     "font-src 'self' data:; "
