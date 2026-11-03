@@ -8,6 +8,24 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-03] Remove 'unsafe-eval' from Content-Security-Policy
+
+**Model**: Sentinel
+**Commit**: (see git log)
+**Bundle**: `index-rryAHHjt.js` (`?v=8.7`)
+
+**Scope**: Hardened HTTP Content-Security-Policy headers in `server/serve.py` and `server/nginx.conf` by removing `'unsafe-eval'`.
+
+**Changes implemented**:
+- **CSP Hardening (`server/serve.py`, `server/nginx.conf`)**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` in `server/serve.py` and from the `server` block `Content-Security-Policy` header in `server/nginx.conf`, restricting execution to `'self'` and `'wasm-unsafe-eval'`.
+- **Regression Tests (`server/test_serve.py`)**:
+  - Added unit test cases verifying that `serve.CSP_POLICY`, `CustomHandler` response headers, and `nginx.conf` exclude `'unsafe-eval'` and include `'wasm-unsafe-eval'`.
+
+**Tests**: `python3 -m unittest server/test_serve.py` (64 tests passed), `npx tsc --noEmit` (clean), `npm run verify-slim-cache` (verified), and Vitest suite (`npm test`).
+
+---
+
 ### [2026-11-01] Disable Upstream Auto-Sync GitHub Action
 
 **Model**: Gemini (Antigravity)
