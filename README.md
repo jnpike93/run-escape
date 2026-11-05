@@ -6,8 +6,6 @@ Credit to [https://jere.io/run-escape/](https://jere.io/run-escape/) ([@Dynrothe
 
 ## Custom Edition Additions & Differences
 
-Playable at [https://run-escape.cuteanimegirls.moe/](https://run-escape.cuteanimegirls.moe/)
-
 This repository extends [Dynrothe/Run-Escape](https://github.com/Dynrothe/Run-Escape) with multiplayer co-op, custom maps, quests, bosses, adventurers, weapons, OSRS music, mobile support, balance adjustments, and automated upstream synchronization:
 
 - **2-4 Player Co-Op Multiplayer (`server/serve.py` & `src/custom/multiplayer/`)**:

@@ -8,6 +8,31 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-05] Disable Hosting on cuteanimegirls.moe & Remove Deploy Workflow
+
+**Model**: Gemini (Antigravity)
+**Commit**: (see git log)
+**Bundle**: `index-CSd0bYfc.js` (`?v=8.7`, MapViewer `MapViewerApp-CsaSSrqN.js`, Worker `RenderDataWorker-DXeIAucb.js`, WASM loader `module-CcKwaD8y.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Decommissioned `run-escape` hosting on `cuteanimegirls.moe` (167.71.157.5), removed the automatic GitHub Actions deployment workflow, removed live domain references from `README.md`, and tightened Content Security Policy `connect-src` in `index.html`.
+
+**Changes implemented**:
+- **VPS Decommissioning (`cuteanimegirls.moe`)**:
+  - Stopped and deleted the PM2 application process `run-escape` via `sudo pm2 delete run-escape` and persisted state with `sudo pm2 save`.
+  - Replaced the proxy configuration with `/etc/nginx/sites-available/run-escape-disabled` bound to its existing valid Let's Encrypt certificate (`/etc/letsencrypt/live/run-escape.cuteanimegirls.moe/`), returning a direct HTTP 404. This prevents SNI fallback to `cuteanimegirls.moe` and eliminates `NET::ERR_CERT_COMMON_NAME_INVALID` warnings while the DNS A record resolves to 167.71.157.5.
+  - Purged the `/opt/run-escape` repository clone from the server filesystem.
+  - Verified port 8085 is closed and verified external HTTPS requests to `run-escape.cuteanimegirls.moe` return a clean 404 without TLS certificate errors.
+- **Removed GitHub Actions Deployment Workflow (`.github/workflows/deploy.yaml`)**:
+  - Removed `.github/workflows/deploy.yaml` so pushes to `main` no longer trigger SSH deployments or restart services on `cuteanimegirls.moe`.
+- **Repository Cleanup & CSP Tightening (`README.md`, `index.html`, `dist/`, `assets/`)**:
+  - Removed the `Playable at https://run-escape.cuteanimegirls.moe/` link from `README.md`.
+  - Removed `wss://run-escape.cuteanimegirls.moe` and `ws://run-escape.cuteanimegirls.moe` from the Content Security Policy `connect-src` directive in `index.html`.
+  - Rebuilt production assets via `npm run build` (`vite build && node scripts/sync_dist.cjs`).
+
+**Tests**: `tsc` (0 errors), Vitest suite run (`npm test` - 38 passed, 785 tests), slim cache verification (`npm run verify-slim-cache` - 14,760 groups OK), Python server tests (`python -m unittest discover -s server -p "test_*.py"` - 61 tests OK), and `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-11-01] Disable Upstream Auto-Sync GitHub Action
 
 **Model**: Gemini (Antigravity)
