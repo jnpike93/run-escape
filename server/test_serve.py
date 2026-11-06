@@ -927,6 +927,32 @@ class TestSecurityFixes(unittest.TestCase):
         """H-1: HOST_ALLOWED_MSG_TYPES must still contain 'coop_debug'."""
         self.assertIn("coop_debug", HOST_ALLOWED_MSG_TYPES)
 
+    def test_csp_policy_does_not_contain_unsafe_eval(self):
+        """M-8: Content-Security-Policy must not permit 'unsafe-eval'."""
+        self.assertNotIn("'unsafe-eval'", serve.CSP_POLICY)
+        self.assertIn("'wasm-unsafe-eval'", serve.CSP_POLICY)
+
+    def test_nginx_csp_does_not_contain_unsafe_eval(self):
+        """M-8: server/nginx.conf CSP must not permit 'unsafe-eval'."""
+        nginx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nginx.conf")
+        with open(nginx_path, "r", encoding="utf-8") as f:
+            conf = f.read()
+        self.assertNotIn("'unsafe-eval'", conf)
+        self.assertIn("'wasm-unsafe-eval'", conf)
+
+    def test_custom_handler_sends_hardened_csp(self):
+        """M-8: CustomHandler must emit Content-Security-Policy without 'unsafe-eval'."""
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.path = "/index.html"
+        handler._response_code = 200
+        sent = {}
+        handler.send_header = lambda k, v: sent.__setitem__(k, v)
+        with patch.object(serve.http.server.SimpleHTTPRequestHandler, "end_headers", lambda self: None):
+            handler.end_headers()
+        csp = sent.get("Content-Security-Policy", "")
+        self.assertNotIn("'unsafe-eval'", csp)
+        self.assertIn("'wasm-unsafe-eval'", csp)
+
 
 class TestPerformanceOptimizations(unittest.TestCase):
     def setUp(self):
