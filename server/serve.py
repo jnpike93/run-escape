@@ -66,9 +66,10 @@ GUEST_ALLOWED_MSG_TYPES = {
     "coop_pause", "coop_pickup", "coop_loadout", "coop_quest"
 }
 
+# Security note: 'unsafe-eval' is omitted to prevent arbitrary dynamic code execution; 'wasm-unsafe-eval' is retained for WebAssembly compilation
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
+    "script-src 'self' 'wasm-unsafe-eval'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; "
     "font-src 'self' data:; "

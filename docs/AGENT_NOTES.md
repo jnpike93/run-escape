@@ -8,6 +8,24 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-08] Sentinel - Tighten Content-Security-Policy: Remove 'unsafe-eval' from Server & Nginx
+
+**Model**: Sentinel
+**Commit**: (see git log)
+**Bundle**: `index-CSd0bYfc.js` (`?v=8.7`)
+
+**Scope**: Hardened Content-Security-Policy (CSP) headers in `server/serve.py` and `server/nginx.conf` by removing `'unsafe-eval'` from `script-src` while retaining `'wasm-unsafe-eval'` required for WebAssembly execution.
+
+**Changes implemented**:
+- **CSP Tightening (`server/serve.py`, `server/nginx.conf`, `server/test_serve.py`)**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` in `server/serve.py` and from the `Content-Security-Policy` header in `server/nginx.conf`, aligning them with `index.html`.
+  - Retained `'wasm-unsafe-eval'` so multithreaded WASM workers and loaders function securely without permitting arbitrary JS string-to-code evaluation.
+  - Added `test_csp_omits_unsafe_eval` and `test_nginx_csp_omits_unsafe_eval` in `server/test_serve.py` to enforce that `'unsafe-eval'` remains absent and `'wasm-unsafe-eval'` is retained across both Python and Nginx configs.
+
+**Tests**: Python server tests (`python3 -m unittest server/test_serve.py` - 63 tests OK), `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (14,760 groups OK), `pnpm test src/custom/multiplayer/multiplayer.test.ts` (28 tests OK), and `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-11-05] Disable Hosting on cuteanimegirls.moe & Remove Deploy Workflow
 
 **Model**: Gemini (Antigravity)
