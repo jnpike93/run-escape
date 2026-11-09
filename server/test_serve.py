@@ -927,6 +927,30 @@ class TestSecurityFixes(unittest.TestCase):
         """H-1: HOST_ALLOWED_MSG_TYPES must still contain 'coop_debug'."""
         self.assertIn("coop_debug", HOST_ALLOWED_MSG_TYPES)
 
+    def test_csp_omits_unsafe_eval(self):
+        """M-8: Content-Security-Policy must not contain 'unsafe-eval', but retain 'wasm-unsafe-eval'."""
+        # 1. Check Python server CSP_POLICY and end_headers output
+        self.assertNotIn("'unsafe-eval'", serve.CSP_POLICY)
+        self.assertIn("'wasm-unsafe-eval'", serve.CSP_POLICY)
+
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.path = "/index.html"
+        handler._response_code = 200
+        sent_headers = {}
+        handler.send_header = lambda k, v: sent_headers.__setitem__(k, v)
+        with patch.object(serve.http.server.SimpleHTTPRequestHandler, "end_headers", lambda self: None):
+            handler.end_headers()
+        csp = sent_headers.get("Content-Security-Policy", "")
+        self.assertNotIn("'unsafe-eval'", csp)
+        self.assertIn("'wasm-unsafe-eval'", csp)
+
+        # 2. Check server/nginx.conf CSP header
+        nginx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nginx.conf")
+        with open(nginx_path, "r", encoding="utf-8") as f:
+            conf = f.read()
+        self.assertNotIn("'unsafe-eval'", conf)
+        self.assertIn("'wasm-unsafe-eval'", conf)
+
 
 class TestPerformanceOptimizations(unittest.TestCase):
     def setUp(self):

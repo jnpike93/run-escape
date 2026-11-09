@@ -1,3 +1,8 @@
+## 2026-11-09 - Inconsistent Content-Security-Policy Between Client HTML and Backend Servers
+**Vulnerability:** `server/serve.py` and `server/nginx.conf` included `'unsafe-eval'` in `script-src` Content-Security-Policy headers, whereas `index.html` omitted `'unsafe-eval'` and only retained `'wasm-unsafe-eval'`. This permitted arbitrary string evaluation and weakened XSS defense-in-depth on responses served by the backend.
+**Learning:** WebAssembly execution only requires `'wasm-unsafe-eval'`. When CSP policies are defined in multiple locations (HTML `<meta>` tag, custom Python HTTP server, and Nginx proxy), discrepancies can easily leave overly permissive directives like `'unsafe-eval'` active in production HTTP headers.
+**Prevention:** Align `script-src` across all configuration surfaces (`index.html`, `server/serve.py`, and `server/nginx.conf`), ensuring `'unsafe-eval'` is strictly omitted while `'wasm-unsafe-eval'` is kept for WASM, and enforce this via automated unit tests in `server/test_serve.py`.
+
 ## 2026-10-28 - Host Parsing Vulnerability in Custom Python WS Broker
 **Vulnerability:** `urllib.parse.urlparse(origin).netloc.split(":")[0]` was used to validate `Origin` headers in `serve.py`. When an origin contains userinfo in authority (e.g. `http://localhost:pass@attacker.com`), `netloc.split(":")[0]` evaluates to `localhost`, bypassing origin checks.
 **Learning:** `netloc` contains credentials if specified. Parsing hosts using `netloc.split(":")` is vulnerable to authority userinfo bypasses.

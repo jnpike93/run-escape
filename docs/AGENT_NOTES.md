@@ -8,6 +8,25 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-09] Harden Content-Security-Policy: Remove 'unsafe-eval' from Server & Nginx Headers
+
+**Model**: Jules (Sentinel)
+**Commit**: (see git log)
+**Bundle**: `index-CSd0bYfc.js` (`?v=8.7`)
+
+**Scope**: Removed `'unsafe-eval'` from Content-Security-Policy headers in `server/serve.py` and `server/nginx.conf` while retaining `'wasm-unsafe-eval'` to align with `index.html`, eliminating unnecessary dynamic script evaluation risks (XSS defense-in-depth).
+
+**Changes implemented**:
+- **CSP Hardening (`server/serve.py`, `server/nginx.conf`)**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` `script-src` in `server/serve.py`.
+  - Removed `'unsafe-eval'` from `Content-Security-Policy` `script-src` in `server/nginx.conf`.
+- **Regression Testing (`server/test_serve.py`)**:
+  - Added `test_csp_omits_unsafe_eval` in `server/test_serve.py` to ensure neither `server/serve.py` nor `server/nginx.conf` reintroduces `'unsafe-eval'` while preserving `'wasm-unsafe-eval'`.
+
+**Tests**: `python3 -m unittest server/test_serve.py` (62 tests OK), `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (14,760 groups OK), `node --check src/custom/multiplayer.js` (OK), `npm run build` (OK).
+
+---
+
 ### [2026-11-05] Disable Hosting on cuteanimegirls.moe & Remove Deploy Workflow
 
 **Model**: Gemini (Antigravity)
