@@ -8,6 +8,24 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-10] Remove `'unsafe-eval'` from Server and Nginx CSP Headers
+
+**Model**: Sentinel (Jules)
+**Commit**: (see git log)
+**Bundle**: `index-CSd0bYfc.js` (`?v=8.7`, MapViewer `MapViewerApp-CsaSSrqN.js`, Worker `RenderDataWorker-DXeIAucb.js`, WASM loader `module-CcKwaD8y.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Removed `'unsafe-eval'` from Content-Security-Policy headers in `server/serve.py` and `server/nginx.conf`, aligning server-side CSP configuration with `index.html` while preserving `'wasm-unsafe-eval'`.
+
+**Changes implemented**:
+- **CSP Policy Hardening (`server/serve.py`, `server/nginx.conf`)**:
+  - Removed `'unsafe-eval'` from `CSP_POLICY` in `server/serve.py` and the `Content-Security-Policy` header in `server/nginx.conf`, keeping `'wasm-unsafe-eval'` to eliminate runtime JavaScript string evaluation risks while maintaining WebAssembly support.
+- **Unit Test Coverage (`server/test_serve.py`)**:
+  - Added `test_csp_omits_unsafe_eval` in `server/test_serve.py` to ensure `server/serve.py` (`CSP_POLICY`) and `server/nginx.conf` never re-introduce `'unsafe-eval'` while preserving `'wasm-unsafe-eval'`.
+
+**Tests**: `python3 -m unittest discover -s server` (62 tests OK), `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (verified 14,760 groups), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-11-05] Disable Hosting on cuteanimegirls.moe & Remove Deploy Workflow
 
 **Model**: Gemini (Antigravity)
