@@ -927,6 +927,19 @@ class TestSecurityFixes(unittest.TestCase):
         """H-1: HOST_ALLOWED_MSG_TYPES must still contain 'coop_debug'."""
         self.assertIn("coop_debug", HOST_ALLOWED_MSG_TYPES)
 
+    def test_csp_omits_unsafe_eval(self):
+        """Verify CSP policy in serve.py and nginx.conf omits 'unsafe-eval' while keeping 'wasm-unsafe-eval'."""
+        from serve import CSP_POLICY
+        self.assertNotIn("'unsafe-eval'", CSP_POLICY)
+        self.assertIn("'wasm-unsafe-eval'", CSP_POLICY)
+
+        nginx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nginx.conf")
+        with open(nginx_path, "r", encoding="utf-8") as f:
+            conf = f.read()
+        self.assertIn("Content-Security-Policy", conf)
+        self.assertNotIn("'unsafe-eval'", conf)
+        self.assertIn("'wasm-unsafe-eval'", conf)
+
 
 class TestPerformanceOptimizations(unittest.TestCase):
     def setUp(self):
