@@ -940,6 +940,17 @@ class TestSecurityFixes(unittest.TestCase):
         self.assertNotIn("'unsafe-eval'", conf)
         self.assertIn("'wasm-unsafe-eval'", conf)
 
+    def test_security_headers_emitted(self):
+        """Verify CustomHandler.end_headers() emits X-Frame-Options and Referrer-Policy."""
+        handler = CustomHandler.__new__(CustomHandler)
+        handler.path = "/index.html"
+        headers = {}
+        handler.send_header = lambda k, v: headers.__setitem__(k, v)
+        with patch.object(serve.http.server.SimpleHTTPRequestHandler, "end_headers", lambda self: None):
+            handler.end_headers()
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
+
 
 class TestPerformanceOptimizations(unittest.TestCase):
     def setUp(self):
