@@ -729,6 +729,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Security-Policy", CSP_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Accept-Ranges", "bytes")
         req_path = getattr(self, "path", "") or ""
         clean_path = req_path.split("?", 1)[0]

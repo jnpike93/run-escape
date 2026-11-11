@@ -8,6 +8,24 @@
 
 ## Chronological Agent Handoff Log
 
+### [2026-11-11] Add `X-Frame-Options` and `Referrer-Policy` Security Headers to Python Server
+
+**Model**: Sentinel (Jules)
+**Commit**: (see git log)
+**Bundle**: `index-CSd0bYfc.js` (`?v=8.7`, MapViewer `MapViewerApp-CsaSSrqN.js`, Worker `RenderDataWorker-DXeIAucb.js`, WASM loader `module-CcKwaD8y.js`, styles `index-czqCTeqk.css`, slim cache `osrs-241_2026-09-30-slim-6a314ed2`)
+
+**Scope**: Added `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin` response headers to `server/serve.py`, ensuring defense-in-depth parity with `server/nginx.conf`.
+
+**Changes implemented**:
+- **Security Headers Hardening (`server/serve.py`)**:
+  - Added `self.send_header("X-Frame-Options", "DENY")` and `self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")` to `CustomHandler.end_headers()` in `server/serve.py`, protecting users from clickjacking attacks on older browsers and preventing sensitive referrer leakage when served directly via Python.
+- **Unit Test Coverage (`server/test_serve.py`)**:
+  - Added `test_security_headers_emitted` in `server/test_serve.py` to assert that `CustomHandler.end_headers()` emits `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin`.
+
+**Tests**: `python3 -m unittest discover -s server` (63 tests OK), `npx tsc --noEmit` (0 errors), `npm run verify-slim-cache` (verified 14,760 groups), `node --check src/custom/multiplayer.js` (OK).
+
+---
+
 ### [2026-11-10] Remove `'unsafe-eval'` from Server and Nginx CSP Headers
 
 **Model**: Sentinel (Jules)
